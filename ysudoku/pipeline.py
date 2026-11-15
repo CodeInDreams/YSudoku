@@ -8,7 +8,8 @@ from dataclasses import dataclass, field
 from . import llm, rulecache
 from .model import Puzzle, parse_puzzle
 from .rules import compile_spec, heuristic_spec, build_inventory
-from .solve import Solver, audit_steps, check_solution, compare_with_solution
+from .chaos import check_chaos_solution, solve_chaos
+from .solve import Solver, SolveResult, audit_steps, check_solution, compare_with_solution
 from .state import cell_name
 
 
@@ -25,6 +26,7 @@ class Analysis:
     audit: dict = field(default_factory=dict)
     status: str = "solved"
     message: str = ""
+    chaos_regions: list = field(default_factory=list)
 
     def to_json(self) -> dict:
         n = self.puzzle.size
@@ -46,6 +48,7 @@ class Analysis:
                 "spec": self.spec,
             },
             "initial": self.initial,
+            "chaos_regions": self.chaos_regions,
             "steps": [step.to_dict(n) for step in self.result.steps],
             "status": self.status,
             "message": self.message,
@@ -73,6 +76,7 @@ def analyze(
     use_cache: bool = True,
     save_rules: bool = False,
     allow_chains: bool = False,
+    chaos_time_limit: float = 8.0,
 ) -> Analysis:
     from .sudokupad import load
 
@@ -125,14 +129,38 @@ def analyze(
     solver = Solver(puzzle, rules, allow_chains=allow_chains)
     chaos = "chaos construction" in (puzzle.rules_text or "").lower()
     if chaos:
+        exotic = any(word in (puzzle.rules_text or "").lower() for word in (
+            "trisection", "unbalanced", "region count", "region-count",
+            "region sum", "region-sum", "same region", "different region",
+        ))
+        if exotic:
+            return Analysis(
+                puzzle=puzzle, spec=spec, rules=rules, result=SolveResult("unsupported", [], []),
+                initial=solver.initial, source=source,
+                warnings=warnings + ["检测到作者自定义的区域计数规则，首个混沌版本暂不支持"],
+                status="unsupported",
+                message="这类混沌构造依赖作者自定义的区域语义（如三分圆/不平衡圆），暂不支持",
+            )
+        chaos_result = solve_chaos(puzzle, rules.constraints, time_limit=chaos_time_limit)
+        if chaos_result.status == "solved":
+            errors = check_chaos_solution(puzzle, rules.constraints, chaos_result.values, chaos_result.regions)
+            return Analysis(
+                puzzle=puzzle, spec=spec, rules=rules,
+                result=SolveResult("solved", [], chaos_result.values),
+                initial=solver.initial, source=source,
+                warnings=warnings + [chaos_result.message, "混沌构造由搜索求解，不是逐步人类推理"],
+                status="solved-search",
+                message=chaos_result.message,
+                chaos_regions=chaos_result.regions,
+                solution_check="；".join(errors[:3]) if errors else "混沌解自检通过",
+            )
         return Analysis(
-            puzzle=puzzle, spec=spec, rules=rules, result=type("R", (), {
-                "steps": [], "values": solver.state.vals, "message": "",
-            })(),
+            puzzle=puzzle, spec=spec, rules=rules,
+            result=SolveResult("stuck", [], solver.state.vals),
             initial=solver.initial, source=source,
-            warnings=warnings + ["检测到 Chaos Construction（区域待定），P1 暂不支持，计划 P3 实现"],
-            status="unsupported",
-            message="混沌构造需要把区域也当作变量求解，属于 P3 范围",
+            warnings=warnings + [chaos_result.message],
+            status="stuck",
+            message=f"混沌搜索未完成：{chaos_result.message}",
         )
 
     result = solver.run(max_steps=max_steps)

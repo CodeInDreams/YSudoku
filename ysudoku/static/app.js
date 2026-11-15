@@ -77,7 +77,9 @@
   function init(data) {
     S.data = data;
     S.n = data.puzzle.size;
-    S.regions = data.puzzle.regions || [];
+    S.regions = (data.chaos_regions && data.chaos_regions.length)
+      ? data.chaos_regions
+      : (data.puzzle.regions || []);
     S.dom = data.initial.slice();
     S.vals = data.puzzle.givens.slice();
     S.idx = -1;
@@ -93,6 +95,11 @@
     renderStatus();
     buildStepList();
     resetBoard();
+    if (data.status === "solved-search" && data.final) {
+      S.vals = data.final.slice();
+      S.dom = S.vals.map((v, i) => (v ? 1 << (v - 1) : S.data.initial[i]));
+      render();
+    }
 
     $("scrub").max = Math.max(0, data.steps.length - 1);
     $("scrub").value = 0;
@@ -473,7 +480,10 @@
     const node = $("status");
     const d = S.data;
     node.className = "status";
-    if (d.status === "solved") {
+    if (d.status === "solved-search") {
+      node.classList.add("ok");
+      node.textContent = `混沌构造：搜索求解完成` + (d.message ? ` · ${d.message}` : "");
+    } else if (d.status === "solved") {
       node.classList.add("ok");
       node.textContent = `已解出 · ${d.steps.length} 步` + (d.solution_check ? ` · ${d.solution_check}` : "");
     } else if (d.status === "unsupported") {
