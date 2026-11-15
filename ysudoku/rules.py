@@ -14,7 +14,12 @@ from math import dist
 
 from .constraints import (
     AntiPair,
+    Clone,
     Custom,
+    Parity,
+    RegionSum,
+    Sandwich,
+    Skyscraper,
     Arrow,
     Between,
     Cage,
@@ -159,6 +164,12 @@ KINDS = {
     "diagonal": "对角线数独",
     "disjoint_groups": "Disjoint Groups",
     "custom": "自定义规则（L2）",
+    "clone": "克隆（同数）",
+    "odd": "奇数",
+    "even": "偶数",
+    "sandwich": "三明治",
+    "skyscraper": "摩天楼",
+    "region_sum": "区域和线",
 }
 
 
@@ -175,6 +186,25 @@ def compile_spec(puzzle: Puzzle, elements: list[Element], spec: dict,
         params = {k: v for k, v in raw.items() if k not in ("kind", "elements", "note")}
         if kind not in KINDS:
             result.warnings.append(f"未知规则类型 {kind}（已忽略）")
+            continue
+        if kind in ("clone", "odd", "even"):
+            scope, eids = _resolve_scope(puzzle, elements, raw, result.warnings)
+            if not scope:
+                continue
+            if kind == "clone":
+                if len(scope) < 2:
+                    result.warnings.append("clone 至少需要 2 个格子")
+                    continue
+                objs = [Clone(scope)]
+            else:
+                objs = [Parity(scope, "odd" if kind == "odd" else "even")]
+            for obj in objs:
+                result.constraints.append(obj)
+                result.resolved.append({
+                    "kind": kind, "label": KINDS[kind], "elements": eids,
+                    "count": 1, "hypothesis": bool(raw.get("hypothesis")),
+                })
+            used.update(eids)
             continue
         if kind == "custom":
             obj = _build_custom(puzzle, elements, raw, result.warnings)
@@ -266,6 +296,38 @@ def _cell_from_name(puzzle: Puzzle, name: str) -> int | None:
         if 0 <= r < puzzle.size and 0 <= c < puzzle.size:
             return r * puzzle.size + c
     return None
+
+
+def _resolve_scope(puzzle: Puzzle, elements: list[Element], raw: dict, warnings: list[str]):
+    scope_raw = raw.get("scope") or {}
+    scope: list[int] = []
+    element_ids: list[str] = []
+    if isinstance(scope_raw, dict) and scope_raw.get("element"):
+        eid = str(scope_raw["element"])
+        element_ids.append(eid)
+        element = next((e for e in elements if e.id == eid), None)
+        if element is None:
+            warnings.append(f"规则引用了不存在的元素 {eid}")
+            return [], []
+        scope = list(element.cells)
+    else:
+        names = (scope_raw.get("cells") if isinstance(scope_raw, dict) else None) or raw.get("cells") or []
+        if not names and raw.get("elements"):
+            for eid in raw["elements"]:
+                element = next((e for e in elements if e.id == str(eid)), None)
+                if element:
+                    element_ids.append(element.id)
+                    scope.extend(element.cells)
+        else:
+            for name in names:
+                cell = _cell_from_name(puzzle, name)
+                if cell is None:
+                    warnings.append(f"格子名无效：{name}")
+                    return [], []
+                scope.append(cell)
+    if not element_ids and raw.get("elements"):
+        element_ids = [str(e) for e in raw["elements"]]
+    return scope, element_ids
 
 
 def _build_custom(puzzle: Puzzle, elements: list[Element], raw: dict, warnings: list[str]):
@@ -408,6 +470,29 @@ def _build_rule(puzzle: Puzzle, kind: str, element: Element, params: dict,
         if len(cells) < 3:
             raise ValueError("之间线太短")
         return [Between(cells)]
+
+    if kind == "sandwich":
+        total = params.get("sum")
+        if total is None:
+            raise ValueError("三明治缺少 sum")
+        return [Sandwich(cells, int(total))]
+
+    if kind == "skyscraper":
+        clue = params.get("clue")
+        if clue is None:
+            raise ValueError("摩天楼缺少 clue")
+        direction = str(params.get("direction", "left")).lower()
+        return [Skyscraper(cells, int(clue), direction)]
+
+    if kind == "region_sum":
+        if not puzzle.regions:
+            warnings.append("区域和线需要区域定义（混沌构造暂不支持）")
+            return []
+        region_of = {}
+        for index, region in enumerate(puzzle.regions):
+            for cell in region:
+                region_of[cell] = index
+        return [RegionSum(cells, region_of)]
 
     if kind == "little_killer":
         total = params.get("sum")

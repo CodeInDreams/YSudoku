@@ -18,6 +18,13 @@ TITLES = {
     "w_wing": "W-Wing",
     "forcing_chain": "反证（试探）",
     "custom": "自定义规则（L2）",
+    "parity": "奇偶",
+    "odd": "奇数",
+    "even": "偶数",
+    "clone": "克隆",
+    "sandwich": "三明治",
+    "skyscraper": "摩天楼",
+    "region_sum": "区域和线",
     "cage": "杀手笼组合",
     "thermo": "温度计",
     "arrow": "箭头",
@@ -45,7 +52,8 @@ TIERS = {
     "anti_king": 1, "naked_single": 1, "hidden_single": 1, "innie": 2,
     "outie": 2, "locked": 2,
     "subset": 2, "hidden_subset": 2, "x_wing": 3, "xy_wing": 3, "w_wing": 3,
-    "forcing_chain": 4, "custom": 2,
+    "forcing_chain": 4, "custom": 2, "parity": 1, "odd": 1, "even": 1,
+    "clone": 1, "sandwich": 2, "skyscraper": 2, "region_sum": 2,
 }
 
 
@@ -274,6 +282,75 @@ def _explain_x_wing(events, data, n):
         _link([cells[0], cells[1]], n, "#38bdf8", "dashed"),
         _link([cells[2], cells[3]], n, "#38bdf8", "dashed"),
     ]
+    return detail, visual
+
+
+def _explain_parity(events, data, n):
+    cells = data.get("cells", [])
+    odd = data.get("kind", "odd") == "odd"
+    name = "奇数" if odd else "偶数"
+    detail = (
+        f"{name}约束：{_names(cells, n)} 必须填{name}。\n"
+        f"排除与之矛盾的候选：\n"
+    )
+    detail += "；".join(_effect_lines(events, n)) or "（无）"
+    visual = _basic_visual(events, n)
+    visual["groups"].append({"cells": cells, "kind": "pair"})
+    return detail, visual
+
+
+def _explain_clone(events, data, n):
+    cells = data.get("cells", [])
+    detail = (
+        f"克隆：{_names(cells, n)} 必须填同一个数字。\n"
+        f"取所有格子的候选交集，排除不一致的候选：\n"
+    )
+    detail += "；".join(_effect_lines(events, n)) or "（无）"
+    visual = _basic_visual(events, n)
+    visual["groups"].append({"cells": cells, "kind": "pair"})
+    return detail, visual
+
+
+def _explain_sandwich(events, data, n):
+    cells = data.get("cells", [])
+    total = data.get("sum")
+    detail = (
+        f"三明治：{_names(cells, n)} 中，1 与 9 之间的所有数字之和为 {total}。\n"
+        f"枚举 1 和 9 的所有位置，保留能凑出该和的组合，排除不可能的位置与候选：\n"
+    )
+    detail += "；".join(_effect_lines(events, n)) or "（无）"
+    visual = _basic_visual(events, n)
+    visual["groups"].append({"cells": cells, "kind": "line"})
+    visual["chips"].append({"cell": cells[0], "text": str(total), "kind": "sum"})
+    return detail, visual
+
+
+def _explain_skyscraper(events, data, n):
+    cells = data.get("cells", [])
+    clue = data.get("clue")
+    side = "左" if data.get("direction", "left") == "left" else "右"
+    detail = (
+        f"摩天楼：从{side}侧看 {_names(cells, n)}，应看到 {clue} 栋。\n"
+        f"数字代表楼高，只有比前面都高的楼才可见；据此排除不可能的候选：\n"
+    )
+    detail += "；".join(_effect_lines(events, n)) or "（无）"
+    visual = _basic_visual(events, n)
+    visual["groups"].append({"cells": cells, "kind": "line"})
+    visual["chips"].append({"cell": cells[0], "text": f"见{clue}", "kind": "sum"})
+    return detail, visual
+
+
+def _explain_region_sum(events, data, n):
+    cells = data.get("cells", [])
+    segs = data.get("segments") or []
+    detail = (
+        f"区域和线：{_names(cells, n)} 被区域边界切成 {len(segs)} 段，每段数字和必须相等。\n"
+        f"逐段枚举可达和并取交集，排除无法参与该和的候选：\n"
+    )
+    detail += "；".join(_effect_lines(events, n)) or "（无）"
+    visual = _basic_visual(events, n)
+    visual["groups"].append({"cells": cells, "kind": "line"})
+    visual["links"].append(_link(cells, n, "#38bdf8", "line"))
     return detail, visual
 
 

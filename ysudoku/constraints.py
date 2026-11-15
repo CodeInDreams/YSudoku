@@ -551,6 +551,271 @@ class Custom(Constraint):
         return changed
 
 
+
+def _sum_support(domains: list[int], total: int):
+    """Per-cell value masks that can take part in a sum equal to ``total``."""
+    count = len(domains)
+    prefix = [{0}]
+    for dom in domains:
+        prefix.append({s + v for s in prefix[-1] for v in bits(dom)})
+    if total not in prefix[-1]:
+        return None
+    suffix = [set() for _ in range(count + 1)]
+    suffix[count] = {0}
+    for i in range(count - 1, -1, -1):
+        suffix[i] = {s + v for s in suffix[i + 1] for v in bits(domains[i])}
+    masks = [0] * count
+    for i, dom in enumerate(domains):
+        for value in bits(dom):
+            rest = total - value
+            if any(rest - s in suffix[i + 1] for s in prefix[i]):
+                masks[i] |= 1 << (value - 1)
+    return masks
+
+
+class Parity(Constraint):
+    kind = "parity"
+
+    def __init__(self, cells: list[int], parity: str):
+        self._cells = list(cells)
+        self.parity = parity
+
+    def cells(self) -> list[int]:
+        return self._cells
+
+    def describe(self) -> str:
+        return ("奇数" if self.parity == "odd" else "偶数") + f"（{len(self._cells)} 格）"
+
+    def to_dict(self) -> dict:
+        return {"kind": self.parity, "cells": self._cells}
+
+    def check(self, values: list[int]) -> bool:
+        vals = [values[c] for c in self._cells]
+        if any(v == 0 for v in vals):
+            return True
+        return all(v % 2 == (1 if self.parity == "odd" else 0) for v in vals)
+
+    def prune(self, st: State) -> bool:
+        keep = 0
+        for v in range(1, st.n + 1):
+            if v % 2 == (1 if self.parity == "odd" else 0):
+                keep |= 1 << (v - 1)
+        reason = Reason(self.parity, {"cells": self._cells})
+        changed = False
+        for cell in self._cells:
+            changed |= st.restrict(cell, keep, reason)
+        return changed
+
+
+class Clone(Constraint):
+    kind = "clone"
+
+    def __init__(self, cells: list[int]):
+        self._cells = list(cells)
+
+    def cells(self) -> list[int]:
+        return self._cells
+
+    def describe(self) -> str:
+        return f"克隆（{len(self._cells)} 格相同）"
+
+    def to_dict(self) -> dict:
+        return {"kind": "clone", "cells": self._cells}
+
+    def check(self, values: list[int]) -> bool:
+        vals = [values[c] for c in self._cells]
+        if any(v == 0 for v in vals):
+            return True
+        return len(set(vals)) == 1
+
+    def prune(self, st: State) -> bool:
+        common = st.full
+        for cell in self._cells:
+            common &= st.dom[cell]
+        if common == 0:
+            raise Contradiction("clone cells have no common digit")
+        reason = Reason("clone", {"cells": self._cells})
+        changed = False
+        for cell in self._cells:
+            changed |= st.restrict(cell, common, reason)
+        return changed
+
+
+class Sandwich(Constraint):
+    kind = "sandwich"
+
+    def __init__(self, cells: list[int], total: int):
+        self._cells = list(cells)
+        self.total = total
+
+    def cells(self) -> list[int]:
+        return self._cells
+
+    def describe(self) -> str:
+        return f"三明治 {self.total}（{len(self._cells)} 格）"
+
+    def to_dict(self) -> dict:
+        return {"kind": "sandwich", "cells": self._cells, "sum": self.total}
+
+    def check(self, values: list[int]) -> bool:
+        vals = [values[c] for c in self._cells]
+        if any(v == 0 for v in vals):
+            return True
+        if 1 not in vals or 9 not in vals:
+            return False
+        i, j = vals.index(1), vals.index(9)
+        lo, hi = min(i, j), max(i, j)
+        return sum(vals[lo + 1:hi]) == self.total
+
+    def prune(self, st: State) -> bool:
+        cells = self._cells
+        n = st.n
+        support = {cell: 0 for cell in cells}
+        pos1 = pos9 = 0
+        feasible = False
+        for i in range(n):
+            if not st.has(cells[i], 1):
+                continue
+            for j in range(n):
+                if i == j or not st.has(cells[j], 9):
+                    continue
+                between = cells[min(i, j) + 1:max(i, j)]
+                masks = _sum_support([st.dom[c] for c in between], self.total)
+                if masks is None:
+                    continue
+                feasible = True
+                pos1 |= 1 << i
+                pos9 |= 1 << j
+                for cell, mask in zip(between, masks):
+                    support[cell] |= mask
+        if not feasible:
+            raise Contradiction(f"sandwich {self.total} has no position pair")
+        reason = Reason("sandwich", {"cells": cells, "sum": self.total})
+        changed = False
+        for idx, cell in enumerate(cells):
+            if not (pos1 >> idx) & 1:
+                changed |= st.elim(cell, 1, reason)
+            if not (pos9 >> idx) & 1:
+                changed |= st.elim(cell, 9, reason)
+        for cell, mask in support.items():
+            if mask:
+                changed |= st.restrict(cell, mask, reason)
+        return changed
+
+
+class Skyscraper(Constraint):
+    kind = "skyscraper"
+
+    def __init__(self, cells: list[int], clue: int, direction: str = "left"):
+        self._cells = list(cells)
+        self.clue = clue
+        self.direction = direction
+
+    def cells(self) -> list[int]:
+        return self._cells
+
+    def describe(self) -> str:
+        side = "左" if self.direction == "left" else "右"
+        return f"摩天楼（{side}看 {self.clue} 栋）"
+
+    def to_dict(self) -> dict:
+        return {"kind": "skyscraper", "cells": self._cells,
+                "clue": self.clue, "direction": self.direction}
+
+    def _ordered(self) -> list[int]:
+        return self._cells if self.direction == "left" else list(reversed(self._cells))
+
+    def check(self, values: list[int]) -> bool:
+        vals = [values[c] for c in self._ordered()]
+        if any(v == 0 for v in vals):
+            return True
+        seen = 0
+        best = 0
+        for v in vals:
+            if v > best:
+                best = v
+                seen += 1
+        return seen == self.clue
+
+    def prune(self, st: State) -> bool:
+        cells = self._ordered()
+        n = st.n
+        reason = Reason("skyscraper", {"cells": self._cells, "clue": self.clue,
+                                       "direction": self.direction})
+        changed = False
+        if self.clue == 1:
+            changed |= st.place(cells[0], n, reason)
+        elif self.clue == n:
+            for i, cell in enumerate(cells):
+                changed |= st.place(cell, i + 1, reason)
+        else:
+            changed |= st.elim(cells[0], n, reason)
+        return changed
+
+
+class RegionSum(Constraint):
+    kind = "region_sum"
+
+    def __init__(self, cells: list[int], region_of: dict[int, int]):
+        self._cells = list(cells)
+        self.region_of = region_of
+
+    def cells(self) -> list[int]:
+        return self._cells
+
+    def describe(self) -> str:
+        return f"区域和线（{len(self._cells)} 格）"
+
+    def to_dict(self) -> dict:
+        return {"kind": "region_sum", "cells": self._cells}
+
+    def segments(self) -> list[list[int]]:
+        segs: list[list[int]] = []
+        for cell in self._cells:
+            if segs and self.region_of.get(cell) == self.region_of.get(segs[-1][-1]):
+                segs[-1].append(cell)
+            else:
+                segs.append([cell])
+        return segs
+
+    def check(self, values: list[int]) -> bool:
+        sums = []
+        for seg in self.segments():
+            vals = [values[c] for c in seg]
+            if any(v == 0 for v in vals):
+                return True
+            sums.append(sum(vals))
+        return len(set(sums)) <= 1
+
+    def prune(self, st: State) -> bool:
+        segs = self.segments()
+        if len(segs) < 2:
+            return False
+        possible = []
+        for seg in segs:
+            reach = {0}
+            for cell in seg:
+                reach = {s + v for s in reach for v in bits(st.dom[cell])}
+            possible.append(reach)
+        common = set.intersection(*possible)
+        if not common:
+            raise Contradiction("region-sum segments cannot agree")
+        reason = Reason("region_sum", {"cells": self._cells,
+                                       "segments": segs, "sums": sorted(common)})
+        changed = False
+        for seg in segs:
+            support = [0] * len(seg)
+            for total in common:
+                masks = _sum_support([st.dom[c] for c in seg], total)
+                if masks:
+                    for i, mask in enumerate(masks):
+                        support[i] |= mask
+            for cell, mask in zip(seg, support):
+                if mask:
+                    changed |= st.restrict(cell, mask, reason)
+        return changed
+
+
 class AntiPair(Constraint):
     kind = "anti"
 
