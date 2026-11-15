@@ -29,6 +29,7 @@ class Analysis:
     chaos_regions: list = field(default_factory=list)
     demo: bool = False
     provenance: str = ""
+    source_url: str = ""
 
     def to_json(self) -> dict:
         n = self.puzzle.size
@@ -53,6 +54,7 @@ class Analysis:
             "chaos_regions": self.chaos_regions,
             "demo": self.demo,
             "provenance": self.provenance,
+            "source_url": self.source_url,
             "constraints": [c.to_dict() for c in self.rules.constraints],
             "steps": [step.to_dict(n) for step in self.result.steps],
             "status": self.status,
@@ -222,7 +224,14 @@ def analyze(
     return Analysis(
         puzzle=puzzle,
         demo=demo,
-        provenance=("内置生成示例（程序生成，非已发表题目）" if demo else target),
+        provenance=(
+            f"真实题示例：{puzzle.title} — {puzzle.author}"
+            if demo and puzzle.source_url
+            else "内置生成示例（程序生成，非已发表题目）"
+            if demo
+            else target
+        ),
+        source_url=puzzle.source_url or (target if str(target).startswith("http") else ""),
         spec=spec,
         rules=rules,
         result=result,

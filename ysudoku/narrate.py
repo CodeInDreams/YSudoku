@@ -361,12 +361,18 @@ def _explain_coloring(events, data, n):
     mode = data.get("mode")
     links = data.get("links") or []
     colors = data.get("colors") or {}
+    component = int(data.get("component", 0))
+    palette = data.get("palette") or [["#ef4444", "#3b82f6"]]
+    labels = data.get("labels") or ["A", "B"]
+    pair = palette[component % len(palette)]
+    label_a = labels[(2 * component) % len(labels)]
+    label_b = labels[(2 * component + 1) % len(labels)]
     if mode == "wrap":
-        tone = "A" if data.get("color") == 0 else "B"
+        tone = label_a if data.get("color") == 0 else label_b
         cells = data.get("cells") or []
         detail = (
             f"染色法（数字 {digit}）：把所有强链（同一单元里该数字只剩两个位置）连起来，"
-            f"交替染成 A / B 两色。\n"
+            f"交替染成 {label_a} / {label_b} 两色（不同连通块用不同色对）。\n"
             f"同色格 {_names(cells, n)} 互相看见——它们不可能同时为 {digit}，"
             f"所以 {tone} 色整组都不可能为 {digit}。\n"
             f"排除：\n"
@@ -382,10 +388,13 @@ def _explain_coloring(events, data, n):
     visual = _basic_visual(events, n)
     for a, b in links:
         tone = colors.get(str(a), 0)
-        visual["links"].append(_link([a, b], n, "#ef4444" if tone == 0 else "#3b82f6", "dashed"))
+        visual["links"].append(_link([a, b], n, pair[tone], "dashed"))
     for cell, tone in colors.items():
         visual["chips"].append({
-            "cell": int(cell), "text": "A" if tone == 0 else "B", "kind": "color",
+            "cell": int(cell),
+            "text": label_a if tone == 0 else label_b,
+            "kind": "color",
+            "color": pair[tone],
         })
     return detail, visual
 
@@ -394,8 +403,14 @@ def _explain_medusa(events, data, n):
     mode = data.get("mode")
     links = data.get("links") or []
     colors = data.get("colors") or {}
+    component = int(data.get("component", 0))
+    palette = data.get("palette") or [["#ef4444", "#3b82f6"]]
+    labels = data.get("labels") or ["A", "B"]
+    pair = palette[component % len(palette)]
+    label_a = labels[(2 * component) % len(labels)]
+    label_b = labels[(2 * component + 1) % len(labels)]
     if mode == "wrap":
-        tone = "A" if data.get("color") == 0 else "B"
+        tone = label_a if data.get("color") == 0 else label_b
         detail = (
             f"3D Medusa：把候选（格+数字）用强链连起来，交替染成 A / B。\n"
             f"{tone} 色内部出现了互相冲突的候选（同一格两个数字，或同一单元两个同数字），"
@@ -417,14 +432,19 @@ def _explain_medusa(events, data, n):
         if c1 == c2:
             continue
         tone = colors.get(f"{c1}:{d1}", 0)
-        visual["links"].append(_link([c1, c2], n, "#ef4444" if tone == 0 else "#3b82f6", "dashed"))
+        visual["links"].append(_link([c1, c2], n, pair[tone], "dashed"))
     seen = set()
     for key, tone in colors.items():
         cell = int(key.split(":")[0])
         if cell in seen:
             continue
         seen.add(cell)
-        visual["chips"].append({"cell": cell, "text": "A" if tone == 0 else "B", "kind": "color"})
+        visual["chips"].append({
+            "cell": cell,
+            "text": label_a if tone == 0 else label_b,
+            "kind": "color",
+            "color": pair[tone],
+        })
     return detail, visual
 
 

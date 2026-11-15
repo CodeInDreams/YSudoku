@@ -90,12 +90,24 @@
     $("puzzle-meta").textContent = [data.puzzle.author, `${S.n}×${S.n}`, `${countGiven()} 个提示数`]
       .filter(Boolean).join(" · ");
     const prov = $("provenance");
+    prov.textContent = "";
     if (data.demo) {
-      prov.textContent = "内置生成示例 · 程序生成，非已发表题目";
-      prov.classList.add("demo");
+      prov.textContent = data.source_url
+        ? `${data.provenance || "真实题示例"}`
+        : "内置生成示例 · 程序生成，非已发表题目";
+      prov.classList.toggle("demo", !data.source_url);
     } else {
       prov.classList.remove("demo");
-      prov.textContent = data.provenance ? `来源：${data.provenance}` : "";
+      if (data.provenance) prov.textContent = `来源：${data.provenance}`;
+    }
+    if (data.source_url && data.source_url.startsWith("http")) {
+      const link = document.createElement("a");
+      link.href = data.source_url;
+      link.target = "_blank";
+      link.rel = "noopener";
+      link.className = "src-link";
+      link.textContent = " · 在 SudokuPad 打开原题";
+      prov.appendChild(link);
     }
 
     buildBoard();
@@ -267,20 +279,24 @@
     el("text", { x: x - 0.32, y: y - 0.22, class: cls }, layer).textContent = text;
   }
 
-  function drawCage(layer, cells, sum) {
+  function drawCage(layer, cells, sum, hot = false) {
     if (!cells || !cells.length) return;
     const set = new Set(cells);
     const n = S.n;
     for (const cell of cells) {
       const r = Math.floor(cell / n), c = cell % n;
+      el("rect", {
+        x: c + 0.005, y: r + 0.005, width: 0.99, height: 0.99,
+        class: hot ? "cage-fill hot" : "cage-fill",
+      }, layer);
       const edge = (x1, y1, x2, y2) =>
-        el("line", { x1, y1, x2, y2, class: "cage-edge" }, layer);
+        el("line", { x1, y1, x2, y2, class: hot ? "cage-edge hot" : "cage-edge" }, layer);
       if (!set.has(cell - n)) edge(c, r, c + 1, r);
       if (!set.has(cell + n)) edge(c, r + 1, c + 1, r + 1);
       if (c === 0 || !set.has(cell - 1)) edge(c, r, c, r + 1);
       if (c === n - 1 || !set.has(cell + 1)) edge(c + 1, r, c + 1, r + 1);
     }
-    if (sum !== null && sum !== undefined) {
+    if (sum !== null && sum !== undefined && !hot) {
       const first = cells.reduce((a, b) => {
         const ra = Math.floor(a / n), rb = Math.floor(b / n);
         if (ra !== rb) return ra < rb ? a : b;
@@ -404,6 +420,10 @@
     const layer = $("layer-groups");
     for (const g of visual.groups || []) {
       if (!g.cells || !g.cells.length) continue;
+      if (g.kind === "cage") {
+        drawCage(layer, g.cells, null, true);
+        continue;
+      }
       const pts = g.cells.map(rc);
       const minR = Math.min(...pts.map((p) => p[0])) - 0.03;
       const maxR = Math.max(...pts.map((p) => p[0])) + 1.03;
@@ -437,6 +457,7 @@
       const [r, c] = rc(chip.cell);
       el("text", {
         x: c + 0.5, y: r + 0.5, class: "chip-text",
+        fill: chip.color || "",
       }, $("layer-chips")).textContent = chip.text;
     }
   }

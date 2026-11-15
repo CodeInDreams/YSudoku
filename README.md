@@ -25,7 +25,7 @@ python3 -m ysudoku --web
 # 打开 http://127.0.0.1:8765/
 ```
 
-网页里点「示例」可以先看一道 92 步的完整动画；也可以直接粘贴 SudokuPad 链接。
+网页里点「示例」会加载真实题 **Globosite**（lgastako，229 步，约 2 秒），并给出 SudokuPad 原题链接；也可以直接粘贴 SudokuPad 链接。
 
 命令行看文字推理：
 
@@ -56,12 +56,12 @@ SudokuPad 的 JSON 只保存“画了什么”，真正的规则在 `metadata.ru
 
 ### LLM 配置（可选）
 
-默认走 DeepSeek，也可以指向任何 OpenAI 兼容服务（OpenAI / Ollama / vLLM / OneAPI）：
+默认走 DeepSeek 的 `deepseek-flash`，也可以指向任何 OpenAI 兼容服务（OpenAI / Ollama / vLLM / OneAPI）：
 
 ```bash
 export SUDOKU_LLM_API_KEY=sk-...
 export SUDOKU_LLM_BASE_URL=https://api.deepseek.com   # 或 https://api.openai.com/v1
-export SUDOKU_LLM_MODEL=deepseek-chat
+export SUDOKU_LLM_MODEL=deepseek-flash
 ```
 
 本地 Ollama 示例（无需付费 key）：

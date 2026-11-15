@@ -72,7 +72,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         target = (body.get("url") or "").strip()
         if urlparse(self.path).path == "/api/demo":
-            target = str(STATIC_DIR.parent.parent / "fixtures" / "demo-killer.json")
+            target = str(STATIC_DIR.parent.parent / "fixtures" / "demo-globosite.json")
         if not target:
             self._send(400, b'{"error":"missing url"}', "application/json")
             return
@@ -80,9 +80,9 @@ class Handler(BaseHTTPRequestHandler):
             analysis = analyze(
                 target,
                 demo=(urlparse(self.path).path == "/api/demo"),
-                use_llm=bool(body.get("llm", True)),
+                use_llm=False if urlparse(self.path).path == "/api/demo" else bool(body.get("llm", True)),
                 do_audit=bool(body.get("audit", False)),
-                allow_chains=bool(body.get("chains", False)),
+                allow_chains=True if urlparse(self.path).path == "/api/demo" else bool(body.get("chains", False)),
             )
             payload = analysis.to_json()
         except Exception as exc:  # noqa: BLE001 - surfaced to the UI

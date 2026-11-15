@@ -6,6 +6,15 @@ from collections import defaultdict
 from itertools import combinations
 
 from .constraints import Cage
+
+PALETTE = [
+    ("#ef4444", "#3b82f6"),
+    ("#22c55e", "#f59e0b"),
+    ("#a855f7", "#14b8a6"),
+    ("#ec4899", "#84cc16"),
+    ("#f97316", "#6366f1"),
+    ("#06b6d4", "#eab308"),
+]
 from .state import Reason, State, bits
 
 
@@ -461,7 +470,7 @@ def coloring(st: State, constraints=None):
                         color[other] = 1 - color[cell]
                         stack.append(other)
             components.append(comp)
-        for comp in components:
+        for comp_index, comp in enumerate(components):
             comp_set = set(comp)
             comp_links = [(a, b) for a, b in links if a in comp_set and b in comp_set]
             groups = {0: [c for c in comp if color[c] == 0],
@@ -480,6 +489,9 @@ def coloring(st: State, constraints=None):
                     "digit": digit, "mode": "wrap", "color": tone,
                     "cells": cells, "links": comp_links,
                     "colors": {str(c): color[c] for c in comp},
+                    "component": comp_index,
+                    "palette": [list(p) for p in PALETTE],
+                    "labels": [chr(ord("A") + i) for i in range(2 * len(PALETTE))],
                 })
                 made = False
                 for cell in cells:
@@ -497,6 +509,9 @@ def coloring(st: State, constraints=None):
                         "digit": digit, "mode": "trap", "color": None,
                         "cells": [cell], "links": comp_links,
                         "colors": {str(c): color[c] for c in comp},
+                        "component": comp_index,
+                        "palette": [list(p) for p in PALETTE],
+                        "labels": [chr(ord("A") + i) for i in range(2 * len(PALETTE))],
                     })
                     st.elim(cell, digit, reason)
                     return _wrap(st)
@@ -562,7 +577,7 @@ def medusa(st: State, constraints=None):
                     stack.append(other)
         components.append(comp)
 
-    for comp in components:
+    for comp_index, comp in enumerate(components):
         comp_set = set(comp)
         if any(color[b] == color[a] for a in comp for b in strong[a] if b in comp_set):
             continue  # odd strong-link cycle: colouring inconsistent, skip safely
@@ -589,6 +604,9 @@ def medusa(st: State, constraints=None):
                 "nodes": [list(n) for n in groups[tone]],
                 "links": [[a[0], a[1], b[0], b[1]] for a, b in links],
                 "colors": {f"{c}:{d}": color[(c, d)] for c, d in comp},
+                "component": comp_index,
+                "palette": [list(p) for p in PALETTE],
+                "labels": [chr(ord("A") + i) for i in range(2 * len(PALETTE))],
             })
             made = False
             for cell, digit in groups[tone]:
@@ -607,6 +625,9 @@ def medusa(st: State, constraints=None):
                     "mode": "trap", "cells": [cell], "nodes": [list(node)],
                     "links": [[a[0], a[1], b[0], b[1]] for a, b in links],
                     "colors": {f"{c}:{d}": color[(c, d)] for c, d in comp},
+                    "component": comp_index,
+                    "palette": [list(p) for p in PALETTE],
+                    "labels": [chr(ord("A") + i) for i in range(2 * len(PALETTE))],
                 })
                 st.elim(cell, digit, reason)
                 return _wrap(st)
@@ -624,6 +645,9 @@ def medusa(st: State, constraints=None):
                 "nodes": [[cell, d] for d in keep],
                 "links": [[a[0], a[1], b[0], b[1]] for a, b in links],
                 "colors": {f"{c}:{d}": color[(c, d)] for c, d in comp},
+                "component": comp_index,
+                "palette": [list(p) for p in PALETTE],
+                "labels": [chr(ord("A") + i) for i in range(2 * len(PALETTE))],
             })
             made = False
             for digit in bits(st.dom[cell]):

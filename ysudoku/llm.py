@@ -78,7 +78,7 @@ FULL spec in the same schema (not a diff).  Rules:
 class LLMConfig:
     base_url: str = "https://api.deepseek.com"
     api_key: str = ""
-    model: str = "deepseek-chat"
+    model: str = "deepseek-flash"
     timeout: float = 60.0
 
     @classmethod
@@ -93,7 +93,7 @@ class LLMConfig:
         return cls(
             base_url=os.environ.get("SUDOKU_LLM_BASE_URL", "https://api.deepseek.com").rstrip("/"),
             api_key=key,
-            model=os.environ.get("SUDOKU_LLM_MODEL", "deepseek-chat"),
+            model=os.environ.get("SUDOKU_LLM_MODEL", "deepseek-flash"),
             timeout=float(os.environ.get("SUDOKU_LLM_TIMEOUT", "60")),
         )
 

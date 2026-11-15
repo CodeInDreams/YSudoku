@@ -76,6 +76,7 @@ class Puzzle:
     arrows: list[Arrow]
     texts: list[TextMark]
     solution: list[int] | None
+    source_url: str = ""
     raw: dict = field(repr=False, default_factory=dict)
 
     # ---------------------------------------------------------------- geometry
@@ -371,5 +372,6 @@ def parse_puzzle(data: dict, puzzle_id: str = "") -> Puzzle:
         arrows=arrows,
         texts=texts,
         solution=solution,
+        source_url=str(meta.get("source_url") or ""),
         raw=data,
     )
