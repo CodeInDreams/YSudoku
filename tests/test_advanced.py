@@ -45,3 +45,21 @@ class AdvancedTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RegionCountTest(unittest.TestCase):
+    def test_check_regions(self):
+        from ysudoku.constraints import RegionCount
+        rule = RegionCount([0, 1, 2, 3], [3])
+        self.assertTrue(rule.check_regions([0, 0, 0, 0], {0: 0, 1: 1, 2: 2, 3: 0}))
+        self.assertFalse(rule.check_regions([0, 0, 0, 0], {0: 0, 1: 0, 2: 0, 3: 0}))
+
+    def test_compile_region_count(self):
+        puzzle = parse_puzzle(data())
+        inventory = build_inventory(puzzle)
+        spec = {"rules": [{"kind": "region_count",
+                           "cells": ["R1C1", "R1C2", "R2C1", "R2C2"],
+                           "counts": [1, 4]}], "globals": []}
+        rules = compile_spec(puzzle, inventory, spec)
+        kinds = [c.kind for c in rules.constraints]
+        self.assertIn("region_count", kinds)

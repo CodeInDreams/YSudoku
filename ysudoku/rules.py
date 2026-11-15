@@ -14,6 +14,7 @@ from math import dist
 
 from .constraints import (
     AntiPair,
+    RegionCount,
     ClassCover,
     Clone,
     Custom,
@@ -171,6 +172,7 @@ KINDS = {
     "sandwich": "三明治",
     "skyscraper": "摩天楼",
     "region_sum": "区域和线",
+    "region_count": "区域计数",
     "modular": "模块 2×2（每宫含 1/4/7、2/5/8、3/6/9）",
     "entropy": "熵 2×2（每宫含低/中/高）",
 }
@@ -189,6 +191,28 @@ def compile_spec(puzzle: Puzzle, elements: list[Element], spec: dict,
         params = {k: v for k, v in raw.items() if k not in ("kind", "elements", "note")}
         if kind not in KINDS:
             result.warnings.append(f"未知规则类型 {kind}（已忽略）")
+            continue
+        if kind == "region_count":
+            scope, eids = _resolve_scope(puzzle, elements, raw, result.warnings)
+            if not scope:
+                continue
+            raw_counts = raw.get("counts", raw.get("count"))
+            if raw_counts is None:
+                result.warnings.append("region_count 缺少 counts")
+                continue
+            counts = raw_counts if isinstance(raw_counts, (list, tuple)) else [raw_counts]
+            try:
+                rule = RegionCount(scope, [int(c) for c in counts])
+            except ValueError as exc:
+                result.warnings.append(f"region_count: {exc}")
+                continue
+            result.constraints.append(rule)
+            result.resolved.append({
+                "kind": "region_count", "label": KINDS["region_count"],
+                "elements": eids, "count": 1,
+                "hypothesis": bool(raw.get("hypothesis")),
+            })
+            used.update(eids)
             continue
         if kind in ("clone", "odd", "even"):
             scope, eids = _resolve_scope(puzzle, elements, raw, result.warnings)

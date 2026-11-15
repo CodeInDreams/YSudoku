@@ -19,6 +19,7 @@ TITLES = {
     "coloring": "染色法",
     "medusa": "3D Medusa（多数字染色）",
     "x_chain": "X-Chain（单数字链）",
+    "als": "ALS-XZ",
     "forcing_chain": "反证（试探）",
     "custom": "自定义规则（L2）",
     "parity": "奇偶",
@@ -464,6 +465,29 @@ def _explain_x_chain(events, data, n):
     visual = _basic_visual(events, n)
     visual["groups"].append({"cells": path, "kind": "line"})
     visual["links"].append(_link(path, n, "#f59e0b", "line"))
+    return detail, visual
+
+
+def _explain_als(events, data, n):
+    a1 = data.get("als1") or []
+    a2 = data.get("als2") or []
+    x = data.get("x")
+    z = data.get("z")
+    detail = (
+        f"ALS-XZ：两个「几乎锁定集」\n"
+        f"  A = {_names(a1, n)}，B = {_names(a2, n)}\n"
+        f"共同候选里，{x} 是受限共同候选（A、B 中所有 {x} 都互相看见，不能同时在两边成立），"
+        f"{z} 是普通共同候选。\n"
+        f"若 A 不含 {z}，则 A 的其余候选被迫成立，进而推出 B 的 {z} 成立；"
+        f"所以 {z} 必然落在 A 或 B 中。\n"
+        f"因此同时看见 A、B 里所有 {z} 的格子不能是 {z}：\n"
+    )
+    detail += "；".join(_effect_lines(events, n)) or "（无）"
+    visual = _basic_visual(events, n)
+    visual["groups"].append({"cells": a1, "kind": "pair"})
+    visual["groups"].append({"cells": a2, "kind": "pair"})
+    visual["chips"].append({"cell": a1[0], "text": f"X={x}", "kind": "sum"})
+    visual["chips"].append({"cell": a2[0], "text": f"Z={z}", "kind": "value"})
     return detail, visual
 
 

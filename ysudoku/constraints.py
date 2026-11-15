@@ -877,6 +877,37 @@ class ClassCover(Constraint):
         return changed
 
 
+class RegionCount(Constraint):
+    """Region-aware rule: the scope cells must span one of the allowed counts."""
+
+    kind = "region_count"
+
+    def __init__(self, cells: list[int], counts: list[int]):
+        self._cells = list(cells)
+        self.counts = sorted({int(c) for c in counts})
+        if not self.counts:
+            raise ValueError("region_count needs at least one count")
+
+    def cells(self) -> list[int]:
+        return self._cells
+
+    def describe(self) -> str:
+        return f"区域计数 {self.counts}（{len(self._cells)} 格）"
+
+    def to_dict(self) -> dict:
+        return {"kind": "region_count", "cells": self._cells, "counts": self.counts}
+
+    def check(self, values: list[int]) -> bool:
+        return True  # needs regions; see check_regions
+
+    def check_regions(self, values: list[int], region_of: dict[int, int]) -> bool:
+        regions = {region_of.get(c, -1) for c in self._cells}
+        return len(regions) in self.counts
+
+    def prune(self, st: State) -> bool:
+        return False
+
+
 class AntiPair(Constraint):
     kind = "anti"
 

@@ -719,6 +719,68 @@ def x_chain(st: State, constraints=None):
     return _wrap(st)
 
 
+def als(st: State, constraints=None):
+    """ALS-XZ: two almost-locked sets with a restricted common and a shared Z."""
+    st.begin()
+    als_list: list[tuple[tuple[int, ...], int]] = []
+    seen: set[frozenset[int]] = set()
+    for unit in st.units:
+        candidates = [c for c in unit.cells if st.vals[c] == 0]
+        if len(candidates) < 2:
+            continue
+        for k in (2, 3):
+            for combo in combinations(candidates, k):
+                key = frozenset(combo)
+                if key in seen:
+                    continue
+                union = 0
+                for cell in combo:
+                    union |= st.dom[cell]
+                if union.bit_count() != k + 1:
+                    continue
+                seen.add(key)
+                als_list.append((combo, union))
+    if len(als_list) > 500:
+        als_list = als_list[:500]
+
+    for i in range(len(als_list)):
+        a1, u1 = als_list[i]
+        set1 = set(a1)
+        for j in range(i + 1, len(als_list)):
+            a2, u2 = als_list[j]
+            if set1 & set(a2):
+                continue
+            common = u1 & u2
+            if common.bit_count() < 2:
+                continue
+            for x in bits(common):
+                cells1x = [c for c in a1 if st.has(c, x)]
+                cells2x = [c for c in a2 if st.has(c, x)]
+                if not cells1x or not cells2x:
+                    continue
+                if not all(b in st.peers[a] for a in cells1x for b in cells2x):
+                    continue
+                for z in bits(common):
+                    if z == x:
+                        continue
+                    cells1z = [c for c in a1 if st.has(c, z)]
+                    cells2z = [c for c in a2 if st.has(c, z)]
+                    if not cells1z or not cells2z:
+                        continue
+                    inside = set1 | set(a2)
+                    for cell in range(st.n2):
+                        if cell in inside or not st.has(cell, z):
+                            continue
+                        if all(cell in st.peers[p] for p in cells1z + cells2z):
+                            reason = Reason("als", {
+                                "als1": list(a1), "als2": list(a2),
+                                "x": x, "z": z, "target": cell,
+                            })
+                            st.elim(cell, z, reason)
+                            return _wrap(st)
+    return _wrap(st)
+
+
 TECHNIQUES = [
     ("naked_single", 1, naked_single),
     ("hidden_single", 1, hidden_single),
@@ -732,5 +794,6 @@ TECHNIQUES = [
     ("coloring", 3, coloring),
     ("medusa", 3, medusa),
     ("x_chain", 3, x_chain),
+    ("als", 3, als),
     ("forcing_chain", 4, forcing_chain),
 ]

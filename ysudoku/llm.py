@@ -21,10 +21,12 @@ Schema:
     {"kind": "cage" | "thermo" | "arrow" | "kropki" | "xv" | "quadruple" |
              "palindrome" | "renban" | "german_whisper" | "dutch_whisper" |
              "between" | "consecutive" | "little_killer" | "clone" |
-             "clone" | "odd" | "even" | "sandwich" | "skyscraper" | "region_sum",
+             "clone" | "odd" | "even" | "sandwich" | "skyscraper" | "region_sum" |
+             "region_count",
      "elements": ["<element id>", ...],
      "variant": "black" | "white",     // kropki only
      "sum": 15,                        // xv / little_killer only
+     "counts": [1, 4],                 // region_count only
      "note": "why this rule applies"}
   ],
   "globals": [

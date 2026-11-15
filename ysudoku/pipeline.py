@@ -146,7 +146,8 @@ def analyze(
             "how many cells of its own region", "block vision",
             "region borders", "consecutive cells immediately following",
         ))
-        if exotic:
+        has_region_rules = any(c.kind == "region_count" for c in rules.constraints)
+        if exotic and not has_region_rules:
             return Analysis(
                 puzzle=puzzle, spec=spec, rules=rules, result=SolveResult("unsupported", [], []),
                 initial=solver.initial, source=source,

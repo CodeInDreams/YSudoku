@@ -37,7 +37,7 @@ def _neighbors(cell: int, n: int):
         yield cell + 1
 
 
-def solve_chaos(puzzle, constraints, node_limit: int = 300_000,
+def solve_chaos(puzzle, constraints, node_limit: int = 1_500_000,
                 time_limit: float = 20.0) -> ChaosResult:
     n = puzzle.size
     if n > 9:
@@ -52,23 +52,24 @@ def solve_chaos(puzzle, constraints, node_limit: int = 300_000,
     col_used = [set() for _ in range(n)]
     nodes = [0]
     started = time.time()
+    region_rules = [con for con in constraints if con.kind == "region_count"]
     cage_rules = []
     for con in constraints:
-        total = getattr(con, "total", None)
-        if con.kind == "cage" and total is not None:
-            cage_rules.append((set(con.cells()), int(total), bool(getattr(con, "unique", True))))
+        con_total = getattr(con, "total", None)
+        if con.kind == "cage" and con_total is not None:
+            cage_rules.append((set(con.cells()), int(con_total), bool(getattr(con, "unique", True))))
 
     def cages_ok() -> bool:
-        for cells, total, unique in cage_rules:
+        for cells, target_sum, unique in cage_rules:
             vals = [values[c] for c in cells if values[c]]
             if unique and len(set(vals)) != len(vals):
                 return False
             if len(vals) == len(cells):
-                if sum(vals) != total:
+                if sum(vals) != target_sum:
                     return False
                 continue
             remaining = len(cells) - len(vals)
-            if not (sum(vals) + remaining <= total <= sum(vals) + remaining * n):
+            if not (sum(vals) + remaining <= target_sum <= sum(vals) + remaining * n):
                 return False
         return True
 
@@ -79,8 +80,27 @@ def solve_chaos(puzzle, constraints, node_limit: int = 300_000,
         return any(region_of[nb] == -1 for c in cells for nb in _neighbors(c, n))
 
     def check_all() -> bool:
+        region_map = {c: region_of[c] for c in range(total)}
         for con in constraints:
-            if not con.check(values):
+            if con.kind == "region_count":
+                if not con.check_regions(values, region_map):
+                    return False
+            elif not con.check(values):
+                return False
+        return True
+
+    def region_rules_ok(cell: int) -> bool:
+        for con in region_rules:
+            cells = con.cells()
+            if cell not in cells:
+                continue
+            assigned = [region_of[c] for c in cells if region_of[c] >= 0]
+            distinct = len(set(assigned))
+            unassigned = len(cells) - len(assigned)
+            if unassigned == 0:
+                if distinct not in con.counts:
+                    return False
+            elif not any(distinct <= k <= distinct + unassigned for k in con.counts):
                 return False
         return True
 
@@ -114,6 +134,13 @@ def solve_chaos(puzzle, constraints, node_limit: int = 300_000,
                 created = True
             region_cells[choice].append(cell)
             region_of[cell] = choice
+            if not region_rules_ok(cell):
+                region_cells[choice].pop()
+                region_of[cell] = -1
+                if created:
+                    region_cells.pop()
+                    region_used.pop()
+                continue
             digits = [givens[cell]] if cell in givens else range(1, n + 1)
             ok = False
             for digit in digits:
@@ -173,7 +200,11 @@ def check_chaos_solution(puzzle, constraints, values: list[int], regions: list[l
     for i, reg in enumerate(regions):
         if {values[cell] for cell in reg} != want:
             errors.append(f"区域{i + 1}不是 1..{n} 的排列")
+    region_of = {cell: i for i, reg in enumerate(regions) for cell in reg}
     for con in constraints:
-        if not con.check(values):
+        if con.kind == "region_count":
+            if not con.check_regions(values, region_of):
+                errors.append(f"违反规则：{con.describe()}")
+        elif not con.check(values):
             errors.append(f"违反规则：{con.describe()}")
     return errors
