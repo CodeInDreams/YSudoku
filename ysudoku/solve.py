@@ -20,12 +20,13 @@ class SolveResult:
 
 
 class Solver:
-    def __init__(self, puzzle, rules):
+    def __init__(self, puzzle, rules, allow_chains: bool = False):
         self.puzzle = puzzle
         self.rules = rules
         self.units = build_units(puzzle, (rules.diagonal_main, rules.diagonal_anti))
         self.state = State(puzzle.size, self.units)
         self.constraints = list(rules.constraints)
+        self.allow_chains = allow_chains
         self.steps: list[Step] = []
         self.invalid: str | None = None
         try:
@@ -54,7 +55,9 @@ class Solver:
                 step.pre_dom, step.pre_vals = pre_dom, pre_vals
                 return step, None
 
-        for _name, _tier, technique in TECHNIQUES:
+        for name, _tier, technique in TECHNIQUES:
+            if name == "forcing_chain" and not self.allow_chains:
+                continue
             pre_dom, pre_vals = self._pre()
             try:
                 events = technique(self.state, self.constraints)
@@ -78,8 +81,12 @@ class Solver:
             if error:
                 return SolveResult("invalid", self.steps, self.state.vals, error)
             if step is None:
-                return SolveResult("stuck", self.steps, self.state.vals,
-                                   "所有技巧都已尝试，暂时无法继续")
+                tried = sorted({s.technique for s in self.steps})
+                hint = "" if self.allow_chains else "；可开启「反证」(--allow-chains) 尝试高级试探"
+                return SolveResult(
+                    "stuck", self.steps, self.state.vals,
+                    f"已尝试 {len(tried)} 类技巧仍卡住{hint}",
+                )
             self.steps.append(step)
         return SolveResult("solved", self.steps, self.state.vals, "")
 

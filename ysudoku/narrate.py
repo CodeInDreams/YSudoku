@@ -13,6 +13,9 @@ TITLES = {
     "subset": "数对/三数组",
     "hidden_subset": "隐性数组",
     "x_wing": "X-Wing",
+    "xy_wing": "XY-Wing",
+    "w_wing": "W-Wing",
+    "forcing_chain": "反证（试探）",
     "cage": "杀手笼组合",
     "thermo": "温度计",
     "arrow": "箭头",
@@ -39,7 +42,8 @@ TIERS = {
     "between": 1, "consecutive": 1, "little_killer": 1, "anti_knight": 1,
     "anti_king": 1, "naked_single": 1, "hidden_single": 1, "innie": 2,
     "outie": 2, "locked": 2,
-    "subset": 2, "hidden_subset": 2, "x_wing": 3,
+    "subset": 2, "hidden_subset": 2, "x_wing": 3, "xy_wing": 3, "w_wing": 3,
+    "forcing_chain": 4,
 }
 
 
@@ -268,6 +272,65 @@ def _explain_x_wing(events, data, n):
         _link([cells[0], cells[1]], n, "#38bdf8", "dashed"),
         _link([cells[2], cells[3]], n, "#38bdf8", "dashed"),
     ]
+    return detail, visual
+
+
+def _explain_xy_wing(events, data, n):
+    pivot, (w1, w2) = data["pivot"], data["wings"]
+    a, b, c = data["digits"]
+    detail = (
+        f"XY-Wing：枢纽 {cell_name(pivot, n)} 的候选是 {{{a},{b}}}；"
+        f"两翼 {cell_name(w1, n)} 为 {{{a},{c}}}、{cell_name(w2, n)} 为 {{{b},{c}}}。\n"
+        f"枢纽无论取 {a} 还是 {b}，数字 {c} 都必然落在其中一翼；\n"
+        f"因此同时看见两翼的格子不能是 {c}：\n"
+    )
+    detail += "；".join(_effect_lines(events, n)) or "（无）"
+    visual = _basic_visual(events, n)
+    visual["groups"].append({"cells": [pivot, w1, w2], "kind": "pair"})
+    visual["links"] = [
+        _link([pivot, w1], n, "#38bdf8", "dashed"),
+        _link([pivot, w2], n, "#38bdf8", "dashed"),
+    ]
+    return detail, visual
+
+
+def _explain_w_wing(events, data, n):
+    x, y = data["cells"]
+    p, q = data["link"]
+    digit, other = data["digits"]
+    detail = (
+        f"W-Wing：{cell_name(x, n)} 与 {cell_name(y, n)} 的候选都是 {{{digit},{other}}}。\n"
+        f"数字 {digit} 在某个单元里只有 {cell_name(p, n)}、{cell_name(q, n)} 两个位置（强链）。\n"
+        f"若 {cell_name(x, n)}={digit}，则 {cell_name(p, n)}≠{digit}，强制 {cell_name(q, n)}={digit}，"
+        f"于是 {cell_name(y, n)}={other}；反之亦然。\n"
+        f"两种情况下 {other} 都落在这两格之一，因此它们的共同影响格不能是 {other}：\n"
+    )
+    detail += "；".join(_effect_lines(events, n)) or "（无）"
+    visual = _basic_visual(events, n)
+    visual["groups"].append({"cells": [x, y, p, q], "kind": "pair"})
+    visual["links"] = [_link([x, p], n, "#f59e0b", "dashed"), _link([y, q], n, "#f59e0b", "dashed")]
+    return detail, visual
+
+
+def _explain_forcing_chain(events, data, n):
+    cell, value = data["cell"], data["value"]
+    trace = data.get("trace") or []
+    detail = (
+        f"反证（高级技巧，不属于纯直接推理）：假设 {cell_name(cell, n)} = {value}。\n"
+        f"沿着已确定的约束传播，得到以下连锁反应：\n"
+    )
+    if trace:
+        parts = []
+        for item in trace:
+            if item["kind"] == "place":
+                parts.append(f"{cell_name(item['cell'], n)}={item['value']}")
+            else:
+                parts.append(f"{cell_name(item['cell'], n)}≠{item['value']}")
+        detail += " → ".join(parts) + "\n"
+    detail += f"传播最终出现矛盾（某格候选被清空），所以假设不成立：{cell_name(cell, n)} ≠ {value}。\n"
+    detail += "注意：这一步是反证，不是直接推理；如只想看纯逻辑链，请关闭「反证」开关。"
+    visual = _basic_visual(events, n)
+    visual["focus"] = [cell]
     return detail, visual
 
 

@@ -42,6 +42,10 @@ class _Handler(BaseHTTPRequestHandler):
 
 
 class LLMPipelineTest(unittest.TestCase):
+    def setUp(self):
+        os.environ["YSUDOKU_CACHE"] = tempfile.mkdtemp(prefix="ysudoku-cache-")
+        os.environ["YSUDOKU_RULES"] = os.path.join(tempfile.mkdtemp(prefix="ysudoku-rules-"), "rules")
+
     @classmethod
     def setUpClass(cls):
         cls.server = HTTPServer(("127.0.0.1", 0), _Handler)

@@ -81,6 +81,7 @@ class Handler(BaseHTTPRequestHandler):
                 target,
                 use_llm=bool(body.get("llm", True)),
                 do_audit=bool(body.get("audit", False)),
+                allow_chains=bool(body.get("chains", False)),
             )
             payload = analysis.to_json()
         except Exception as exc:  # noqa: BLE001 - surfaced to the UI

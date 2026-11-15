@@ -307,6 +307,128 @@ def x_wing(st: State, constraints=None):
     return _wrap(st)
 
 
+def xy_wing(st: State, constraints=None):
+    st.begin()
+    for pivot in range(st.n2):
+        if st.vals[pivot] or st.dom[pivot].bit_count() != 2:
+            continue
+        a, b = bits(st.dom[pivot])
+        for wing1 in st.peers[pivot]:
+            if st.vals[wing1]:
+                continue
+            d1 = st.dom[wing1]
+            if d1.bit_count() != 2 or not d1 & (1 << (a - 1)) or d1 & (1 << (b - 1)):
+                continue
+            c = (d1 & ~(1 << (a - 1))).bit_length()
+            for wing2 in st.peers[pivot]:
+                if wing2 == wing1 or st.vals[wing2]:
+                    continue
+                d2 = st.dom[wing2]
+                if d2.bit_count() != 2 or not d2 & (1 << (b - 1)) or d2 & (1 << (a - 1)):
+                    continue
+                if not d2 & (1 << (c - 1)):
+                    continue
+                reason = Reason("xy_wing", {
+                    "pivot": pivot, "wings": [wing1, wing2], "digits": [a, b, c],
+                })
+                made = False
+                targets = (set(st.peers[wing1]) & set(st.peers[wing2])) - {pivot, wing1, wing2}
+                for cell in targets:
+                    if st.has(cell, c):
+                        st.elim(cell, c, reason)
+                        made = True
+                if made:
+                    return _wrap(st)
+    return _wrap(st)
+
+
+def w_wing(st: State, constraints=None):
+    st.begin()
+    pairs = {}
+    for cell in range(st.n2):
+        if st.vals[cell] == 0 and st.dom[cell].bit_count() == 2:
+            pairs.setdefault(st.dom[cell], []).append(cell)
+    links = {}
+    for unit in st.units:
+        for digit in range(1, st.n + 1):
+            hosts = [c for c in unit.cells if st.has(c, digit)]
+            if len(hosts) == 2:
+                links.setdefault(digit, []).append(tuple(hosts))
+    for mask, cells in pairs.items():
+        if len(cells) < 2:
+            continue
+        a, b = bits(mask)
+        for i in range(len(cells)):
+            for j in range(i + 1, len(cells)):
+                x, y = cells[i], cells[j]
+                for digit, other in ((a, b), (b, a)):
+                    for p, q in links.get(digit, []):
+                        if (p in st.peers[x] and q in st.peers[y]) or (
+                            q in st.peers[x] and p in st.peers[y]
+                        ):
+                            reason = Reason("w_wing", {
+                                "cells": [x, y], "link": [p, q], "digits": [digit, other],
+                            })
+                            made = False
+                            for cell in (set(st.peers[x]) & set(st.peers[y])) - {x, y}:
+                                if st.has(cell, other):
+                                    st.elim(cell, other, reason)
+                                    made = True
+                            if made:
+                                return _wrap(st)
+    return _wrap(st)
+
+
+def forcing_chain(st: State, constraints=None):
+    """T4: assume a candidate and refute it by propagation (labelled as 反证)."""
+    if not constraints:
+        return None
+    from .search import propagate
+
+    st.begin()
+    order = sorted(
+        (c for c in range(st.n2) if st.vals[c] == 0),
+        key=lambda c: st.dom[c].bit_count(),
+    )
+    probes = 0
+    for cell in order[:24]:
+        if st.dom[cell].bit_count() > 3:
+            continue
+        for value in bits(st.dom[cell]):
+            probes += 1
+            if probes > 120:
+                return _wrap(st)
+            child = st.copy()
+            child.record = True
+            child.events = []
+            try:
+                child.place(cell, value, Reason("assumption", {"cell": cell, "value": value}))
+                ok = propagate(child, constraints)
+            except Contradiction:
+                ok = False
+            if ok:
+                continue
+            trace = [
+                {
+                    "kind": e.kind,
+                    "cell": e.cell,
+                    "value": e.value,
+                    "reason": e.reason.kind,
+                }
+                for e in child.events
+                if e.reason.kind != "assumption"
+            ][-6:]
+            reason = Reason("forcing_chain", {
+                "cell": cell,
+                "value": value,
+                "trace": trace,
+                "steps": max(0, len(child.events) - 1),
+            })
+            st.elim(cell, value, reason)
+            return _wrap(st)
+    return _wrap(st)
+
+
 TECHNIQUES = [
     ("naked_single", 1, naked_single),
     ("hidden_single", 1, hidden_single),
@@ -315,4 +437,7 @@ TECHNIQUES = [
     ("locked", 2, locked_candidates),
     ("subset", 2, naked_subset),
     ("x_wing", 3, x_wing),
+    ("xy_wing", 3, xy_wing),
+    ("w_wing", 3, w_wing),
+    ("forcing_chain", 4, forcing_chain),
 ]

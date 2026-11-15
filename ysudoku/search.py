@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .state import Contradiction, State, bits
+from .state import Contradiction, Reason, State, bits
 
 
 class BudgetExceeded(Exception):
@@ -21,7 +21,8 @@ def propagate(st: State, constraints, max_rounds: int = 200) -> bool:
         for cell in range(st.n2):
             if st.vals[cell] == 0 and st.dom[cell].bit_count() == 1:
                 try:
-                    st.place(cell, st.dom[cell].bit_length())
+                    value = st.dom[cell].bit_length()
+                    st.place(cell, value, Reason("probe_single", {"cell": cell, "value": value}) if st.record else None)
                 except Contradiction:
                     return False
                 changed = True
@@ -32,7 +33,9 @@ def propagate(st: State, constraints, max_rounds: int = 200) -> bool:
                     return False
                 if len(hosts) == 1 and st.vals[hosts[0]] == 0:
                     try:
-                        st.place(hosts[0], digit)
+                        st.place(hosts[0], digit, Reason("probe_hidden", {
+                            "cell": hosts[0], "value": digit, "unit": unit.label,
+                        }) if st.record else None)
                     except Contradiction:
                         return False
                     changed = True

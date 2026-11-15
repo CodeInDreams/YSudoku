@@ -49,6 +49,7 @@ def main(argv=None) -> int:
     parser.add_argument("--json", action="store_true", help="输出 JSON")
     parser.add_argument("--no-cache", action="store_true", help="跳过规则缓存")
     parser.add_argument("--save-rules", action="store_true", help="把编译出的规则写入 rules/ 共享目录")
+    parser.add_argument("--allow-chains", action="store_true", help="允许反证（试探）作为最后手段，步骤会标注 T4")
     args = parser.parse_args(argv)
 
     if args.web or not args.target:
@@ -62,6 +63,7 @@ def main(argv=None) -> int:
         do_audit=args.audit,
         use_cache=not args.no_cache,
         save_rules=args.save_rules,
+        allow_chains=args.allow_chains,
     )
     if args.json:
         print(json.dumps(analysis.to_json(), ensure_ascii=False, indent=1))

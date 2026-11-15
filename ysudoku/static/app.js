@@ -53,7 +53,12 @@
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url, llm: $("use-llm").checked, audit: $("audit").checked }),
+        body: JSON.stringify({
+          url,
+          llm: $("use-llm").checked,
+          audit: $("audit").checked,
+          chains: $("chains").checked,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "解析失败");
@@ -444,6 +449,7 @@
     const sourceLabel = {
       llm: "LLM 编译（已用官方答案校验）",
       cache: "LLM 编译（本地缓存）",
+      "llm-repair": "LLM 卡住后二次修复",
       manual: "手动规则",
       heuristic: "本地启发式",
     }[rules.source] || rules.source;

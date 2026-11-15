@@ -49,6 +49,20 @@ Rules:
 """
 
 
+REPAIR_PROMPT = """You repair rule specs for a variant sudoku solver.
+You receive the official rules text, the drawn-element inventory, the current
+JSON spec, and diagnostics from a solve that got stuck.  Output a corrected
+FULL spec in the same schema (not a diff).  Rules:
+- Only use the supported kinds listed in the schema from the first message.
+- Every constraint must be justified by the rules text; never invent one.
+- Elements that the current spec ignored are often the missing constraint:
+  re-read the text and map them.
+- A rule may have been mapped to the wrong kind or wrong variant; fix it.
+- Keep the constraints that were already correct.
+- Output valid JSON only, no markdown fences.
+"""
+
+
 @dataclass
 class LLMConfig:
     base_url: str = "https://api.deepseek.com"
@@ -115,6 +129,37 @@ def chat(config: LLMConfig, messages: list[dict], temperature: float = 0.0) -> s
         return data["choices"][0]["message"]["content"]
     except (KeyError, IndexError) as exc:
         raise LLMError(f"unexpected response: {data}") from exc
+
+
+def repair_rules(config: LLMConfig, rules_text: str, inventory: list[dict],
+                 spec: dict, diagnostics: dict) -> dict:
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": REPAIR_PROMPT},
+        {
+            "role": "user",
+            "content": (
+                f"=== OFFICIAL RULES ===\n{rules_text}\n\n"
+                "=== DRAWN ELEMENTS ===\n"
+                + json.dumps(inventory, ensure_ascii=False)
+                + "\n\n=== CURRENT SPEC ===\n"
+                + json.dumps(spec, ensure_ascii=False)
+                + "\n\n=== DIAGNOSTICS (solve got stuck) ===\n"
+                + json.dumps(diagnostics, ensure_ascii=False)
+                + "\n\nReturn the corrected full spec as JSON."
+            ),
+        },
+    ]
+    last_error = ""
+    for _ in range(2):
+        reply = chat(config, messages)
+        try:
+            return parse_json_reply(reply)
+        except Exception as exc:  # noqa: BLE001
+            last_error = str(exc)
+            messages.append({"role": "assistant", "content": reply})
+            messages.append({"role": "user", "content": f"Invalid JSON ({exc}). Reply with JSON only."})
+    raise LLMError(f"failed to repair rules: {last_error}")
 
 
 def parse_json_reply(text: str) -> dict:

@@ -72,6 +72,7 @@ def analyze(
     llm_config: "llm.LLMConfig | None" = None,
     use_cache: bool = True,
     save_rules: bool = False,
+    allow_chains: bool = False,
 ) -> Analysis:
     from .sudokupad import load
 
@@ -121,7 +122,7 @@ def analyze(
     rules = compile_spec(puzzle, inventory, spec, source=source)
     warnings.extend(rules.warnings)
 
-    solver = Solver(puzzle, rules)
+    solver = Solver(puzzle, rules, allow_chains=allow_chains)
     chaos = "chaos construction" in (puzzle.rules_text or "").lower()
     if chaos:
         return Analysis(
@@ -135,6 +136,34 @@ def analyze(
         )
 
     result = solver.run(max_steps=max_steps)
+
+    # If the trusted rules stall, ask the LLM to re-read the rule text and fix
+    # the spec (never shown the solution, only the diagnostics).
+    if (result.status == "stuck" and use_llm and source in ("llm", "cache")
+            and puzzle.rules_text):
+        config = llm_config or llm.LLMConfig.from_env()
+        if config is not None:
+            diagnostics = {
+                "steps": len(result.steps),
+                "message": result.message,
+                "tried": sorted({step.technique for step in result.steps}),
+                "unused_elements": [w for w in warnings if "未被任何规则使用" in w][:10],
+                "warnings": [w for w in warnings if "未被任何规则使用" not in w][-6:],
+            }
+            repaired = _llm_repair(puzzle, inventory, config, spec, diagnostics, warnings)
+            if repaired is not None:
+                new_spec, new_rules = repaired
+                solver2 = Solver(puzzle, new_rules, allow_chains=allow_chains)
+                result2 = solver2.run(max_steps=max_steps)
+                if (result2.status == "solved"
+                        or len(result2.steps) > len(result.steps)):
+                    rules, result, solver, spec = new_rules, result2, solver2, new_spec
+                    source = "llm-repair"
+                    try:
+                        rulecache.save(puzzle, inventory, fingerprint, spec,
+                                       model=config.model, shared=save_rules)
+                    except OSError:
+                        pass
 
     status = result.status
     message = result.message
@@ -169,6 +198,22 @@ def analyze(
         status=status,
         message=message,
     )
+
+
+def _llm_repair(puzzle, inventory, config, spec, diagnostics, warnings):
+    inventory_json = [element.to_json(puzzle.size) for element in inventory]
+    try:
+        new_spec = llm.repair_rules(config, puzzle.rules_text, inventory_json, spec, diagnostics)
+    except llm.LLMError as exc:
+        warnings.append(f"LLM 规则修复失败：{exc}")
+        return None
+    new_rules = compile_spec(puzzle, inventory, new_spec, source="llm-repair")
+    if puzzle.solution:
+        errors = check_solution(puzzle, new_rules, puzzle.solution)
+        if errors:
+            warnings.append("LLM 修复后的规则仍与官方答案冲突：" + "；".join(errors[:3]))
+            return None
+    return new_spec, new_rules
 
 
 def _llm_spec(puzzle, inventory, config, warnings: list[str]):
