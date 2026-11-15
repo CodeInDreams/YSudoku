@@ -17,7 +17,7 @@
 | 层 | 能力 | 状态 |
 |---|---|---|
 | **L1 重映射** | 规则文本 + 元素清单 → 已有约束类型的正确组合；卡住后带诊断信息重编译 | ✅ 已实现 |
-| **L2 类型化组合** | 从固定原语（sum / count / ordered / distinct / region_count …）组合出新约束 | 📐 本文档 |
+| **L2 类型化组合** | 从固定原语（sum / count / ordered / distinct / region_count …）组合出新约束 | ✅ 已实现（第一版） |
 | **L3 插件代码** | 模型写 Python 插件 | ❌ 不做 |
 
 L1 已经能解决大部分“规则看懂了但元素没对上”的问题（颜色、粗细、圆圈含义、XV/黑点混淆等），
@@ -82,6 +82,17 @@ L1 已经能解决大部分“规则看懂了但元素没对上”的问题（�
    {"op":"eq","args":[{"op":"count_regions","args":[...]},{"const":4}]}]},
  "cite":"must either belong to the same region or four distinct regions"}
 ```
+
+## 3.5 已实现的 L2（第一版）
+
+- 位置：`ysudoku/predicate.py`（AST）+ `constraints.py::Custom`（枚举 GAC）
+- 谓词节点：`const var sum min max abs add sub mul mod count_digit count_distinct
+  all_different ordered eq ne lt le gt ge and or not`
+- 作用域 2–6 格；候选组合数 > 8 万时跳过传播（只保留 `check`），避免拖慢搜索
+- spec 形状：`{"kind":"custom","cells":[...] | "scope":{"element":"..."},
+  "predicate":{...},"cite":"...","hypothesis":true}`
+- 推测规则会出现在网页规则面板（带「推测」徽章），步骤标题为「自定义规则（L2）」
+- 已知缺口：`count_regions` 需要区域变量（P3）；枚举 GAC 只适合小作用域
 
 ## 4. 传播与检查
 

@@ -14,6 +14,7 @@ from math import dist
 
 from .constraints import (
     AntiPair,
+    Custom,
     Arrow,
     Between,
     Cage,
@@ -26,6 +27,7 @@ from .constraints import (
     Thermo,
 )
 from .model import Puzzle
+from . import predicate as predicate_mod
 from .state import cell_name
 
 # ------------------------------------------------------------------ inventory
@@ -156,6 +158,7 @@ KINDS = {
     "anti_king": "反国王",
     "diagonal": "对角线数独",
     "disjoint_groups": "Disjoint Groups",
+    "custom": "自定义规则（L2）",
 }
 
 
@@ -172,6 +175,20 @@ def compile_spec(puzzle: Puzzle, elements: list[Element], spec: dict,
         params = {k: v for k, v in raw.items() if k not in ("kind", "elements", "note")}
         if kind not in KINDS:
             result.warnings.append(f"未知规则类型 {kind}（已忽略）")
+            continue
+        if kind == "custom":
+            obj = _build_custom(puzzle, elements, raw, result.warnings)
+            if obj is not None:
+                result.constraints.append(obj["constraint"])
+                used.update(obj.get("elements", []))
+                result.resolved.append({
+                    "kind": "custom",
+                    "label": obj["label"],
+                    "elements": obj.get("elements", []),
+                    "count": 1,
+                    "hypothesis": bool(raw.get("hypothesis")),
+                    "cite": raw.get("cite", ""),
+                })
             continue
         if not ids:
             result.warnings.append(f"规则 {kind} 没有引用任何元素（已忽略）")
@@ -230,7 +247,80 @@ def compile_spec(puzzle: Puzzle, elements: list[Element], spec: dict,
     result.resolved.append({
         "kind": "_ignored", "elements": [e.id for e in ignored],
     })
+    hypotheses = [r for r in result.resolved if r.get("hypothesis")]
+    if hypotheses:
+        result.warnings.append(
+            f"包含 {len(hypotheses)} 条推测规则（LLM 自定义谓词），相关步骤会标注【推测规则】"
+        )
     return result
+
+
+def _cell_from_name(puzzle: Puzzle, name: str) -> int | None:
+    text = str(name).strip().upper()
+    if text.startswith("R") and "C" in text:
+        try:
+            r, c = text[1:].split("C")
+            r, c = int(r) - 1, int(c) - 1
+        except ValueError:
+            return None
+        if 0 <= r < puzzle.size and 0 <= c < puzzle.size:
+            return r * puzzle.size + c
+    return None
+
+
+def _build_custom(puzzle: Puzzle, elements: list[Element], raw: dict, warnings: list[str]):
+    scope_raw = raw.get("scope") or {}
+    scope: list[int] = []
+    element_ids: list[str] = []
+    if isinstance(scope_raw, dict) and scope_raw.get("element"):
+        eid = str(scope_raw["element"])
+        element_ids.append(eid)
+        element = next((e for e in elements if e.id == eid), None)
+        if element is None:
+            warnings.append(f"custom 引用了不存在的元素 {eid}")
+            return None
+        scope = list(element.cells)
+    elif isinstance(scope_raw, dict) and scope_raw.get("cells"):
+        for name in scope_raw["cells"]:
+            cell = _cell_from_name(puzzle, name)
+            if cell is None:
+                warnings.append(f"custom 的格子名无效：{name}")
+                return None
+            scope.append(cell)
+    elif raw.get("cells"):
+        for name in raw["cells"]:
+            cell = _cell_from_name(puzzle, name)
+            if cell is None:
+                warnings.append(f"custom 的格子名无效：{name}")
+                return None
+            scope.append(cell)
+    else:
+        warnings.append("custom 缺少 scope.cells 或 scope.element")
+        return None
+    if not 2 <= len(scope) <= 6:
+        warnings.append(f"custom 作用域必须 2..6 格，实际 {len(scope)}")
+        return None
+    raw_pred = raw.get("predicate")
+    if not isinstance(raw_pred, dict):
+        warnings.append("custom 缺少 predicate")
+        return None
+    try:
+        node = predicate_mod.parse(raw_pred)
+    except predicate_mod.PredicateError as exc:
+        warnings.append(f"custom predicate 无效：{exc}")
+        return None
+    used_vars = predicate_mod.variables(node)
+    if any(index >= len(scope) for index in used_vars):
+        warnings.append("custom predicate 的 var 下标越界")
+        return None
+    cite = str(raw.get("cite", "")).strip()
+    hypothesis = bool(raw.get("hypothesis", False))
+    obj = Custom(scope, node, cite=cite, hypothesis=hypothesis)
+    return {
+        "constraint": obj,
+        "elements": element_ids,
+        "label": cite or "自定义谓词",
+    }
 
 
 def _build_rule(puzzle: Puzzle, kind: str, element: Element, params: dict,

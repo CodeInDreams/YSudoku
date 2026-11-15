@@ -45,6 +45,15 @@ Rules:
   outline: skip it.
 - "Arrow" means the digit in the circle equals the sum of the digits on the arm.
 - Put every non-cosmetic element you did not use into "ignored" with a reason.
+- If no built-in kind can express a stated rule, emit ONE "custom" rule:
+  {"kind":"custom","cells":["R1C1","R1C2",...],
+   "predicate":{"op":"eq","args":[{"op":"sum","args":[{"op":"var","index":0},{"op":"var","index":1}]},{"op":"const","value":10}]},
+   "cite":"the exact sentence from the rules","hypothesis":true}
+  Allowed ops: const(value), var(index), sum, min, max, abs, add, sub, mul, mod,
+  count_digit(digit), count_distinct, all_different, ordered,
+  eq, ne, lt, le, gt, ge, and, or, not.
+  Scope is 2-6 cells.  Only use "custom" when nothing else fits; always set
+  "hypothesis": true unless the rule is completely explicit.
 - Output valid JSON only, no markdown fences, no commentary.
 """
 

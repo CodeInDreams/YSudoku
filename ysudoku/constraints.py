@@ -5,6 +5,7 @@ from __future__ import annotations
 from functools import lru_cache
 from itertools import combinations
 
+from . import predicate as predicate_mod
 from .state import Contradiction, Reason, State, bits, cell_name
 
 
@@ -495,6 +496,58 @@ class SumLine(Constraint):
                 if (self.total - v) in other_sums:
                     allowed |= 1 << (v - 1)
             changed |= st.restrict(cell, allowed, reason)
+        return changed
+
+
+class Custom(Constraint):
+    """L2 rule: a typed predicate over a small scope of cells."""
+
+    kind = "custom"
+
+    def __init__(self, scope: list[int], node, cite: str = "", hypothesis: bool = False):
+        self._scope = list(scope)
+        self.node = node
+        self.cite = cite
+        self.hypothesis = hypothesis
+
+    def cells(self) -> list[int]:
+        return self._scope
+
+    def describe(self) -> str:
+        label = self.cite or "自定义规则"
+        return f"自定义规则（{label}）"
+
+    def to_dict(self) -> dict:
+        return {
+            "kind": "custom",
+            "cells": self._scope,
+            "predicate": self.node.to_json(),
+            "cite": self.cite,
+            "hypothesis": self.hypothesis,
+        }
+
+    def check(self, values: list[int]) -> bool:
+        vals = [values[c] for c in self._scope]
+        if any(v == 0 for v in vals):
+            return True
+        return predicate_mod.evaluate(self.node, vals)
+
+    def prune(self, st: State) -> bool:
+        domains = [st.dom[c] for c in self._scope]
+        supported = predicate_mod.prune_by_enumeration(domains, self.node)
+        if supported is None:
+            return False
+        if any(mask == 0 for mask in supported):
+            raise Contradiction(f"custom rule {self.cite or ''} has no support")
+        reason = Reason("custom", {
+            "scope": self._scope,
+            "cite": self.cite,
+            "predicate": self.node.to_json(),
+            "hypothesis": self.hypothesis,
+        })
+        changed = False
+        for cell, mask in zip(self._scope, supported):
+            changed |= st.restrict(cell, mask, reason)
         return changed
 
 

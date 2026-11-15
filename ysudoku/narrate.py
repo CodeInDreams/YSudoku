@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from . import predicate as predicate_mod
 from .state import Event, cell_name
 
 TITLES = {
@@ -16,6 +17,7 @@ TITLES = {
     "xy_wing": "XY-Wing",
     "w_wing": "W-Wing",
     "forcing_chain": "反证（试探）",
+    "custom": "自定义规则（L2）",
     "cage": "杀手笼组合",
     "thermo": "温度计",
     "arrow": "箭头",
@@ -43,7 +45,7 @@ TIERS = {
     "anti_king": 1, "naked_single": 1, "hidden_single": 1, "innie": 2,
     "outie": 2, "locked": 2,
     "subset": 2, "hidden_subset": 2, "x_wing": 3, "xy_wing": 3, "w_wing": 3,
-    "forcing_chain": 4,
+    "forcing_chain": 4, "custom": 2,
 }
 
 
@@ -272,6 +274,32 @@ def _explain_x_wing(events, data, n):
         _link([cells[0], cells[1]], n, "#38bdf8", "dashed"),
         _link([cells[2], cells[3]], n, "#38bdf8", "dashed"),
     ]
+    return detail, visual
+
+
+def _explain_custom(events, data, n):
+    scope = data.get("scope", [])
+    cite = data.get("cite") or "未命名自定义规则"
+    names = [cell_name(c, n) for c in scope]
+    try:
+        node = predicate_mod.parse(data["predicate"])
+        text = predicate_mod.format_node(node, names)
+    except Exception:  # noqa: BLE001 - display only
+        text = "（谓词解析失败）"
+    prefix = "【推测规则】" if data.get("hypothesis") else ""
+    detail = (
+        f"{prefix}自定义规则：{cite}\n"
+        f"作用域：{_names(scope, n)}\n"
+        f"约束：{text}\n"
+        f"按当前候选逐组枚举，排除没有任何满足赋值的候选：\n"
+    )
+    detail += "；".join(_effect_lines(events, n)) or "（无）"
+    if data.get("hypothesis"):
+        detail += "\n注意：这条规则由模型推测，未经形式化证明；可关闭推测规则后重算。"
+    visual = _basic_visual(events, n)
+    if scope:
+        visual["groups"].append({"cells": scope, "kind": "pair"})
+        visual["links"].append(_link(scope, n, "#f472b6", "dashed"))
     return detail, visual
 
 

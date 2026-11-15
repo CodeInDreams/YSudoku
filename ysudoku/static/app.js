@@ -435,13 +435,15 @@
     for (const r of rules.resolved || []) {
       if (r.kind === "_ignored") continue;
       const key = r.kind;
-      if (!grouped.has(key)) grouped.set(key, { label: r.label || key, count: 0 });
+      if (!grouped.has(key)) grouped.set(key, { label: r.label || key, count: 0, hypothesis: false });
       grouped.get(key).count += r.count || 1;
+      if (r.hypothesis) grouped.get(key).hypothesis = true;
     }
     for (const [, info] of grouped) {
       const row = document.createElement("div");
       row.className = "rule-row";
-      row.innerHTML = `<span class="rule-kind">${info.label}</span><span class="rule-count">× ${info.count}</span>`;
+      const tag = info.hypothesis ? '<span class="hypo">推测</span>' : "";
+      row.innerHTML = `<span class="rule-kind">${info.label}</span>${tag}<span class="rule-count">× ${info.count}</span>`;
       box.appendChild(row);
     }
     const source = document.createElement("div");
