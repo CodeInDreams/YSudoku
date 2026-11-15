@@ -42,6 +42,24 @@ pip install -e .
 ysudoku --web
 ```
 
+### 在真实 SudokuPad 里自动填入（可选）
+
+如果想让程序直接操作 SudokuPad 页面（点格子、输入数字），可以用 Playwright 桥接：
+
+```bash
+cd tools
+npm install
+npx playwright install chromium
+cd ..
+python3 -m ysudoku --browser https://sudokupad.app/6uhr6irwvd
+```
+
+会打开一个真实浏览器，按 `Start Puzzle`，然后把解逐格敲进去：
+
+![在真实 SudokuPad 中自动填入](docs/sudokupad-autofill.png)
+
+这是本地自动化工具，不参与 Web UI；它只“写入”页面，不读取 SudokuPad 的内部状态。
+
 ## 它怎么工作
 
 ```

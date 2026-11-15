@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
+from pathlib import Path
 
 from .pipeline import analyze
 
@@ -50,6 +52,7 @@ def main(argv=None) -> int:
     parser.add_argument("--no-cache", action="store_true", help="跳过规则缓存")
     parser.add_argument("--save-rules", action="store_true", help="把编译出的规则写入 rules/ 共享目录")
     parser.add_argument("--allow-chains", action="store_true", help="允许反证（试探）作为最后手段，步骤会标注 T4")
+    parser.add_argument("--browser", action="store_true", help="解出后用 Playwright 在真实 SudokuPad 里自动填入（需 tools/ 依赖）")
     args = parser.parse_args(argv)
 
     if args.web or not args.target:
@@ -69,6 +72,28 @@ def main(argv=None) -> int:
         print(json.dumps(analysis.to_json(), ensure_ascii=False, indent=1))
     else:
         _print_text(analysis)
+
+    if args.browser:
+        values = analysis.result.values
+        if analysis.status not in ("solved", "solved-search") or any(v == 0 for v in values):
+            print("题目没有解出，无法自动填入。", file=sys.stderr)
+            return 1
+        target = str(args.target)
+        url = target if target.startswith("http") else f"https://sudokupad.app/{target}"
+        script = Path(__file__).resolve().parents[1] / "tools" / "sudokupad_bridge.mjs"
+        if not script.exists():
+            print(f"找不到桥接脚本：{script}", file=sys.stderr)
+            return 1
+        cmd = ["node", str(script), "--url", url,
+               "--solution", "".join(str(v) for v in values), "--headed"]
+        try:
+            subprocess.run(cmd, check=True)
+        except FileNotFoundError:
+            print("需要 Node.js；并在 tools/ 下执行 npm install && npx playwright install chromium", file=sys.stderr)
+            return 1
+        except subprocess.CalledProcessError as exc:
+            print(f"浏览器桥接失败：{exc}", file=sys.stderr)
+            return 1
     return 0
 
 
