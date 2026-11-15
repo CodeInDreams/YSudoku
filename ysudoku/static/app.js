@@ -9,6 +9,14 @@
   };
 
   const TIER_LABEL = { 1: "T1 直接推理", 2: "T2 基础技巧", 3: "T3 进阶技巧" };
+  const CAL_KEY = "ysudoku.overlay.cal";
+  let cal = { x: 0.07, y: 0.07, size: 0.86 };
+  try {
+    const saved = JSON.parse(localStorage.getItem(CAL_KEY) || "{}");
+    if (typeof saved.x === "number" && typeof saved.y === "number" && typeof saved.size === "number") {
+      cal = saved;
+    }
+  } catch (err) { /* ignore */ }
 
   const el = (name, attrs = {}, parent = null) => {
     const node = document.createElementNS(SVG_NS, name);
@@ -149,6 +157,80 @@
     $("tab-embed").classList.toggle("active", embed);
     if (embed && $("sp-frame").src !== S.data.source_url) {
       $("sp-frame").src = S.data.source_url;
+    }
+    requestAnimationFrame(renderOverlay);
+  }
+
+  function renderOverlay() {
+    const svg = $("sp-overlay");
+    const stage = $("embed-view");
+    if (!svg || !stage) return;
+    const w = stage.clientWidth || 0;
+    const h = stage.clientHeight || 0;
+    svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+    svg.innerHTML = "";
+    if (stage.classList.contains("hidden") || !w || !h) return;
+
+    const side = Math.min(w, h) * cal.size;
+    const left = cal.x * w;
+    const top = cal.y * h;
+
+    const frame = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    frame.setAttribute("x", left);
+    frame.setAttribute("y", top);
+    frame.setAttribute("width", side);
+    frame.setAttribute("height", side);
+    frame.setAttribute("fill", "none");
+    frame.setAttribute("stroke", "rgba(255,210,138,.35)");
+    frame.setAttribute("stroke-dasharray", "6 6");
+    svg.appendChild(frame);
+
+    if (!S.data || S.idx < 0) return;
+    const step = S.data.steps[S.idx];
+    const cellRect = (cell) => {
+      const r = Math.floor(cell / S.n), c = cell % S.n;
+      return {
+        x: left + c * side / S.n,
+        y: top + r * side / S.n,
+        w: side / S.n,
+        h: side / S.n,
+      };
+    };
+    const rect = (cell, fill, stroke) => {
+      const g = cellRect(cell);
+      const node = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      node.setAttribute("x", g.x); node.setAttribute("y", g.y);
+      node.setAttribute("width", g.w); node.setAttribute("height", g.h);
+      node.setAttribute("fill", fill);
+      node.setAttribute("stroke", stroke);
+      node.setAttribute("stroke-width", "2");
+      svg.appendChild(node);
+    };
+    for (const cell of step.visual.focus || []) rect(cell, "rgba(255,210,138,.22)", "rgba(255,210,138,.85)");
+    for (const cell of step.visual.premise || []) rect(cell, "rgba(88,166,255,.10)", "rgba(88,166,255,.45)");
+
+    for (const link of step.visual.links || []) {
+      const node = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+      node.setAttribute("points", link.points.map(([y, x]) =>
+        `${left + x * side / S.n},${top + y * side / S.n}`).join(" "));
+      node.setAttribute("fill", "none");
+      node.setAttribute("stroke", link.color || "#58a6ff");
+      node.setAttribute("stroke-width", "3");
+      node.setAttribute("stroke-dasharray", link.dashed ? "8 6" : "");
+      node.setAttribute("opacity", "0.9");
+      svg.appendChild(node);
+    }
+    for (const chip of step.visual.chips || []) {
+      const g = cellRect(chip.cell);
+      const node = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      node.setAttribute("x", g.x + g.w / 2);
+      node.setAttribute("y", g.y + g.h / 2);
+      node.setAttribute("text-anchor", "middle");
+      node.setAttribute("dominant-baseline", "central");
+      node.setAttribute("font-size", Math.max(10, g.h * 0.3));
+      node.setAttribute("fill", chip.color || "#ffd28a");
+      node.textContent = chip.text;
+      svg.appendChild(node);
     }
   }
 
@@ -540,6 +622,7 @@
     if (i === S.idx) {
       if (i >= 0) renderPanel(steps[i]);
       updateControls();
+      renderOverlay();
       return;
     }
     if (!animate) {
@@ -547,6 +630,7 @@
       render();
       if (i >= 0) renderPanel(steps[i]);
       updateControls();
+      renderOverlay();
       return;
     }
     const step = steps[i];
@@ -560,6 +644,7 @@
     ghostElims(step);
     updateControls();
     renderPanel(step);
+    renderOverlay();
   }
 
   function renderPanel(step) {
@@ -708,6 +793,26 @@
     stopPlay();
     loadPuzzle($("url").value.trim());
   });
+  $("calib-toggle").addEventListener("click", () => {
+    $("calib-panel").classList.toggle("hidden");
+    $("cal-x").value = cal.x;
+    $("cal-y").value = cal.y;
+    $("cal-size").value = cal.size;
+  });
+  for (const [id, key] of [["cal-x", "x"], ["cal-y", "y"], ["cal-size", "size"]]) {
+    $(id).addEventListener("input", (e) => {
+      cal[key] = Number(e.target.value);
+      try { localStorage.setItem(CAL_KEY, JSON.stringify(cal)); } catch (err) { /* ignore */ }
+      renderOverlay();
+    });
+  }
+  $("cal-reset").addEventListener("click", () => {
+    cal = { x: 0.07, y: 0.07, size: 0.86 };
+    $("cal-x").value = cal.x; $("cal-y").value = cal.y; $("cal-size").value = cal.size;
+    try { localStorage.setItem(CAL_KEY, JSON.stringify(cal)); } catch (err) { /* ignore */ }
+    renderOverlay();
+  });
+  window.addEventListener("resize", () => renderOverlay());
   $("tab-board").addEventListener("click", () => setView("board"));
   $("tab-embed").addEventListener("click", () => setView("embed"));
   $("demo").addEventListener("click", () => {

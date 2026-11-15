@@ -51,11 +51,21 @@
       <div id="loading" class="loading hidden"><div class="spinner"></div><span>解析中…</span></div>
     </div>
     <div class="embed-wrap hidden" id="embed-view">
-      <iframe id="sp-frame" title="SudokuPad 原题" allow="clipboard-write"></iframe>
+      <div class="embed-stage">
+        <iframe id="sp-frame" title="SudokuPad 原题" allow="clipboard-write"></iframe>
+        <svg id="sp-overlay" class="sp-overlay"></svg>
+      </div>
     </div>
     <div class="embed-hint hidden" id="embed-hint">
-      在 SudokuPad 里落子，右侧看推理；高亮只在本工具的棋盘上。
-      <a id="embed-open" target="_blank" rel="noopener">打不开？在新标签页打开</a>
+      原题可直接操作；高亮叠在原题上，若没对齐请点「校准」。
+      <button type="button" id="calib-toggle" class="mini">校准</button>
+      <a id="embed-open" target="_blank" rel="noopener">新标签页打开</a>
+    </div>
+    <div class="calib hidden" id="calib-panel">
+      <label>横向 <input id="cal-x" type="range" min="0" max="0.4" step="0.002"></label>
+      <label>纵向 <input id="cal-y" type="range" min="0" max="0.4" step="0.002"></label>
+      <label>大小 <input id="cal-size" type="range" min="0.5" max="0.98" step="0.002"></label>
+      <button type="button" id="cal-reset" class="mini">重置</button>
     </div>
     <div class="board-controls">
       <button id="prev" title="上一步">←</button>
