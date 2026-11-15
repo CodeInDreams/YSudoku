@@ -1,7 +1,7 @@
 {
  "metadata": {
   "title": "示例：杀手数独（需要规则修复）",
-  "author": "SudokuLoom",
+  "author": "YSudoku",
   "rules": "Normal sudoku rules apply. Killer cages: digits in a cage do not repeat and must sum to the given total.",
   "solution": "534678912672195348198342567859761423426853791713924856961537284287419635345286179"
  },
