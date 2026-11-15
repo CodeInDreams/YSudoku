@@ -79,6 +79,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             analysis = analyze(
                 target,
+                demo=(urlparse(self.path).path == "/api/demo"),
                 use_llm=bool(body.get("llm", True)),
                 do_audit=bool(body.get("audit", False)),
                 allow_chains=bool(body.get("chains", False)),

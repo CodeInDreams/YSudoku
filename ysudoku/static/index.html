@@ -36,7 +36,10 @@
 <main class="layout">
   <section class="board-panel">
     <div class="board-head">
-      <div id="puzzle-title" class="puzzle-title">等待题目…</div>
+      <div>
+        <div id="puzzle-title" class="puzzle-title">等待题目…</div>
+        <div id="provenance" class="provenance"></div>
+      </div>
       <div id="puzzle-meta" class="puzzle-meta"></div>
     </div>
     <div class="board-wrap">
@@ -51,6 +54,7 @@
         <input id="speed" type="range" min="120" max="2400" step="60" value="1100">
       </label>
       <label class="switch"><input id="show-cands" type="checkbox" checked> 候选数</label>
+      <label class="switch"><input id="show-constraints" type="checkbox" checked> 约束图形</label>
     </div>
     <div class="timeline">
       <input id="scrub" type="range" min="0" max="0" value="0">

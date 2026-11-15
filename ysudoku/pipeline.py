@@ -27,6 +27,8 @@ class Analysis:
     status: str = "solved"
     message: str = ""
     chaos_regions: list = field(default_factory=list)
+    demo: bool = False
+    provenance: str = ""
 
     def to_json(self) -> dict:
         n = self.puzzle.size
@@ -49,6 +51,9 @@ class Analysis:
             },
             "initial": self.initial,
             "chaos_regions": self.chaos_regions,
+            "demo": self.demo,
+            "provenance": self.provenance,
+            "constraints": [c.to_dict() for c in self.rules.constraints],
             "steps": [step.to_dict(n) for step in self.result.steps],
             "status": self.status,
             "message": self.message,
@@ -77,6 +82,7 @@ def analyze(
     save_rules: bool = False,
     allow_chains: bool = False,
     chaos_time_limit: float = 8.0,
+    demo: bool = False,
 ) -> Analysis:
     from .sudokupad import load
 
@@ -215,6 +221,8 @@ def analyze(
 
     return Analysis(
         puzzle=puzzle,
+        demo=demo,
+        provenance=("内置生成示例（程序生成，非已发表题目）" if demo else target),
         spec=spec,
         rules=rules,
         result=result,

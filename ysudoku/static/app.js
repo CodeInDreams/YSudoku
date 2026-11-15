@@ -89,8 +89,17 @@
     $("puzzle-title").textContent = data.puzzle.title || "未命名";
     $("puzzle-meta").textContent = [data.puzzle.author, `${S.n}×${S.n}`, `${countGiven()} 个提示数`]
       .filter(Boolean).join(" · ");
+    const prov = $("provenance");
+    if (data.demo) {
+      prov.textContent = "内置生成示例 · 程序生成，非已发表题目";
+      prov.classList.add("demo");
+    } else {
+      prov.classList.remove("demo");
+      prov.textContent = data.provenance ? `来源：${data.provenance}` : "";
+    }
 
     buildBoard();
+    drawStatic();
     renderRules();
     renderStatus();
     buildStepList();
@@ -123,6 +132,7 @@
     el("g", { id: "layer-groups" }, svg);
     el("g", { id: "layer-cells" }, svg);
     el("g", { id: "layer-regions" }, svg);
+    el("g", { id: "layer-static" }, svg);
     el("g", { id: "layer-links" }, svg);
     el("g", { id: "layer-vals" }, svg);
     el("g", { id: "layer-cands" }, svg);
@@ -223,6 +233,148 @@
         const p = candPos(n, v);
         node.setAttribute("x", c + p.x);
         node.setAttribute("y", r + p.y);
+      }
+    }
+  }
+
+
+  // ------------------------------------------------------- static constraints
+  const STATIC_COLOR = {
+    thermo: "#f97316", renban: "#c084fc", palindrome: "#94a3b8",
+    between: "#a3a3a3", german_whisper: "#22c55e", dutch_whisper: "#4ade80",
+    consecutive: "#fb923c", region_sum: "#38bdf8", little_killer: "#eab308",
+    sandwich: "#f472b6", skyscraper: "#f59e0b",
+  };
+
+  function centerOf(cell) {
+    return [cell % S.n + 0.5, Math.floor(cell / S.n) + 0.5];
+  }
+
+  function staticPolyline(layer, cells, color, dashed = false, width = 0.055) {
+    if (!cells || cells.length < 2) return;
+    const pts = cells.map((cell) => {
+      const [x, y] = centerOf(cell);
+      return `${x},${y}`;
+    }).join(" ");
+    el("polyline", {
+      points: pts, class: "static-line", stroke: color,
+      "stroke-width": width, "stroke-dasharray": dashed ? "0.12 0.08" : "",
+    }, layer);
+  }
+
+  function staticLabel(layer, cell, text, cls = "static-label") {
+    const [x, y] = centerOf(cell);
+    el("text", { x: x - 0.32, y: y - 0.22, class: cls }, layer).textContent = text;
+  }
+
+  function drawCage(layer, cells, sum) {
+    if (!cells || !cells.length) return;
+    const set = new Set(cells);
+    const n = S.n;
+    for (const cell of cells) {
+      const r = Math.floor(cell / n), c = cell % n;
+      const edge = (x1, y1, x2, y2) =>
+        el("line", { x1, y1, x2, y2, class: "cage-edge" }, layer);
+      if (!set.has(cell - n)) edge(c, r, c + 1, r);
+      if (!set.has(cell + n)) edge(c, r + 1, c + 1, r + 1);
+      if (c === 0 || !set.has(cell - 1)) edge(c, r, c, r + 1);
+      if (c === n - 1 || !set.has(cell + 1)) edge(c + 1, r, c + 1, r + 1);
+    }
+    if (sum !== null && sum !== undefined) {
+      const first = cells.reduce((a, b) => {
+        const ra = Math.floor(a / n), rb = Math.floor(b / n);
+        if (ra !== rb) return ra < rb ? a : b;
+        return (a % n) <= (b % n) ? a : b;
+      });
+      const r = Math.floor(first / n), c = first % n;
+      el("text", { x: c + 0.2, y: r + 0.3, class: "static-label" }, layer).textContent = String(sum);
+    }
+  }
+
+  function drawStatic() {
+    const layer = $("layer-static");
+    if (!layer) return;
+    layer.innerHTML = "";
+    const cons = (S.data && S.data.constraints) || [];
+    for (const con of cons) {
+      const cells = con.cells || [];
+      switch (con.kind) {
+        case "cage":
+          drawCage(layer, con.cells, con.sum);
+          break;
+        case "thermo":
+        case "renban":
+        case "palindrome":
+        case "between":
+        case "region_sum":
+        case "little_killer":
+          staticPolyline(layer, cells, STATIC_COLOR[con.kind] || "#94a3b8");
+          if (con.sum !== undefined && con.sum !== null) staticLabel(layer, cells[0], String(con.sum));
+          break;
+        case "sandwich":
+          staticPolyline(layer, cells, STATIC_COLOR.sandwich);
+          if (con.sum !== undefined) staticLabel(layer, cells[0], String(con.sum));
+          break;
+        case "skyscraper":
+          staticPolyline(layer, cells, STATIC_COLOR.skyscraper);
+          if (con.clue !== undefined) staticLabel(layer, cells[0], `见${con.clue}`);
+          break;
+        case "arrow": {
+          const arm = con.arm || [];
+          staticPolyline(layer, [con.circle, ...arm], "#eab308");
+          const [cx, cy] = centerOf(con.circle);
+          el("circle", { cx, cy, r: 0.16, fill: "none", stroke: "#eab308", "stroke-width": 0.04 }, layer);
+          break;
+        }
+        case "kropki": {
+          const [ax, ay] = centerOf(con.a);
+          const [bx, by] = centerOf(con.b);
+          el("circle", {
+            cx: (ax + bx) / 2, cy: (ay + by) / 2, r: 0.1,
+            fill: con.variant === "black" ? "#0b1020" : "#ffffff",
+            stroke: "#94a3b8", "stroke-width": 0.02, class: "static-dot",
+          }, layer);
+          break;
+        }
+        case "xv": {
+          const [ax, ay] = centerOf(con.a);
+          const [bx, by] = centerOf(con.b);
+          el("text", {
+            x: (ax + bx) / 2, y: (ay + by) / 2 + 0.05, class: "static-label",
+            "text-anchor": "middle", "font-size": "0.16",
+          }, layer).textContent = con.sum === 5 ? "V" : "X";
+          break;
+        }
+        case "quadruple": {
+          const xs = cells.map((c) => c % S.n + 0.5);
+          const ys = cells.map((c) => Math.floor(c / S.n) + 0.5);
+          const cx = xs.reduce((a, b) => a + b, 0) / xs.length;
+          const cy = ys.reduce((a, b) => a + b, 0) / ys.length;
+          el("circle", { cx, cy, r: 0.3, fill: "none", stroke: "#38d39f", "stroke-width": 0.04, opacity: 0.7 }, layer);
+          el("text", {
+            x: cx, y: cy, "text-anchor": "middle", "dominant-baseline": "central",
+            class: "static-label", "font-size": "0.13",
+          }, layer).textContent = (con.digits || []).join("");
+          break;
+        }
+        case "odd":
+        case "even":
+          for (const cell of cells) staticLabel(layer, cell, con.kind === "odd" ? "奇" : "偶", "static-label dim");
+          break;
+        case "clone":
+          staticPolyline(layer, cells, "#f472b6", true);
+          break;
+        case "german_whisper":
+        case "dutch_whisper":
+        case "consecutive":
+          staticPolyline(layer, [con.a, con.b], STATIC_COLOR[con.kind] || "#22c55e");
+          break;
+        case "custom":
+          staticPolyline(layer, cells, "#f472b6", true);
+          if (cells.length) staticLabel(layer, cells[0], "L2");
+          break;
+        default:
+          break;
       }
     }
   }
@@ -524,6 +676,9 @@
   $("next").addEventListener("click", () => { stopPlay(); showStep(S.idx + 1, true); });
   $("play").addEventListener("click", () => { S.playing ? stopPlay() : startPlay(); });
   $("show-cands").addEventListener("change", (e) => { S.showCands = e.target.checked; render(); });
+  $("show-constraints").addEventListener("change", (e) => {
+    $("layer-static").style.display = e.target.checked ? "" : "none";
+  });
   $("scrub").addEventListener("input", (e) => {
     stopPlay();
     const target = Number(e.target.value);
