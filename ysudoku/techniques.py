@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from itertools import combinations
 
 from .constraints import Cage
@@ -502,6 +503,137 @@ def coloring(st: State, constraints=None):
     return _wrap(st)
 
 
+def medusa(st: State, constraints=None):
+    """3D Medusa: colour candidates, not just one digit."""
+    st.begin()
+    nodes: list[tuple[int, int]] = []
+    for cell in range(st.n2):
+        if st.vals[cell]:
+            continue
+        for digit in bits(st.dom[cell]):
+            nodes.append((cell, digit))
+    if not nodes:
+        return _wrap(st)
+    node_set = set(nodes)
+    strong: dict[tuple[int, int], set] = defaultdict(set)
+    weak: dict[tuple[int, int], set] = defaultdict(set)
+
+    for cell in range(st.n2):
+        if st.vals[cell]:
+            continue
+        digits = list(bits(st.dom[cell]))
+        for i in range(len(digits)):
+            for j in range(i + 1, len(digits)):
+                a, b = (cell, digits[i]), (cell, digits[j])
+                weak[a].add(b)
+                weak[b].add(a)
+        if len(digits) == 2:
+            a, b = (cell, digits[0]), (cell, digits[1])
+            strong[a].add(b)
+            strong[b].add(a)
+
+    for unit in st.units:
+        for digit in range(1, st.n + 1):
+            hosts = [c for c in unit.cells if st.has(c, digit)]
+            for i in range(len(hosts)):
+                for j in range(i + 1, len(hosts)):
+                    a, b = (hosts[i], digit), (hosts[j], digit)
+                    weak[a].add(b)
+                    weak[b].add(a)
+            if len(hosts) == 2:
+                a, b = (hosts[0], digit), (hosts[1], digit)
+                strong[a].add(b)
+                strong[b].add(a)
+
+    color: dict[tuple[int, int], int] = {}
+    components: list[list[tuple[int, int]]] = []
+    for start in strong:
+        if start in color:
+            continue
+        color[start] = 0
+        stack = [start]
+        comp = []
+        while stack:
+            node = stack.pop()
+            comp.append(node)
+            for other in strong[node]:
+                if other not in color:
+                    color[other] = 1 - color[node]
+                    stack.append(other)
+        components.append(comp)
+
+    for comp in components:
+        comp_set = set(comp)
+        if any(color[b] == color[a] for a in comp for b in strong[a] if b in comp_set):
+            continue  # odd strong-link cycle: colouring inconsistent, skip safely
+
+        links = [(a, b) for a in comp for b in strong[a] if a < b]
+        groups = {0: [n for n in comp if color[n] == 0],
+                  1: [n for n in comp if color[n] == 1]}
+
+        # 1. same-colour weak link -> the colour is impossible
+        for tone in (0, 1):
+            conflict = None
+            for a in groups[tone]:
+                for b in weak.get(a, ()):  # type: ignore[arg-type]
+                    if b in comp_set and color[b] == tone:
+                        conflict = (a, b)
+                        break
+                if conflict:
+                    break
+            if not conflict:
+                continue
+            reason = Reason("medusa", {
+                "mode": "wrap", "color": tone,
+                "cells": [n[0] for n in groups[tone]],
+                "nodes": [list(n) for n in groups[tone]],
+                "links": [[a[0], a[1], b[0], b[1]] for a, b in links],
+                "colors": {f"{c}:{d}": color[(c, d)] for c, d in comp},
+            })
+            made = False
+            for cell, digit in groups[tone]:
+                made |= st.elim(cell, digit, reason)
+            if made:
+                return _wrap(st)
+
+        # 2. a candidate seeing both colours
+        for cell, digit in nodes:
+            node = (cell, digit)
+            if node in comp_set:
+                continue
+            sees = {color[other] for other in weak.get(node, ()) if other in comp_set}
+            if sees == {0, 1}:
+                reason = Reason("medusa", {
+                    "mode": "trap", "cells": [cell], "nodes": [list(node)],
+                    "links": [[a[0], a[1], b[0], b[1]] for a, b in links],
+                    "colors": {f"{c}:{d}": color[(c, d)] for c, d in comp},
+                })
+                st.elim(cell, digit, reason)
+                return _wrap(st)
+
+        # 3. a cell holding both colours: any third candidate is false
+        tones_by_cell: dict[int, set[int]] = defaultdict(set)
+        for cell, _digit in comp:
+            tones_by_cell[cell].add(color[(cell, _digit)])
+        for cell, tones in tones_by_cell.items():
+            if tones != {0, 1}:
+                continue
+            keep = {d for c, d in comp if c == cell}
+            reason = Reason("medusa", {
+                "mode": "cell", "cells": [cell],
+                "nodes": [[cell, d] for d in keep],
+                "links": [[a[0], a[1], b[0], b[1]] for a, b in links],
+                "colors": {f"{c}:{d}": color[(c, d)] for c, d in comp},
+            })
+            made = False
+            for digit in bits(st.dom[cell]):
+                if digit not in keep:
+                    made |= st.elim(cell, digit, reason)
+            if made:
+                return _wrap(st)
+    return _wrap(st)
+
+
 TECHNIQUES = [
     ("naked_single", 1, naked_single),
     ("hidden_single", 1, hidden_single),
@@ -513,5 +645,6 @@ TECHNIQUES = [
     ("xy_wing", 3, xy_wing),
     ("w_wing", 3, w_wing),
     ("coloring", 3, coloring),
+    ("medusa", 3, medusa),
     ("forcing_chain", 4, forcing_chain),
 ]

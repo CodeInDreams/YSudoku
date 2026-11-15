@@ -28,7 +28,8 @@ Schema:
      "note": "why this rule applies"}
   ],
   "globals": [
-    {"kind": "anti_knight" | "anti_king" | "diagonal", "direction": "main" | "anti" | "both"}
+    {"kind": "anti_knight" | "anti_king" | "diagonal" | "modular" | "entropy",
+     "direction": "main" | "anti" | "both"}
   ],
   "ignored": [{"element": "<element id>", "why": "decoration / already covered"}],
   "notes": "short summary of your interpretation"

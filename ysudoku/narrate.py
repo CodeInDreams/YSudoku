@@ -17,6 +17,7 @@ TITLES = {
     "xy_wing": "XY-Wing",
     "w_wing": "W-Wing",
     "coloring": "染色法",
+    "medusa": "3D Medusa（多数字染色）",
     "forcing_chain": "反证（试探）",
     "custom": "自定义规则（L2）",
     "parity": "奇偶",
@@ -386,6 +387,44 @@ def _explain_coloring(events, data, n):
         visual["chips"].append({
             "cell": int(cell), "text": "A" if tone == 0 else "B", "kind": "color",
         })
+    return detail, visual
+
+
+def _explain_medusa(events, data, n):
+    mode = data.get("mode")
+    links = data.get("links") or []
+    colors = data.get("colors") or {}
+    if mode == "wrap":
+        tone = "A" if data.get("color") == 0 else "B"
+        detail = (
+            f"3D Medusa：把候选（格+数字）用强链连起来，交替染成 A / B。\n"
+            f"{tone} 色内部出现了互相冲突的候选（同一格两个数字，或同一单元两个同数字），"
+            f"说明整组 {tone} 色不可能成立。\n排除该色全部候选：\n"
+        )
+    elif mode == "trap":
+        detail = (
+            "3D Medusa：某个候选同时看见 A 色和 B 色候选。\n"
+            "两色必有一真，因此无论哪色成立，它都不能成立：\n"
+        )
+    else:
+        detail = (
+            "3D Medusa：同一格里同时出现 A 色和 B 色候选，说明这两者必有一真。\n"
+            "因此该格其余候选都可以排除：\n"
+        )
+    detail += "；".join(_effect_lines(events, n)) or "（无）"
+    visual = _basic_visual(events, n)
+    for c1, d1, c2, d2 in links:
+        if c1 == c2:
+            continue
+        tone = colors.get(f"{c1}:{d1}", 0)
+        visual["links"].append(_link([c1, c2], n, "#ef4444" if tone == 0 else "#3b82f6", "dashed"))
+    seen = set()
+    for key, tone in colors.items():
+        cell = int(key.split(":")[0])
+        if cell in seen:
+            continue
+        seen.add(cell)
+        visual["chips"].append({"cell": cell, "text": "A" if tone == 0 else "B", "kind": "color"})
     return detail, visual
 
 

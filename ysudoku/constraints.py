@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from itertools import combinations
+from itertools import combinations, product
 
 from . import predicate as predicate_mod
 from .state import Contradiction, Reason, State, bits, cell_name
@@ -813,6 +813,67 @@ class RegionSum(Constraint):
             for cell, mask in zip(seg, support):
                 if mask:
                     changed |= st.restrict(cell, mask, reason)
+        return changed
+
+
+class ClassCover(Constraint):
+    """Every block must contain at least one digit from each class."""
+
+    kind = "class_cover"
+
+    def __init__(self, cells: list[int], classes: list[set[int]]):
+        self._cells = list(cells)
+        self.classes = [set(c) for c in classes]
+
+    def cells(self) -> list[int]:
+        return self._cells
+
+    def describe(self) -> str:
+        return "2×2 类覆盖（" + "/".join(
+            ",".join(str(v) for v in sorted(c)) for c in self.classes
+        ) + "）"
+
+    def to_dict(self) -> dict:
+        return {"kind": "class_cover", "cells": self._cells,
+                "classes": [sorted(c) for c in self.classes]}
+
+    def check(self, values: list[int]) -> bool:
+        vals = [values[c] for c in self._cells]
+        if any(v == 0 for v in vals):
+            return True
+        return all(any(v in cls for v in vals) for cls in self.classes)
+
+    def prune(self, st: State) -> bool:
+        reason = Reason("class_cover", {"cells": self._cells,
+                                        "classes": [sorted(c) for c in self.classes]})
+        changed = False
+        for cls in self.classes:
+            mask = 0
+            for value in cls:
+                mask |= 1 << (value - 1)
+            hosts = [c for c in self._cells if st.dom[c] & mask]
+            if not hosts:
+                raise Contradiction("2x2 class cover has no host")
+            if len(hosts) == 1:
+                changed |= st.restrict(hosts[0], mask, reason)
+        if changed:
+            return True
+        total = 1
+        for cell in self._cells:
+            total *= st.dom[cell].bit_count()
+            if total > 512:
+                return False
+        support = [0] * len(self._cells)
+        feasible = False
+        for combo in product(*[list(bits(st.dom[c])) for c in self._cells]):
+            if all(any(v in cls for v in combo) for cls in self.classes):
+                feasible = True
+                for i, v in enumerate(combo):
+                    support[i] |= 1 << (v - 1)
+        if not feasible:
+            raise Contradiction("2x2 class cover has no support")
+        for cell, mask in zip(self._cells, support):
+            changed |= st.restrict(cell, mask, reason)
         return changed
 
 

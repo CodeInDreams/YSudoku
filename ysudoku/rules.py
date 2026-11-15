@@ -14,6 +14,7 @@ from math import dist
 
 from .constraints import (
     AntiPair,
+    ClassCover,
     Clone,
     Custom,
     Parity,
@@ -170,6 +171,8 @@ KINDS = {
     "sandwich": "三明治",
     "skyscraper": "摩天楼",
     "region_sum": "区域和线",
+    "modular": "模块 2×2（每宫含 1/4/7、2/5/8、3/6/9）",
+    "entropy": "熵 2×2（每宫含低/中/高）",
 }
 
 
@@ -253,6 +256,25 @@ def compile_spec(puzzle: Puzzle, elements: list[Element], spec: dict,
         elif kind == "anti_king":
             result.constraints.extend(_anti_pairs(puzzle, "anti_king", "反国王"))
             result.resolved.append({"kind": kind, "label": KINDS[kind], "elements": [], "count": 1})
+        elif kind in ("modular", "entropy"):
+            n = puzzle.size
+            if n < 4:
+                result.warnings.append(f"{KINDS[kind]} 需要至少 4×4")
+            else:
+                if kind == "modular":
+                    classes = [set(range(d, n + 1, 3)) for d in (1, 2, 3)]
+                else:
+                    third = max(1, n // 3)
+                    classes = [set(range(1, third + 1)),
+                               set(range(third + 1, 2 * third + 1)),
+                               set(range(2 * third + 1, n + 1))]
+                for r in range(n - 1):
+                    for c in range(n - 1):
+                        cells = [r * n + c, r * n + c + 1,
+                                 (r + 1) * n + c, (r + 1) * n + c + 1]
+                        result.constraints.append(ClassCover(cells, classes))
+                result.resolved.append({"kind": kind, "label": KINDS[kind],
+                                        "elements": [], "count": (n - 1) ** 2})
         elif kind == "diagonal":
             direction = str(raw.get("direction", "both"))
             result.diagonal_main |= direction in ("main", "both")
@@ -594,6 +616,10 @@ def heuristic_spec(puzzle: Puzzle, elements: list[Element]) -> dict:
         globals_.append({"kind": "anti_knight"})
     if _has(text, "anti-king", "anti king"):
         globals_.append({"kind": "anti_king"})
+    if _has(text, "modular") or _has(text, "modularity"):
+        globals_.append({"kind": "modular"})
+    if _has(text, "entropy"):
+        globals_.append({"kind": "entropy"})
     if _has(text, "diagonal") and not _has(text, "little killer"):
         direction = "both"
         if _has(text, "main diagonal") and not _has(text, "both"):
