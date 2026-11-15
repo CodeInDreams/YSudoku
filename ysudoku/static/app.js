@@ -175,15 +175,17 @@
     const left = cal.x * w;
     const top = cal.y * h;
 
-    const frame = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    frame.setAttribute("x", left);
-    frame.setAttribute("y", top);
-    frame.setAttribute("width", side);
-    frame.setAttribute("height", side);
-    frame.setAttribute("fill", "none");
-    frame.setAttribute("stroke", "rgba(255,210,138,.35)");
-    frame.setAttribute("stroke-dasharray", "6 6");
-    svg.appendChild(frame);
+    if (!$("calib-panel").classList.contains("hidden") || S.idx < 0) {
+      const frame = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      frame.setAttribute("x", left);
+      frame.setAttribute("y", top);
+      frame.setAttribute("width", side);
+      frame.setAttribute("height", side);
+      frame.setAttribute("fill", "none");
+      frame.setAttribute("stroke", "rgba(255,210,138,.35)");
+      frame.setAttribute("stroke-dasharray", "6 6");
+      svg.appendChild(frame);
+    }
 
     if (!S.data || S.idx < 0) return;
     const step = S.data.steps[S.idx];
@@ -798,6 +800,7 @@
     $("cal-x").value = cal.x;
     $("cal-y").value = cal.y;
     $("cal-size").value = cal.size;
+    renderOverlay();
   });
   for (const [id, key] of [["cal-x", "x"], ["cal-y", "y"], ["cal-size", "size"]]) {
     $(id).addEventListener("input", (e) => {
