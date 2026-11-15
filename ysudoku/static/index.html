@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>YSudoku · 变形数独推理讲解</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">◈</span>
+    <div>
+      <h1>YSudoku</h1>
+      <p>See why every digit is right · 每一个数字，都有理由</p>
+    </div>
+  </div>
+  <form id="load-form" class="loader">
+    <input id="url" type="text" spellcheck="false"
+           placeholder="粘贴 SudokuPad 链接，例如 https://sudokupad.app/eynwusqy5l">
+    <label class="switch" title="用 LLM 把规则文本编译成约束">
+      <input id="use-llm" type="checkbox" checked> LLM 规则
+    </label>
+    <span id="llm-note" class="llm-note"></span>
+    <label class="switch" title="逐步用穷举反证校验每步结论（较慢）">
+      <input id="audit" type="checkbox"> 反证审计
+    </label>
+    <button type="submit" id="go">解析并求解</button>
+    <button type="button" id="demo" title="加载内置示例">示例</button>
+  </form>
+</header>
+
+<main class="layout">
+  <section class="board-panel">
+    <div class="board-head">
+      <div id="puzzle-title" class="puzzle-title">等待题目…</div>
+      <div id="puzzle-meta" class="puzzle-meta"></div>
+    </div>
+    <div class="board-wrap">
+      <svg id="board" viewBox="0 0 9 9" aria-label="数独棋盘"></svg>
+      <div id="loading" class="loading hidden"><div class="spinner"></div><span>解析中…</span></div>
+    </div>
+    <div class="board-controls">
+      <button id="prev" title="上一步">←</button>
+      <button id="play" class="primary" title="播放/暂停">▶ 播放</button>
+      <button id="next" title="下一步">→</button>
+      <label class="speed">速度
+        <input id="speed" type="range" min="120" max="2400" step="60" value="1100">
+      </label>
+      <label class="switch"><input id="show-cands" type="checkbox" checked> 候选数</label>
+    </div>
+    <div class="timeline">
+      <input id="scrub" type="range" min="0" max="0" value="0">
+      <div id="progress-label" class="progress-label">—</div>
+    </div>
+  </section>
+
+  <aside class="side">
+    <div id="status" class="status hidden"></div>
+
+    <div class="step-card">
+      <div class="step-head">
+        <span id="step-index" class="step-index">—</span>
+        <span id="step-title" class="step-title">尚无步骤</span>
+        <span id="step-tier" class="tier"></span>
+      </div>
+      <div id="step-detail" class="step-detail">在上方粘贴题目链接开始。</div>
+      <div id="step-audit" class="audit hidden"></div>
+    </div>
+
+    <details class="panel" open>
+      <summary>本题规则理解</summary>
+      <div id="rules" class="rules"></div>
+    </details>
+
+    <details class="panel">
+      <summary>推理步骤列表</summary>
+      <ol id="step-list" class="step-list"></ol>
+    </details>
+
+    <details class="panel">
+      <summary>关于</summary>
+      <p class="muted">规则来源：SudokuPad 的 “rules” 文本 + 图形元素清单，由 LLM 编译为结构化约束；
+      无 LLM 时退回本地启发式。每步结论可用穷举反证审计。</p>
+    </details>
+  </aside>
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
