@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
+from itertools import product
 
 
 class _Timeout(Exception):
@@ -77,7 +78,35 @@ def solve_chaos(puzzle, constraints, node_limit: int = 1_500_000,
         cells = region_cells[index]
         if len(cells) >= n:
             return True
-        return any(region_of[nb] == -1 for c in cells for nb in _neighbors(c, n))
+        seen = set(cells)
+        stack = list(cells)
+        while stack:
+            cell = stack.pop()
+            for nb in _neighbors(cell, n):
+                if region_of[nb] == -1 and nb not in seen:
+                    seen.add(nb)
+                    stack.append(nb)
+        return len(seen) >= n
+
+    def region_count_possible(con) -> bool:
+        cells = con.cells()
+        assigned = {c: region_of[c] for c in cells if region_of[c] >= 0}
+        unassigned = [c for c in cells if region_of[c] < 0]
+        existing = sorted(set(assigned.values()))
+        if not unassigned:
+            return len(existing) in con.counts
+        usable = [r for r in existing if len(region_cells[r]) < n]
+        new_slots = max(0, n - len(region_cells))
+        new_ids = [-(i + 1) for i in range(min(len(unassigned), new_slots))]
+        options = usable + new_ids
+        if not options:
+            return False
+        for combo in product(options, repeat=len(unassigned)):
+            labels = set(existing)
+            labels.update(combo)
+            if len(labels) in con.counts:
+                return True
+        return False
 
     def check_all() -> bool:
         region_map = {c: region_of[c] for c in range(total)}
@@ -91,16 +120,7 @@ def solve_chaos(puzzle, constraints, node_limit: int = 1_500_000,
 
     def region_rules_ok(cell: int) -> bool:
         for con in region_rules:
-            cells = con.cells()
-            if cell not in cells:
-                continue
-            assigned = [region_of[c] for c in cells if region_of[c] >= 0]
-            distinct = len(set(assigned))
-            unassigned = len(cells) - len(assigned)
-            if unassigned == 0:
-                if distinct not in con.counts:
-                    return False
-            elif not any(distinct <= k <= distinct + unassigned for k in con.counts):
+            if cell in con.cells() and not region_count_possible(con):
                 return False
         return True
 

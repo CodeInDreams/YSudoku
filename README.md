@@ -137,7 +137,7 @@ For the boundaries of LLM-authored rules, the typed DSL and its trust guardrails
 | Lines | Thermo, arrow (experimental), palindrome, Renban, German/Dutch Whisper, between, consecutive |
 | Dots / clues | Kropki (consecutive / 1:2), XV, quadruple circles (`?` supported) |
 | Global | Diagonal, anti-knight, anti-king, jigsaw regions, 6×6, modular 2×2, entropy 2×2 |
-| Chaos | Cages, quadruples, **region-count rules** (trisection / unbalanced circles) participate in search |
+| Chaos | Cages, quadruples, **region-count rules** (trisection / unbalanced circles) with exact count GAC + connectivity reachability |
 | Other | Odd/even, clone, sandwich, skyscraper, region-sum line |
 | L2 custom | Typed predicates (`sum` / `count` / `ordered` / `all_different` / …), composed by the LLM, marked as *hypothesis* |
 
@@ -187,7 +187,7 @@ docs/            rule DSL and trust design
 ## Known limitations
 
 - **Chaos construction** is a search solver, not step-by-step human reasoning. Region-count rules
-  prune the search, but *Tringle and Cross* (trisection + unbalanced circles) still times out.
+  now use exact GAC and connectivity reachability, but *Tringle and Cross* still times out at ~0.9M nodes.
   Vision/region-border rules are not supported.
 - **Fog puzzles / puzzles with a scratch table** are unsupported (the grid payload itself is incomplete).
 - Author-specific drawing conventions depend on LLM compilation; without a key, heuristics may misread them.
