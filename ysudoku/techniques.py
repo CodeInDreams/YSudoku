@@ -658,6 +658,67 @@ def medusa(st: State, constraints=None):
     return _wrap(st)
 
 
+def x_chain(st: State, constraints=None):
+    """Single-digit alternating strong/weak chain; ends see a common target."""
+    st.begin()
+    budget = [6000]
+    for digit in range(1, st.n + 1):
+        hosts = {c for c in range(st.n2) if st.has(c, digit)}
+        if len(hosts) < 4:
+            continue
+        strong: dict[int, set[int]] = defaultdict(set)
+        for unit in st.units:
+            members = [c for c in unit.cells if c in hosts]
+            if len(members) == 2:
+                strong[members[0]].add(members[1])
+                strong[members[1]].add(members[0])
+        if not strong:
+            continue
+        weak: dict[int, set[int]] = defaultdict(set)
+        for a in hosts:
+            for b in st.peers[a]:
+                if b in hosts:
+                    weak[a].add(b)
+
+        def walk(start: int):
+            found = []
+
+            def dfs(node: int, need_strong: bool, path: list[int]):
+                budget[0] -= 1
+                if budget[0] < 0:
+                    return
+                if len(path) > 8:
+                    return
+                edges = strong[node] if need_strong else weak[node]
+                for nxt in edges:
+                    if nxt in path:
+                        continue
+                    new_path = path + [nxt]
+                    if need_strong and len(new_path) >= 4:
+                        found.append((start, nxt, new_path))
+                    dfs(nxt, not need_strong, new_path)
+                    if budget[0] < 0:
+                        return
+
+            dfs(start, True, [start])
+            return found
+
+        for start in sorted(hosts):
+            for a, b, path in walk(start):
+                if budget[0] < 0:
+                    return _wrap(st)
+                targets = (set(st.peers[a]) & set(st.peers[b])) - set(path)
+                for cell in targets:
+                    if st.has(cell, digit):
+                        reason = Reason("x_chain", {
+                            "digit": digit, "cells": path, "ends": [a, b],
+                            "target": cell,
+                        })
+                        st.elim(cell, digit, reason)
+                        return _wrap(st)
+    return _wrap(st)
+
+
 TECHNIQUES = [
     ("naked_single", 1, naked_single),
     ("hidden_single", 1, hidden_single),
@@ -670,5 +731,6 @@ TECHNIQUES = [
     ("w_wing", 3, w_wing),
     ("coloring", 3, coloring),
     ("medusa", 3, medusa),
+    ("x_chain", 3, x_chain),
     ("forcing_chain", 4, forcing_chain),
 ]

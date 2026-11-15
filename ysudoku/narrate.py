@@ -18,6 +18,7 @@ TITLES = {
     "w_wing": "W-Wing",
     "coloring": "染色法",
     "medusa": "3D Medusa（多数字染色）",
+    "x_chain": "X-Chain（单数字链）",
     "forcing_chain": "反证（试探）",
     "custom": "自定义规则（L2）",
     "parity": "奇偶",
@@ -445,6 +446,24 @@ def _explain_medusa(events, data, n):
             "kind": "color",
             "color": pair[tone],
         })
+    return detail, visual
+
+
+def _explain_x_chain(events, data, n):
+    digit = data.get("digit")
+    path = data.get("cells") or []
+    a, b = data.get("ends") or (path[0], path[-1])
+    detail = (
+        f"X-Chain（数字 {digit}）：沿强链/弱链交替走 "
+        f"{' → '.join(cell_name(c, n) for c in path)}。\n"
+        f"链的两端 {cell_name(a, n)}、{cell_name(b, n)} 必有一格为 {digit}，"
+        f"所以同时看见两端的 {cell_name(data['target'], n)} 不能是 {digit}。\n"
+        f"排除：\n"
+    )
+    detail += "；".join(_effect_lines(events, n)) or "（无）"
+    visual = _basic_visual(events, n)
+    visual["groups"].append({"cells": path, "kind": "line"})
+    visual["links"].append(_link(path, n, "#f59e0b", "line"))
     return detail, visual
 
 

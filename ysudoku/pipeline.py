@@ -135,11 +135,16 @@ def analyze(
     warnings.extend(rules.warnings)
 
     solver = Solver(puzzle, rules, allow_chains=allow_chains)
-    chaos = "chaos construction" in (puzzle.rules_text or "").lower()
+    rules_low = (puzzle.rules_text or "").lower()
+    chaos = any(key in rules_low for key in (
+        "chaos construction", "chaos sudoku", "regions are hidden",
+        "hidden regions", "regions must be determined",
+    ))
     if chaos:
-        exotic = any(word in (puzzle.rules_text or "").lower() for word in (
+        exotic = any(word in rules_low for word in (
             "trisection", "unbalanced", "region count", "region-count",
-            "region sum", "region-sum", "same region", "different region",
+            "how many cells of its own region", "block vision",
+            "region borders", "consecutive cells immediately following",
         ))
         if exotic:
             return Analysis(
@@ -147,7 +152,7 @@ def analyze(
                 initial=solver.initial, source=source,
                 warnings=warnings + ["检测到作者自定义的区域计数规则，首个混沌版本暂不支持"],
                 status="unsupported",
-                message="这类混沌构造依赖作者自定义的区域语义（如三分圆/不平衡圆），暂不支持",
+                message="检测到作者自定义的区域语义（区域计数/视野/边界），首个混沌版本暂不支持",
             )
         chaos_result = solve_chaos(puzzle, rules.constraints, time_limit=chaos_time_limit)
         if chaos_result.status == "solved":

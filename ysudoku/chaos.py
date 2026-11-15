@@ -52,6 +52,31 @@ def solve_chaos(puzzle, constraints, node_limit: int = 300_000,
     col_used = [set() for _ in range(n)]
     nodes = [0]
     started = time.time()
+    cage_rules = []
+    for con in constraints:
+        total = getattr(con, "total", None)
+        if con.kind == "cage" and total is not None:
+            cage_rules.append((set(con.cells()), int(total), bool(getattr(con, "unique", True))))
+
+    def cages_ok() -> bool:
+        for cells, total, unique in cage_rules:
+            vals = [values[c] for c in cells if values[c]]
+            if unique and len(set(vals)) != len(vals):
+                return False
+            if len(vals) == len(cells):
+                if sum(vals) != total:
+                    return False
+                continue
+            remaining = len(cells) - len(vals)
+            if not (sum(vals) + remaining <= total <= sum(vals) + remaining * n):
+                return False
+        return True
+
+    def region_can_grow(index: int) -> bool:
+        cells = region_cells[index]
+        if len(cells) >= n:
+            return True
+        return any(region_of[nb] == -1 for c in cells for nb in _neighbors(c, n))
 
     def check_all() -> bool:
         for con in constraints:
@@ -98,6 +123,12 @@ def solve_chaos(puzzle, constraints, node_limit: int = 300_000,
                 row_used[r].add(digit)
                 col_used[c].add(digit)
                 region_used[choice].add(digit)
+                if not cages_ok() or not region_can_grow(choice):
+                    row_used[r].discard(digit)
+                    col_used[c].discard(digit)
+                    region_used[choice].discard(digit)
+                    values[cell] = 0
+                    continue
                 try:
                     result = dfs(pos + 1)
                 finally:
