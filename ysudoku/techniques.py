@@ -429,6 +429,79 @@ def forcing_chain(st: State, constraints=None):
     return _wrap(st)
 
 
+def coloring(st: State, constraints=None):
+    """Single-digit simple coloring: strong links -> two colours -> wrap/trap."""
+    st.begin()
+    for digit in range(1, st.n + 1):
+        links: list[tuple[int, int]] = []
+        for unit in st.units:
+            hosts = [c for c in unit.cells if st.has(c, digit)]
+            if len(hosts) == 2:
+                links.append((hosts[0], hosts[1]))
+        if not links:
+            continue
+        adj: dict[int, set[int]] = {}
+        for a, b in links:
+            adj.setdefault(a, set()).add(b)
+            adj.setdefault(b, set()).add(a)
+        color: dict[int, int] = {}
+        components: list[list[int]] = []
+        for start in adj:
+            if start in color:
+                continue
+            color[start] = 0
+            stack = [start]
+            comp: list[int] = []
+            while stack:
+                cell = stack.pop()
+                comp.append(cell)
+                for other in adj[cell]:
+                    if other not in color:
+                        color[other] = 1 - color[cell]
+                        stack.append(other)
+            components.append(comp)
+        for comp in components:
+            comp_set = set(comp)
+            comp_links = [(a, b) for a, b in links if a in comp_set and b in comp_set]
+            groups = {0: [c for c in comp if color[c] == 0],
+                      1: [c for c in comp if color[c] == 1]}
+            # colour wrap: two same-colour cells see each other -> that colour is false
+            for tone in (0, 1):
+                cells = groups[tone]
+                conflict = any(
+                    b in st.peers[a]
+                    for i, a in enumerate(cells)
+                    for b in cells[i + 1:]
+                )
+                if not conflict:
+                    continue
+                reason = Reason("coloring", {
+                    "digit": digit, "mode": "wrap", "color": tone,
+                    "cells": cells, "links": comp_links,
+                    "colors": {str(c): color[c] for c in comp},
+                })
+                made = False
+                for cell in cells:
+                    made |= st.elim(cell, digit, reason)
+                if made:
+                    return _wrap(st)
+            # colour trap: a cell seeing both colours cannot hold the digit
+            for cell in range(st.n2):
+                if cell in comp_set or not st.has(cell, digit):
+                    continue
+                sees0 = any(c in st.peers[cell] for c in groups[0])
+                sees1 = any(c in st.peers[cell] for c in groups[1])
+                if sees0 and sees1:
+                    reason = Reason("coloring", {
+                        "digit": digit, "mode": "trap", "color": None,
+                        "cells": [cell], "links": comp_links,
+                        "colors": {str(c): color[c] for c in comp},
+                    })
+                    st.elim(cell, digit, reason)
+                    return _wrap(st)
+    return _wrap(st)
+
+
 TECHNIQUES = [
     ("naked_single", 1, naked_single),
     ("hidden_single", 1, hidden_single),
@@ -439,5 +512,6 @@ TECHNIQUES = [
     ("x_wing", 3, x_wing),
     ("xy_wing", 3, xy_wing),
     ("w_wing", 3, w_wing),
+    ("coloring", 3, coloring),
     ("forcing_chain", 4, forcing_chain),
 ]

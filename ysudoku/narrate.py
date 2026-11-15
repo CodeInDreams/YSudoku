@@ -16,6 +16,7 @@ TITLES = {
     "x_wing": "X-Wing",
     "xy_wing": "XY-Wing",
     "w_wing": "W-Wing",
+    "coloring": "染色法",
     "forcing_chain": "反证（试探）",
     "custom": "自定义规则（L2）",
     "parity": "奇偶",
@@ -52,7 +53,7 @@ TIERS = {
     "anti_king": 1, "naked_single": 1, "hidden_single": 1, "innie": 2,
     "outie": 2, "locked": 2,
     "subset": 2, "hidden_subset": 2, "x_wing": 3, "xy_wing": 3, "w_wing": 3,
-    "forcing_chain": 4, "custom": 2, "parity": 1, "odd": 1, "even": 1,
+    "forcing_chain": 4, "custom": 2, "coloring": 3, "parity": 1, "odd": 1, "even": 1,
     "clone": 1, "sandwich": 2, "skyscraper": 2, "region_sum": 2,
 }
 
@@ -351,6 +352,40 @@ def _explain_region_sum(events, data, n):
     visual = _basic_visual(events, n)
     visual["groups"].append({"cells": cells, "kind": "line"})
     visual["links"].append(_link(cells, n, "#38bdf8", "line"))
+    return detail, visual
+
+
+def _explain_coloring(events, data, n):
+    digit = data.get("digit")
+    mode = data.get("mode")
+    links = data.get("links") or []
+    colors = data.get("colors") or {}
+    if mode == "wrap":
+        tone = "A" if data.get("color") == 0 else "B"
+        cells = data.get("cells") or []
+        detail = (
+            f"染色法（数字 {digit}）：把所有强链（同一单元里该数字只剩两个位置）连起来，"
+            f"交替染成 A / B 两色。\n"
+            f"同色格 {_names(cells, n)} 互相看见——它们不可能同时为 {digit}，"
+            f"所以 {tone} 色整组都不可能为 {digit}。\n"
+            f"排除：\n"
+        )
+    else:
+        detail = (
+            f"染色法（数字 {digit}）：强链把候选分成 A / B 两色，必有一色为真。\n"
+            f"{_names(data.get('cells') or [], n)} 同时看见 A 色和 B 色格："
+            f"无论哪一色为真，它都不能是 {digit}。\n"
+            f"排除：\n"
+        )
+    detail += "；".join(_effect_lines(events, n)) or "（无）"
+    visual = _basic_visual(events, n)
+    for a, b in links:
+        tone = colors.get(str(a), 0)
+        visual["links"].append(_link([a, b], n, "#ef4444" if tone == 0 else "#3b82f6", "dashed"))
+    for cell, tone in colors.items():
+        visual["chips"].append({
+            "cell": int(cell), "text": "A" if tone == 0 else "B", "kind": "color",
+        })
     return detail, visual
 
 

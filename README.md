@@ -113,7 +113,8 @@ python3 -m ysudoku --no-cache <sudokupad-url>     # 跳过缓存
 | L2 自定义 | 类型化谓词（sum/count/ordered/all_different/…），LLM 可组合，标注「推测」|
 
 技巧分层：T1 约束局部 → T2 唯一候选/隐性唯一/区块排除/数组/45 法则 →
-T3 X-Wing / XY-Wing / W-Wing → T4 反证（默认关闭，`--allow-chains` 或网页勾选「允许反证」）。
+T3 X-Wing / XY-Wing / W-Wing / **染色法**（单数字强链、A/B 双色、同色互见与双色夹击）
+→ T4 反证（默认关闭，`--allow-chains` 或网页勾选「允许反证」）。
 每一步都带结构化理由与动画脚本；T4 步骤会明确标注“这是反证，不是直接推理”。
 
 ## 动画与交互
