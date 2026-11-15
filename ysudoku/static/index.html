@@ -42,9 +42,20 @@
       </div>
       <div id="puzzle-meta" class="puzzle-meta"></div>
     </div>
-    <div class="board-wrap">
+    <div class="view-tabs">
+      <button type="button" id="tab-board" class="tab active">推理棋盘</button>
+      <button type="button" id="tab-embed" class="tab" disabled title="加载题目后可用">SudokuPad 原题</button>
+    </div>
+    <div class="board-wrap" id="board-view">
       <svg id="board" viewBox="0 0 9 9" aria-label="数独棋盘"></svg>
       <div id="loading" class="loading hidden"><div class="spinner"></div><span>解析中…</span></div>
+    </div>
+    <div class="embed-wrap hidden" id="embed-view">
+      <iframe id="sp-frame" title="SudokuPad 原题" allow="clipboard-write"></iframe>
+    </div>
+    <div class="embed-hint hidden" id="embed-hint">
+      在 SudokuPad 里落子，右侧看推理；高亮只在本工具的棋盘上。
+      <a id="embed-open" target="_blank" rel="noopener">打不开？在新标签页打开</a>
     </div>
     <div class="board-controls">
       <button id="prev" title="上一步">←</button>

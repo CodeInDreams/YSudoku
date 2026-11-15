@@ -115,6 +115,7 @@
     renderRules();
     renderStatus();
     buildStepList();
+    resetView();
     resetBoard();
     if (data.status === "solved-search" && data.final) {
       S.vals = data.final.slice();
@@ -129,6 +130,25 @@
     setLoading(false);
     if (data.steps.length) {
       setTimeout(() => showStep(0, true), 350);
+    }
+  }
+
+  function resetView() {
+    $("sp-frame").src = "about:blank";
+    $("tab-embed").disabled = !(S.data && S.data.source_url);
+    $("embed-open").href = (S.data && S.data.source_url) || "#";
+    setView("board");
+  }
+
+  function setView(view) {
+    const embed = view === "embed" && S.data && S.data.source_url;
+    $("board-view").classList.toggle("hidden", embed);
+    $("embed-view").classList.toggle("hidden", !embed);
+    $("embed-hint").classList.toggle("hidden", !embed);
+    $("tab-board").classList.toggle("active", !embed);
+    $("tab-embed").classList.toggle("active", embed);
+    if (embed && $("sp-frame").src !== S.data.source_url) {
+      $("sp-frame").src = S.data.source_url;
     }
   }
 
@@ -688,6 +708,8 @@
     stopPlay();
     loadPuzzle($("url").value.trim());
   });
+  $("tab-board").addEventListener("click", () => setView("board"));
+  $("tab-embed").addEventListener("click", () => setView("embed"));
   $("demo").addEventListener("click", () => {
     stopPlay();
     $("url").value = "";
