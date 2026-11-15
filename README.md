@@ -1,50 +1,53 @@
 # YSudoku
 
-**See why every digit is right.** / 每一个数字，都有理由。
+English | [中文](README.zh-CN.md)
+
+**See why every digit is right.**
 
 [![CI](https://github.com/CodeInDreams/ysudoku/actions/workflows/ci.yml/badge.svg)](https://github.com/CodeInDreams/ysudoku/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-> 读音：**WHY-soo-doh-koo**（/ˌwaɪ suːˈdoʊkuː/），即 “why sudoku”。
-> 中文可读作 **Y 数独**（“歪·数独”）。
+> Pronounced **WHY-soo-doh-koo** (/ˌwaɪ suːˈdoʊkuː/), i.e. "why sudoku".
 
-YSudoku 把 [SudokuPad](https://sudokupad.app) 上的变形数独链接，变成**一步一步、可播放、可交互的推理动画**，而不是一个黑箱答案。
+YSudoku turns a [SudokuPad](https://sudokupad.app) link into a **step-by-step, playable,
+interactive explanation** — not a black-box answer.
 
-- 不是穷举：每一步都说明「根据什么规则、排除了什么、为什么」
-- 可机械校验：可选穷举反证，对每一步结论做独立检查
-- 可交互：网页里逐步播放高亮、描边、候选数划除、填数动画
+- **Not brute force.** Every step says which rule was used, what was eliminated, and why.
+- **Machine-checkable.** An optional refutation audit verifies each conclusion independently.
+- **Playable.** Highlights, constraint outlines, candidate strikes and digit pops are animated.
 
-## 快速开始
+## Quick start
 
-零第三方依赖，Python 3.10+：
+The core has no third-party dependencies; Python 3.10+.
 
 ```bash
 git clone git@github.com:CodeInDreams/ysudoku.git
 cd ysudoku
 python3 -m ysudoku --web
-# 打开 http://127.0.0.1:8765/
+# open http://127.0.0.1:8765/
 ```
 
-网页里点「示例」会加载真实题 **Globosite**（lgastako，229 步，约 2 秒），并给出 SudokuPad 原题链接；也可以直接粘贴 SudokuPad 链接。
+The **Example** button loads a real puzzle — *Globosite* by lgastako (229 steps, ~2 s) — with a
+link to the original SudokuPad page. You can also paste any SudokuPad link.
 
-命令行看文字推理：
+Text-only reasoning from the CLI:
 
 ```bash
 python3 -m ysudoku 7v57yvn5vf
-python3 -m ysudoku --allow-chains 7v57yvn5vf        # 卡住时允许反证（步骤标注 T4）
+python3 -m ysudoku --allow-chains 7v57yvn5vf        # allow refutation (T4) when stuck
 python3 -m ysudoku --audit --json https://sudokupad.app/eynwusqy5l > out.json
 ```
 
-安装为命令（可选）：
+Optional install as a command:
 
 ```bash
 pip install -e .
 ysudoku --web
 ```
 
-### 在真实 SudokuPad 里自动填入（可选）
+### Autofill the real SudokuPad page (optional)
 
-如果想让程序直接操作 SudokuPad 页面（点格子、输入数字），可以用 Playwright 桥接：
+Playwright can drive the actual SudokuPad page — click cells, type digits, press buttons:
 
 ```bash
 cd tools
@@ -54,35 +57,41 @@ cd ..
 python3 -m ysudoku --browser https://sudokupad.app/6uhr6irwvd
 ```
 
-会打开一个真实浏览器，按 `Start Puzzle`，然后把解逐格敲进去：
+It opens a real browser, presses **Start Puzzle**, then types the solution cell by cell:
 
-![在真实 SudokuPad 中自动填入](docs/sudokupad-autofill.png)
+![Autofill in the real SudokuPad](docs/sudokupad-autofill.png)
 
-这是本地自动化工具，不参与 Web UI；它只“写入”页面，不读取 SudokuPad 的内部状态。
+This is a local automation helper. It is not used by the web UI, and it only *writes* to the page;
+it does not read SudokuPad's internal state.
 
-## 它怎么工作
+## How it works
 
 ```
-链接 → api/puzzle → scl 压缩串 → 自定义 LZW + zipper 解码
-     → 网格 / 笼 / 线 / 圆 / 点 / 箭头
-     → 元素清单 + 官方 rules 文本
-     → LLM 编译成 JSON 约束（用题面答案逐条校验，失败自动回传修正）
-     → 约束传播 + 人类技巧 → 每一步：中文解释 + 动画脚本
+link → api/puzzle → scl payload → custom LZW + zipper decode
+     → grid / cages / lines / circles / dots / arrows
+     → element inventory + official rules text
+     → LLM compiles the text into JSON constraints (validated against the built-in solution)
+     → constraint propagation + human techniques
+     → each step: explanation + animation script
 ```
 
-SudokuPad 的 JSON 只保存“画了什么”，真正的规则在 `metadata.rules` 里。例如 kropki 黑点只是一块黑色圆形，`三分圆` 只是一个粗灰圆——所以必须有一层“图形 → 语义”的编译。YSudoku 用 LLM 做这层编译，并用题目自带答案做闭环校验；没有配置 key 时退回颜色/关键词启发式。
+SudokuPad's JSON only stores **what is drawn**, not what it means: a Kropki dot is just a black
+circle, a "trisection circle" is just a thick grey circle. YSudoku adds a *graphics → semantics*
+compiler, uses the puzzle's own solution as a closed-loop check, and falls back to colour/keyword
+heuristics when no LLM is configured.
 
-### LLM 配置（可选）
+### LLM configuration (optional)
 
-默认走 DeepSeek 的 `deepseek-flash`，也可以指向任何 OpenAI 兼容服务（OpenAI / Ollama / vLLM / OneAPI）：
+The default is DeepSeek `deepseek-flash`, but any OpenAI-compatible endpoint works
+(OpenAI / Ollama / vLLM / OneAPI):
 
 ```bash
 export SUDOKU_LLM_API_KEY=sk-...
-export SUDOKU_LLM_BASE_URL=https://api.deepseek.com   # 或 https://api.openai.com/v1
+export SUDOKU_LLM_BASE_URL=https://api.deepseek.com   # or https://api.openai.com/v1
 export SUDOKU_LLM_MODEL=deepseek-flash
 ```
 
-本地 Ollama 示例（无需付费 key）：
+Local Ollama (no paid key):
 
 ```bash
 ollama run qwen2.5:7b
@@ -91,121 +100,125 @@ export SUDOKU_LLM_API_KEY=local
 export SUDOKU_LLM_MODEL=qwen2.5:7b
 ```
 
-没有 key 时网页会把「LLM 规则」置灰，并显示“未配置 key · 本地启发式”。
+Without a key the web UI greys out **LLM rules** and shows "no key · local heuristics".
 
-### 规则缓存
+### Rule cache
 
-编译结果按「题目 id + 规则文本 + 元素清单」的指纹缓存，换机器/改题都会自动失效：
+Compiled specs are cached by a fingerprint of *puzzle id + rules text + element inventory*:
 
-- `.cache/rules/<id>.json`：本地缓存，LLM 编译成功后自动写入（已 gitignore）
-- `rules/<id>.json`：共享缓存，用 `--save-rules` 写入，可随仓库提交、供他人直接复用
+- `.cache/rules/<id>.json` — written automatically after a successful LLM compile (gitignored)
+- `rules/<id>.json` — shared cache, written by `--save-rules`, safe to commit and reuse
 
 ```bash
-python3 -m ysudoku --save-rules <sudokupad-url>   # 写入共享规则
-python3 -m ysudoku --no-cache <sudokupad-url>     # 跳过缓存
+python3 -m ysudoku --save-rules <sudokupad-url>   # write to the shared cache
+python3 -m ysudoku --no-cache <sudokupad-url>     # bypass the cache
 ```
 
-健康检查：`GET /api/health` 返回 LLM 是否可用、模型名、缓存条目数。
+Health check: `GET /api/health` reports LLM availability, model name and cache counts.
 
-### 卡住后的规则修复
+### Repair after getting stuck
 
-如果规则 spec 编译成功、但求解器半路卡住，YSudoku 会把**诊断信息**（已尝试技巧、未使用的元素、警告）
-回传给 LLM，让它重读规则文本并输出一份修正后的完整 spec；新 spec 仍须通过与官方答案的校验才会被采用。
-这一步只做“重新理解规则”，不会把答案喂给模型，也不会凭空增加约束。
+If the spec compiles but the solver stalls, YSudoku sends **diagnostics** (techniques tried, unused
+elements, warnings) back to the LLM and asks for a corrected full spec. The new spec must still pass
+validation against the official solution. This only re-interprets the rules; the answer is never
+sent to the model.
 
-网页里勾选「允许反证」可以让求解器在卡住时尝试“假设—矛盾”式试探；这类步骤标注为 T4，
-并明确提示不是纯直接推理。
+The **Allow refutation** checkbox lets the solver try assumption/contradiction as a last resort.
+Those steps are labelled **T4** and explicitly marked as refutation, not direct deduction.
 
-关于“让 LLM 自创规则”的边界、类型化 DSL 与可信性护栏，见
-[docs/rule-dsl.md](docs/rule-dsl.md)。
+For the boundaries of LLM-authored rules, the typed DSL and its trust guardrails, see
+[docs/rule-dsl.md](docs/rule-dsl.md) (Chinese).
 
-## 支持的约束（P1）
+## Supported constraints
 
-| 类别 | 约束 |
+| Category | Constraints |
 |---|---|
-| 求和 | 杀手笼（组合 + 逐格匹配）、小杀手、45 法则（innie/outie） |
-| 线 | 温度计、箭头（实验性）、回文、Renban、德式/荷式 Whisper、之间线、连续线 |
-| 点/提示 | 黑白点（连续 / 1:2）、XV、四格提示（圆圈内数字，支持 `?`） |
-| 全局 | 对角线、反骑士、反国王、锯齿区域、6×6、模块 2×2、熵 2×2 |
-| 混沌 | 笼、四格提示、**区域计数**（三分圆/不平衡圆）参与搜索剪枝 |
-| 其他 | 奇偶、克隆、三明治、摩天楼、区域和线 |
-| L2 自定义 | 类型化谓词（sum/count/ordered/all_different/…），LLM 可组合，标注「推测」|
+| Sums | Killer cages (combinations + per-cell matching), Little Killer, 45 rule (innies/outies) |
+| Lines | Thermo, arrow (experimental), palindrome, Renban, German/Dutch Whisper, between, consecutive |
+| Dots / clues | Kropki (consecutive / 1:2), XV, quadruple circles (`?` supported) |
+| Global | Diagonal, anti-knight, anti-king, jigsaw regions, 6×6, modular 2×2, entropy 2×2 |
+| Chaos | Cages, quadruples, **region-count rules** (trisection / unbalanced circles) participate in search |
+| Other | Odd/even, clone, sandwich, skyscraper, region-sum line |
+| L2 custom | Typed predicates (`sum` / `count` / `ordered` / `all_different` / …), composed by the LLM, marked as *hypothesis* |
 
-技巧分层：T1 约束局部 → T2 唯一候选/隐性唯一/区块排除/数组/45 法则 →
-T3 X-Wing / XY-Wing / W-Wing / **染色法**（单数字强链、A/B 双色、同色互见与双色夹击）
-/ **3D Medusa**（格+数字候选、强弱链、同色冲突/双色夹击/同格双色）
-/ **X-Chain**（单数字强弱链交替，两端夹击）/ **ALS-XZ**（两个几乎锁定集、受限共同候选）
-→ T4 反证（默认关闭，`--allow-chains` 或网页勾选「允许反证」）。
-每一步都带结构化理由与动画脚本；T4 步骤会明确标注“这是反证，不是直接推理”。
+Technique tiers: T1 constraint-local → T2 naked/hidden singles, locked candidates, subsets, 45 rule →
+T3 X-Wing, XY-Wing, W-Wing, **colouring** (single-digit strong links, A/B colours, colour wrap/trap),
+**3D Medusa** (cell+digit candidates, strong/weak links), **X-Chain**, **ALS-XZ** →
+T4 refutation (off by default; `--allow-chains` or the UI checkbox).
+Every step carries a structured reason and an animation script; T4 steps are always marked.
 
-## 动画与交互
+## Animation and UI
 
-- 左侧棋盘：候选数、区域边界、约束描边（笼框、箭头线、鱼形连线）
-- 右侧解释卡：结论、规则前提、逐步影响；可展开规则理解与步骤列表
-- 控制：上一步 / 下一步 / 播放暂停 / 速度 / 进度条 / 键盘方向键
-- **SudokuPad 原题 + 标注**：左侧嵌入官方页面，高亮/连线直接叠在原题上；
-  可点「校准」用三根滑杆对齐并记住；标注层不拦截点击，可在原题里正常落子。
-  跨域限制：不会读取 SudokuPad 的内部状态，也不会把落子同步回本工具
-- 每步的 `visual` 字段是一份视觉脚本：`focus`、`groups`、`links`、`chips`，前端据此播放高亮、描线、划除与弹出
+- Left: candidates, region borders, constraint outlines (cages, arrows, fish links)
+- Right: conclusion, premises, effects; expandable rule interpretation and step list
+- Controls: previous / next / play-pause / speed / scrubber / arrow keys
+- **SudokuPad original + annotations**: embeds the official page and projects highlights/links on
+  top. Use **Calibrate** (three sliders) to align; the overlay is click-through, so the original
+  stays fully playable. Cross-origin limits apply: it does not read SudokuPad's state or sync moves.
+- Each step's `visual` field is a small script — `focus`, `groups`, `links`, `chips` — that the
+  front-end replays as highlights, strokes, candidate strikes and pops.
 
-## 结构
+## Layout
 
 ```
 ysudoku/
-  decode.py      SudokuPad LZW + zipper 解码（已与官方实现逐字段比对）
-  model.py       网格 / 区域 / 笼 / 线 / 圆 / 点 / 箭头
-  sudokupad.py   链接解析、API 拉取、本地缓存
-  rules.py       元素清单、LLM/启发式规则 spec、约束编译
-  rulecache.py   规则缓存（本地 + 共享）
-  llm.py         OpenAI 兼容客户端 + 规则编译 prompt
-  state.py       候选域、事件日志、单位
-  constraints.py 各类约束的传播 + 检查
-  techniques.py  人类技巧（含 45 法则）
-  solve.py       调度器、审计、答案校验
-  search.py      仅作裁判：唯一性、逐步反证、卡住提示
-  narrate.py     中文解释 + 动画脚本生成
-  server.py      标准库 HTTP 服务
-  static/        单页前端（原生 JS/CSS/SVG）
-tests/           解码、引擎、纯数独、LLM mock/修复回归
-fixtures/        示例题与原始数据
-rules/           共享规则 spec（可提交）
-docs/            规则 DSL 与可信性设计
+  decode.py      SudokuPad LZW + zipper decoder (field-by-field verified against the app)
+  model.py       grid / regions / cages / lines / circles / dots / arrows
+  sudokupad.py   link parsing, API fetch, local cache
+  rules.py       element inventory, LLM/heuristic specs, constraint compilation
+  rulecache.py   rule cache (local + shared)
+  llm.py         OpenAI-compatible client + rule-compilation prompts
+  predicate.py   typed predicate AST for L2 custom rules
+  state.py       candidate domains, event log, units
+  constraints.py propagation + checking for every constraint
+  techniques.py  human techniques (45 rule, wings, colouring, Medusa, chains, ALS)
+  chaos.py       chaos-construction search (region + digit)
+  solve.py       scheduler, audit, answer checks
+  search.py      referee only: uniqueness, refutation, hints
+  narrate.py     explanations + animation scripts
+  server.py      stdlib HTTP server
+  static/        single-page front-end (vanilla JS/CSS/SVG)
+tests/           decoder, engine, plain sudoku, LLM mock/repair, techniques
+fixtures/        demo puzzles and raw payloads
+rules/           shared rule specs (committable)
+docs/            rule DSL and trust design
 ```
 
-## 已知限制（P1）
+## Known limitations
 
-- **混沌构造**：首个版本是搜索求解，不是逐步人类推理；只支持无作者自定义区域语义的题
-  （视野/边界遮挡仍不支持）；区域计数规则可在搜索中剪枝；9×9 默认 8 秒 / 150 万结点预算。
-  实测 Tringle and Cross（三分圆+不平衡圆+四格提示）仍会超时，属于后续优化
-- **雾战 / 带草稿表的题**：暂不支持（网格数据本身不完整）
-- 作者自定义画法依赖 LLM 编译；无 key 时启发式可能识别错
-- 高难题仍可能卡住：求解器如实报告「卡住」而不是偷偷穷举；反证只能兜底一部分
-- 箭头语义仍在验证，标为实验性
-- 规则修复依赖 LLM；没有 key 时只有启发式 + 本地求解
+- **Chaos construction** is a search solver, not step-by-step human reasoning. Region-count rules
+  prune the search, but *Tringle and Cross* (trisection + unbalanced circles) still times out.
+  Vision/region-border rules are not supported.
+- **Fog puzzles / puzzles with a scratch table** are unsupported (the grid payload itself is incomplete).
+- Author-specific drawing conventions depend on LLM compilation; without a key, heuristics may misread them.
+- Hard puzzles can still stall. The solver reports *stuck* instead of silently brute-forcing.
+- Arrow semantics are still being verified and marked experimental.
+- Rule repair needs an LLM; without one you get heuristics plus local solving.
 
-## 测试
+## Tests
 
 ```bash
 python3 -m unittest discover -s tests -v
 ```
 
-CI 在每次 push 时跑同一套测试。
+CI runs the same suite on every push.
 
-## 路线图
+## Roadmap
 
-- **P2（基本完成）**：XY-Wing / W-Wing / 反证、三明治、摩天楼、区域和线、
-  克隆、奇偶、6×6 已落地；剩 f-puzzles 导入
-- **P2.5（已完成第一版）**：类型化规则 DSL —— LLM 用受控表达式组合出新约束（不写代码），
-  所有“自创规则”标注来源、带「推测」徽章、可用官方答案做否证；详见 docs/rule-dsl.md
-- **P3（部分完成）**：混沌构造搜索版已落地；下一步是把区域归属做成可解释的逐步推理，
-  并支持作者自定义的区域计数规则
+- **P2 (mostly done)**: XY-Wing / W-Wing / refutation, sandwich, skyscraper, region-sum line,
+  clone, odd/even, 6×6; remaining: f-puzzles import
+- **P2.5 (first version)**: typed rule DSL — the LLM composes new constraints from a fixed predicate
+  vocabulary (no generated code); every authored rule carries a source and a *hypothesis* badge and
+  can be falsified by the official solution. See [docs/rule-dsl.md](docs/rule-dsl.md).
+- **P3 (partial)**: chaos search and region-count propagation are in; next is explainable
+  region-by-region reasoning and stronger region GAC.
 
-## 贡献
+## Contributing
 
-欢迎 PR：新增约束/技巧时请附一道可公开访问的 SudokuPad 链接作为回归用例，并确保
-`python3 -m unittest discover -s tests` 通过。共享规则放在 `rules/`，格式见
-[rules/README.md](rules/README.md)。
+PRs are welcome. When adding a constraint or technique, include a publicly accessible SudokuPad
+link as a regression case and make sure `python3 -m unittest discover -s tests` passes. Shared rule
+specs live in `rules/`; the format is documented in [rules/README.md](rules/README.md).
 
 ## License
 
-MIT，见 [LICENSE](LICENSE)。
+MIT — see [LICENSE](LICENSE).
