@@ -21,6 +21,7 @@ from .constraints import (
     Parity,
     RegionSum,
     Sandwich,
+    XSums,
     Skyscraper,
     Arrow,
     Between,
@@ -88,6 +89,15 @@ def build_inventory(puzzle: Puzzle) -> list[Element]:
     for i, dot in enumerate(puzzle.dots):
         elements.append(Element(f"dot:{i}", "dot", dot.cells, {"fill": dot.fill}))
 
+    for i, clue in enumerate(puzzle.clues):
+        if clue.side in ("top", "bottom"):
+            cells = [r * puzzle.size + clue.index for r in range(puzzle.size)]
+        else:
+            cells = [clue.index * puzzle.size + c for c in range(puzzle.size)]
+        elements.append(Element(f"clue:{i}", "clue", cells, {
+            "value": clue.value, "side": clue.side, "index": clue.index,
+        }))
+
     for i, arrow in enumerate(puzzle.arrows):
         elements.append(Element(f"arrow:{i}", "arrow", [arrow.circle] + arrow.arm,
                                 {"circle": arrow.circle, "arm": arrow.arm}))
@@ -113,7 +123,7 @@ def build_inventory(puzzle: Puzzle) -> list[Element]:
 
 def _cell_center(cell: int, n: int) -> tuple[float, float]:
     r, c = divmod(cell, n)
-    return (c + 0.5, r + 0.5)
+    return (r + 0.5, c + 0.5)
 
 
 # ------------------------------------------------------------------ spec
@@ -173,6 +183,8 @@ KINDS = {
     "skyscraper": "摩天楼",
     "region_sum": "区域和线",
     "region_count": "区域计数",
+    "x_sums": "X-Sums（盘外提示）",
+    "full_rank": "Full Rank（全局排名）",
     "modular": "模块 2×2（每宫含 1/4/7、2/5/8、3/6/9）",
     "entropy": "熵 2×2（每宫含低/中/高）",
 }
@@ -530,6 +542,17 @@ def _build_rule(puzzle: Puzzle, kind: str, element: Element, params: dict,
         direction = str(params.get("direction", "left")).lower()
         return [Skyscraper(cells, int(clue), direction)]
 
+    if kind == "x_sums":
+        total = params.get("sum", element.attrs.get("value") if element.attrs else None)
+        if total is None:
+            raise ValueError("X-Sums 缺少和")
+        side = str(params.get("side") or (element.attrs or {}).get("side") or "top")
+        return [XSums(cells, int(total), side)]
+
+    if kind == "full_rank":
+        warnings.append("Full Rank 约束暂未实现（需要 36 个行列数字的全局排名）")
+        return []
+
     if kind == "region_sum":
         if not puzzle.regions:
             warnings.append("区域和线需要区域定义（混沌构造暂不支持）")
@@ -588,6 +611,7 @@ def heuristic_spec(puzzle: Puzzle, elements: list[Element]) -> dict:
     text = puzzle.rules_text or ""
     rules: list[dict] = []
     globals_: list[dict] = []
+    warnings: list[str] = []
 
     cage_ids = [e.id for e in elements if e.kind == "cage" and e.attrs.get("sum") is not None]
     if cage_ids and _has(text, "killer", "cage", "sum", "笼"):
@@ -640,6 +664,32 @@ def heuristic_spec(puzzle: Puzzle, elements: list[Element]) -> dict:
         globals_.append({"kind": "anti_knight"})
     if _has(text, "anti-king", "anti king"):
         globals_.append({"kind": "anti_king"})
+    clue_elements = [e for e in elements if e.kind == "clue"]
+    if clue_elements:
+        low = text.lower()
+        has_rank = _has(text, "full rank", "full-rank")
+        has_xsum = _has(text, "x-sums", "x sums", "xsum", "x-sums clue")
+        if has_rank or has_xsum:
+            if has_rank and has_xsum:
+                warnings.append("盘外提示同时涉及 Full Rank 与 X-Sums（未知类型配对），暂不自动映射")
+            elif has_xsum:
+                for element in clue_elements:
+                    rules.append({"kind": "x_sums", "elements": [element.id],
+                                  "sum": element.attrs["value"], "side": element.attrs["side"]})
+            if has_rank:
+                warnings.append("检测到 Full Rank 盘外提示：当前版本未实现该约束")
+        elif _has(text, "sandwich", "between 1 and 9", "between the 1 and the 9",
+                  "digits between 1 and 9", "sum of the digits between",
+                  "between 1 and 6", "digits between 1 and 6"):
+            for element in clue_elements:
+                rules.append({"kind": "sandwich", "elements": [element.id],
+                              "sum": element.attrs["value"]})
+        elif _has(text, "skyscraper"):
+            for element in clue_elements:
+                side = element.attrs["side"]
+                if side in ("left", "right"):
+                    rules.append({"kind": "skyscraper", "elements": [element.id],
+                                  "clue": element.attrs["value"], "direction": side})
     if _has(text, "modular") or _has(text, "modularity"):
         globals_.append({"kind": "modular"})
     if _has(text, "entropy"):
@@ -652,4 +702,4 @@ def heuristic_spec(puzzle: Puzzle, elements: list[Element]) -> dict:
             direction = "anti"
         globals_.append({"kind": "diagonal", "direction": direction})
 
-    return {"rules": rules, "globals": globals_, "notes": "heuristic"}
+    return {"rules": rules, "globals": globals_, "notes": "heuristic", "warnings": warnings}

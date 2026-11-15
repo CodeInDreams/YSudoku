@@ -661,33 +661,34 @@ class Sandwich(Constraint):
         vals = [values[c] for c in self._cells]
         if any(v == 0 for v in vals):
             return True
-        if 1 not in vals or 9 not in vals:
+        high = len(vals)
+        if 1 not in vals or high not in vals:
             return False
-        i, j = vals.index(1), vals.index(9)
+        i, j = vals.index(1), vals.index(high)
         lo, hi = min(i, j), max(i, j)
         return sum(vals[lo + 1:hi]) == self.total
 
     def prune(self, st: State) -> bool:
         cells = self._cells
         n = st.n
-        support = {cell: 0 for cell in cells}
         pos1 = pos9 = 0
         feasible = False
         for i in range(n):
-            if not st.has(cells[i], 1):
-                continue
-            for j in range(n):
-                if i == j or not st.has(cells[j], 9):
-                    continue
-                between = cells[min(i, j) + 1:max(i, j)]
+            for j in range(i + 1, n):
+                between = cells[i + 1:j]
                 masks = _sum_support([st.dom[c] for c in between], self.total)
                 if masks is None:
                     continue
-                feasible = True
-                pos1 |= 1 << i
-                pos9 |= 1 << j
-                for cell, mask in zip(between, masks):
-                    support[cell] |= mask
+                if st.has(cells[i], 1) and st.has(cells[j], n):
+                    feasible = True
+                    pos1 |= 1 << i
+                    pos9 |= 1 << j
+                    pass
+                if st.has(cells[i], n) and st.has(cells[j], 1):
+                    feasible = True
+                    pos9 |= 1 << i
+                    pos1 |= 1 << j
+                    pass
         if not feasible:
             raise Contradiction(f"sandwich {self.total} has no position pair")
         reason = Reason("sandwich", {"cells": cells, "sum": self.total})
@@ -696,10 +697,7 @@ class Sandwich(Constraint):
             if not (pos1 >> idx) & 1:
                 changed |= st.elim(cell, 1, reason)
             if not (pos9 >> idx) & 1:
-                changed |= st.elim(cell, 9, reason)
-        for cell, mask in support.items():
-            if mask:
-                changed |= st.restrict(cell, mask, reason)
+                changed |= st.elim(cell, n, reason)
         return changed
 
 
@@ -813,6 +811,57 @@ class RegionSum(Constraint):
             for cell, mask in zip(seg, support):
                 if mask:
                     changed |= st.restrict(cell, mask, reason)
+        return changed
+
+
+class XSums(Constraint):
+    """X-Sums: the first digit X, read from ``side``, bounds the sum of X cells."""
+
+    kind = "x_sums"
+
+    def __init__(self, cells: list[int], total: int, side: str = "top"):
+        self._cells = list(cells)
+        self.total = int(total)
+        self.side = side
+
+    def cells(self) -> list[int]:
+        return self._cells
+
+    def ordered(self) -> list[int]:
+        return self._cells if self.side in ("top", "left") else list(reversed(self._cells))
+
+    def describe(self) -> str:
+        return f"X-Sums {self.total}（{self.side}）"
+
+    def to_dict(self) -> dict:
+        return {"kind": "x_sums", "cells": self._cells, "sum": self.total, "side": self.side}
+
+    def check(self, values: list[int]) -> bool:
+        vals = [values[c] for c in self.ordered()]
+        if any(v == 0 for v in vals):
+            return True
+        x = vals[0]
+        if not 1 <= x <= len(vals):
+            return False
+        return sum(vals[:x]) == self.total
+
+    def prune(self, st: State) -> bool:
+        cells = self.ordered()
+        first = cells[0]
+        reason = Reason("x_sums", {"cells": self._cells, "sum": self.total, "side": self.side})
+        changed = False
+        for x in bits(st.dom[first]):
+            if not 1 <= x <= len(cells):
+                changed |= st.elim(first, x, reason)
+                continue
+            span = cells[:x]
+            lo = hi = 0
+            for cell in span:
+                d = st.dom[cell]
+                lo += (d & -d).bit_length()
+                hi += d.bit_length()
+            if not (lo <= self.total <= hi):
+                changed |= st.elim(first, x, reason)
         return changed
 
 

@@ -24,7 +24,7 @@ def puzzle(with_solution=True):
     if with_solution:
         meta["solution"] = SOLUTION
     data = {"cells": cells, "regions": REGIONS, "metadata": meta}
-    data["lines"] = [{"wayPoints": [[0.5, 5.5], [8.5, 5.5]], "color": "#000000", "thickness": 2}]
+    data["lines"] = [{"wayPoints": [[5.5, 0.5], [5.5, 8.5]], "color": "#000000", "thickness": 2}]
     return data
 
 

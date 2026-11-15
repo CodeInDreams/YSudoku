@@ -43,6 +43,10 @@ class Analysis:
                 "givens": [self.puzzle.givens.get(c, 0) for c in range(n * n)],
                 "regions": self.puzzle.regions,
                 "has_solution": bool(self.puzzle.solution),
+                "clues": [
+                    {"side": c.side, "index": c.index, "value": c.value}
+                    for c in self.puzzle.clues
+                ],
             },
             "rules": {
                 "source": self.source,
@@ -132,9 +136,31 @@ def analyze(
         spec = heuristic_spec(puzzle, inventory)
 
     rules = compile_spec(puzzle, inventory, spec, source=source)
+    warnings.extend(spec.get("warnings", []))
     warnings.extend(rules.warnings)
 
     solver = Solver(puzzle, rules, allow_chains=allow_chains)
+
+    clue_ids = {f"clue:{i}" for i in range(len(puzzle.clues))}
+    used_ids = {
+        eid for rule in rules.resolved
+        if rule.get("kind") != "_ignored"
+        for eid in rule.get("elements", [])
+    }
+    mapped_clues = clue_ids & used_ids
+    if clue_ids and not mapped_clues:
+        return Analysis(
+            puzzle=puzzle, spec=spec, rules=rules,
+            result=SolveResult("unsupported", [], []),
+            initial=solver.initial, source=source,
+            warnings=warnings + [
+                f"检测到 {len(clue_ids)} 个盘外提示，但当前规则没有使用任何一条",
+            ],
+            status="unsupported",
+            message="盘外提示未被规则映射（可能是 Full Rank / X-Sums 的未知类型配对，或尚未实现的盘外线索）",
+        )
+    if clue_ids - mapped_clues:
+        warnings.append(f"{len(clue_ids - mapped_clues)} 个盘外提示未被规则使用")
     rules_low = (puzzle.rules_text or "").lower()
     chaos = any(key in rules_low for key in (
         "chaos construction", "chaos sudoku", "regions are hidden",

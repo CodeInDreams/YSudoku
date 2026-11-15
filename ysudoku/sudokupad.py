@@ -15,6 +15,7 @@ from .decode import decode_payload
 API_URL = "https://sudokupad.app/api/puzzle/{id}"
 LEGACY_URL = "https://sudokupad.svencodes.com/ctclegacy/{id}"
 CACHE_DIR = Path(os.environ.get("SUDOKU_EXPLAIN_CACHE", Path.cwd() / ".cache"))
+CACHE_VERSION = 2
 UA = "sudoku-explain/0.1 (+https://logic-masters.de)"
 
 
@@ -81,7 +82,7 @@ def load(target: str, use_cache: bool = True) -> dict:
         return _payload_from_raw(text)
 
     puzzle_id = value
-    cache_file = CACHE_DIR / (re.sub(r"[^A-Za-z0-9_.-]", "_", puzzle_id) + ".json")
+    cache_file = CACHE_DIR / f"v{CACHE_VERSION}" / (re.sub(r"[^A-Za-z0-9_.-]", "_", puzzle_id) + ".json")
     if use_cache and cache_file.exists():
         try:
             return json.loads(cache_file.read_text(encoding="utf-8"))

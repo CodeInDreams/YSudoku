@@ -143,9 +143,9 @@ def unzip_payload(payload: str) -> dict:
 
 def _restore_names(obj):
     if isinstance(obj, list):
-        cleaned = [_restore_names(v) for v in obj]
-        # The zipper represents [] as [{}]; normalise that artefact away.
-        return [v for v in cleaned if v != {}]
+        # Do NOT drop empty objects: SudokuPad uses {} as a placeholder for an
+        # empty cell, so removing them would shift every later column.
+        return [_restore_names(v) for v in obj]
     if isinstance(obj, dict):
         return {_PROP_REV.get(k, k): _restore_names(v) for k, v in obj.items()}
     if isinstance(obj, str) and re.fullmatch(r"[0-9a-fA-F]{6}", obj):

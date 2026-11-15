@@ -88,6 +88,7 @@
     S.regions = (data.chaos_regions && data.chaos_regions.length)
       ? data.chaos_regions
       : (data.puzzle.regions || []);
+    S.clues = data.puzzle.clues || [];
     S.dom = data.initial.slice();
     S.vals = data.puzzle.givens.slice();
     S.idx = -1;
@@ -244,7 +245,8 @@
   function buildBoard() {
     const svg = $("board");
     svg.innerHTML = "";
-    svg.setAttribute("viewBox", `0 0 ${S.n} ${S.n}`);
+    const pad = S.clues && S.clues.length ? 1 : 0;
+    svg.setAttribute("viewBox", `${-pad} ${-pad} ${S.n + 2 * pad} ${S.n + 2 * pad}`);
     el("g", { id: "layer-groups" }, svg);
     el("g", { id: "layer-cells" }, svg);
     el("g", { id: "layer-regions" }, svg);
@@ -415,6 +417,17 @@
     const layer = $("layer-static");
     if (!layer) return;
     layer.innerHTML = "";
+    for (const clue of (S.data.puzzle.clues || [])) {
+      let x = clue.index + 0.5, y = clue.index + 0.5;
+      if (clue.side === "top") { x = clue.index + 0.5; y = -0.45; }
+      if (clue.side === "bottom") { x = clue.index + 0.5; y = S.n + 0.45; }
+      if (clue.side === "left") { x = -0.45; y = clue.index + 0.5; }
+      if (clue.side === "right") { x = S.n + 0.45; y = clue.index + 0.5; }
+      el("text", {
+        x, y, "text-anchor": "middle", "dominant-baseline": "central",
+        class: "static-label", "font-size": "0.42",
+      }, layer).textContent = String(clue.value);
+    }
     const cons = (S.data && S.data.constraints) || [];
     for (const con of cons) {
       const cells = con.cells || [];

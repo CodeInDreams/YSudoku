@@ -53,6 +53,15 @@ class Dot:
 
 
 @dataclass
+class Clue:
+    id: int
+    pos: tuple[float, float]
+    side: str  # top | bottom | left | right
+    index: int  # 0-based row for left/right, column for top/bottom
+    value: int
+
+
+@dataclass
 class TextMark:
     id: int
     pos: tuple[float, float]
@@ -74,6 +83,7 @@ class Puzzle:
     dots: list[Dot]
     markers: list[Circle]
     arrows: list[Arrow]
+    clues: list[Clue]
     texts: list[TextMark]
     solution: list[int] | None
     source_url: str = ""
@@ -126,6 +136,7 @@ class Puzzle:
             "lines": len(self.lines),
             "circles": len(self.circles),
             "dots": len(self.dots),
+            "clues": len(self.clues),
         }
 
 
@@ -133,10 +144,10 @@ class Puzzle:
 
 
 def _cell_from_xy(x: float, y: float, n: int) -> int | None:
-    """Snap an (x=col, y=row) point to a cell id if it sits on a cell centre."""
-    c = int(x)
-    r = int(y)
-    if abs(x - (c + 0.5)) <= 0.35 and abs(y - (r + 0.5)) <= 0.35:
+    """Snap a (row, col) point to a cell id if it sits on a cell centre."""
+    r = int(x)
+    c = int(y)
+    if abs(x - (r + 0.5)) <= 0.35 and abs(y - (c + 0.5)) <= 0.35:
         if 0 <= r < n and 0 <= c < n:
             return r * n + c
     return None
@@ -145,7 +156,7 @@ def _cell_from_xy(x: float, y: float, n: int) -> int | None:
 def _path_cells(points: list[list[float]], n: int) -> list[int]:
     """Map a polyline to the ordered cells it passes through.
 
-    Points are (x=col, y=row).  Interior samples must sit near a cell centre;
+    Points are (row, col).  Interior samples must sit near a cell centre;
     the two endpoints are snapped with floor() so slightly offset arrow tips
     still register.
     """
@@ -159,7 +170,7 @@ def _path_cells(points: list[list[float]], n: int) -> list[int]:
             cells.append(cell)
 
     x, y = pts[0]
-    c, r = int(x), int(y)
+    r, c = int(x), int(y)
     if 0 <= r < n and 0 <= c < n:
         push(r * n + c)
 
@@ -168,15 +179,15 @@ def _path_cells(points: list[list[float]], n: int) -> list[int]:
         for k in range(steps + 1):
             x = x0 + (x1 - x0) * k / steps
             y = y0 + (y1 - y0) * k / steps
-            c, r = int(x), int(y)
+            r, c = int(x), int(y)
             if not (0 <= r < n and 0 <= c < n):
                 continue
-            if abs(x - (c + 0.5)) > 0.3 or abs(y - (r + 0.5)) > 0.3:
+            if abs(x - (r + 0.5)) > 0.3 or abs(y - (c + 0.5)) > 0.3:
                 continue
             push(r * n + c)
 
     x, y = pts[-1]
-    c, r = int(x), int(y)
+    r, c = int(x), int(y)
     if 0 <= r < n and 0 <= c < n:
         push(r * n + c)
     return cells
@@ -205,16 +216,16 @@ def _norm_color(value: str | None, default: str = "#000000") -> str:
 
 
 def _dot_cells(x: float, y: float, n: int) -> list[int]:
-    """Return the two cells touching a dot drawn on a cell edge."""
+    """Return the two cells touching a dot drawn on a cell edge (x=row, y=col)."""
     fx, fy = x - int(x), y - int(y)
     if abs(fx - 0.5) < 0.02 and abs(fy) < 0.02:
-        c = int(x)
-        r = int(y)
-        return [cell for cell in ((r - 1) * n + c, r * n + c) if 0 <= cell < n * n]
-    if abs(fy - 0.5) < 0.02 and abs(fx) < 0.02:
-        r = int(y)
-        c = int(x)
+        r = int(x)
+        c = int(y)
         return [cell for cell in (r * n + c - 1, r * n + c) if 0 <= cell < n * n]
+    if abs(fy - 0.5) < 0.02 and abs(fx) < 0.02:
+        r = int(x)
+        c = int(y)
+        return [cell for cell in ((r - 1) * n + c, r * n + c) if 0 <= cell < n * n]
     return []
 
 
@@ -310,16 +321,16 @@ def parse_puzzle(data: dict, puzzle_id: str = "") -> Puzzle:
                 dots.append(Dot(i, (x, y), pair, fill))
             continue
         if float(x).is_integer() and float(y).is_integer():
-            cx, cy = int(x), int(y)
+            cr, cc = int(x), int(y)
             around = [
-                (cy - 1) * n + (cx - 1), (cy - 1) * n + cx,
-                cy * n + (cx - 1), cy * n + cx,
+                (cr - 1) * n + (cc - 1), (cr - 1) * n + cc,
+                cr * n + (cc - 1), cr * n + cc,
             ]
             circles.append(
                 Circle(i, (x, y), [c for c in around if 0 <= c < n * n], fill, border, thick)
             )
         elif abs(x - int(x) - 0.5) < 0.01 and abs(y - int(y) - 0.5) < 0.01:
-            cell = int(y) * n + int(x)
+            cell = int(x) * n + int(y)
             markers.append(Circle(i, (x, y), [cell], fill, border, thick))
 
     texts: list[TextMark] = []
@@ -351,6 +362,29 @@ def parse_puzzle(data: dict, puzzle_id: str = "") -> Puzzle:
         arrows.append(Arrow(i, head, arm, _norm_color(arrow.get("color")),
                            [[float(p[0]), float(p[1])] for p in points]))
 
+    clues: list[Clue] = []
+    for source in (data.get("underlays") or []) + (data.get("overlays") or []):
+        raw_text = source.get("text")
+        if raw_text is None:
+            continue
+        text = str(raw_text).strip()
+        if not text.isdigit():
+            continue
+        center = source.get("center") or [0, 0]
+        x, y = float(center[0]), float(center[1])  # x=row, y=col
+        side = index = None
+        if x < 0:
+            side, index = "top", int(y)
+        elif x >= n:
+            side, index = "bottom", int(y)
+        elif y < 0:
+            side, index = "left", int(x)
+        elif y >= n:
+            side, index = "right", int(x)
+        if side is None or not (0 <= index < n):
+            continue
+        clues.append(Clue(len(clues), (x, y), side, index, int(text)))
+
     solution = None
     raw_solution = meta.get("solution")
     if isinstance(raw_solution, str) and len(raw_solution) == n * n:
@@ -370,6 +404,7 @@ def parse_puzzle(data: dict, puzzle_id: str = "") -> Puzzle:
         dots=dots,
         markers=markers,
         arrows=arrows,
+        clues=clues,
         texts=texts,
         solution=solution,
         source_url=str(meta.get("source_url") or ""),
