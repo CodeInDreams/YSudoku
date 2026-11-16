@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, HelpCircle, Loader2, Moon, Play, RotateCw, Search, Star, Sun, Trash2, X } from "lucide-react";
+import { ArrowUpDown, Check, ChevronDown, ChevronLeft, ChevronRight, HelpCircle, Loader2, Moon, Palette, Play, RotateCw, Search, Star, Sun, X } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
@@ -8,11 +8,26 @@ import { Switch } from "./components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "./components/ui/popover";
 import { ScrollArea } from "./components/ui/scroll-area";
+import {
+  DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent,
+  DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
+} from "./components/ui/dropdown-menu";
 
 const STATUS_LABEL = {
   solved: "已解出", "solved-global": "全局求解", "solved-search": "搜索求解",
   stuck: "卡住", unsupported: "不支持", invalid: "规则冲突",
 };
+
+const ACCENTS = [
+  { value: "blue", label: "Blue", color: "#2563eb" },
+  { value: "green", label: "Green", color: "#16a34a" },
+  { value: "neutral", label: "Neutral", color: "#404040" },
+  { value: "orange", label: "Orange", color: "#ea580c" },
+  { value: "red", label: "Red", color: "#dc2626" },
+  { value: "rose", label: "Rose", color: "#e11d48" },
+  { value: "violet", label: "Violet", color: "#7c3aed" },
+  { value: "yellow", label: "Yellow", color: "#eab308" },
+];
 
 const HELP = {
   llm: "用大模型把 SudokuPad 的规则文字和图形清单编译成结构化约束。题面若带官方答案，只用于自检，不参与求解；关闭后使用本地启发式规则识别。",
@@ -151,6 +166,9 @@ export default function App() {
   const [dark, setDark] = useState(() => {
     try { return localStorage.getItem("ysudoku.theme") === "dark"; } catch { return false; }
   });
+  const [accent, setAccent] = useState(() => {
+    try { return localStorage.getItem("ysudoku.accent") || "neutral"; } catch { return "neutral"; }
+  });
   const [settings, setSettings] = useState({ max_rules: 100, max_steps: 100, max_frames: 10, max_mb: 500 });
 
   const steps = analysis?.steps || [];
@@ -161,6 +179,11 @@ export default function App() {
     document.documentElement.classList.toggle("dark", dark);
     try { localStorage.setItem("ysudoku.theme", dark ? "dark" : "light"); } catch { /* ignore */ }
   }, [dark]);
+
+  useEffect(() => {
+    document.documentElement.dataset.accent = accent;
+    try { localStorage.setItem("ysudoku.accent", accent); } catch { /* ignore */ }
+  }, [accent]);
 
   useEffect(() => {
     if (!playing) return;
@@ -328,7 +351,25 @@ export default function App() {
               <PopoverTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7"><HelpCircle className="h-4 w-4" /></Button></PopoverTrigger>
               <PopoverContent className="text-xs leading-relaxed">{HELP.audit}</PopoverContent>
             </Popover>
-            <Button variant="ghost" size="icon" onClick={() => setDark((v) => !v)} title="切换浅色/深色">{dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}</Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" title="主题"><Palette className="h-4 w-4" /></Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuLabel>主题</DropdownMenuLabel>
+                {ACCENTS.map((item) => (
+                  <DropdownMenuItem key={item.value} onClick={() => setAccent(item.value)}>
+                    <span className="h-2 w-2 rounded-full" style={{ background: item.color }} />
+                    <span className="flex-1">{item.label}</span>
+                    {accent === item.value && <Check className="h-4 w-4" />}
+                  </DropdownMenuItem>
+                ))}
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel>模式</DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => setDark(false)}><Sun className="h-4 w-4" /><span className="flex-1">Light</span>{!dark && <Check className="h-4 w-4" />}</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setDark(true)}><Moon className="h-4 w-4" /><span className="flex-1">Dark</span>{dark && <Check className="h-4 w-4" />}</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </header>
@@ -478,7 +519,16 @@ export default function App() {
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="relative min-w-[120px] flex-1"><Search className="absolute left-2 top-2.5 h-3.5 w-3.5 text-muted-foreground" /><Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索标题/作者" className="h-8 pl-7 text-xs" /></div>
-                    <select value={sort} onChange={(e) => setSort(e.target.value)} className="h-8 rounded-md border border-input bg-background px-2 text-xs"><option value="recent">最近</option><option value="title">标题</option></select>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="sm" className="h-8 gap-1.5 px-2 text-xs"><ArrowUpDown className="h-3.5 w-3.5" />{sort === "recent" ? "最近" : "标题"}<ChevronDown className="h-3 w-3 opacity-60" /></Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>排序</DropdownMenuLabel>
+                        <DropdownMenuCheckboxItem checked={sort === "recent"} onCheckedChange={() => setSort("recent")}>最近</DropdownMenuCheckboxItem>
+                        <DropdownMenuCheckboxItem checked={sort === "title"} onCheckedChange={() => setSort("title")}>标题</DropdownMenuCheckboxItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                     <label className="flex items-center gap-1 text-xs text-muted-foreground"><input type="checkbox" checked={favOnly} onChange={(e) => setFavOnly(e.target.checked)} />只看收藏</label>
                   </div>
                   <div className="space-y-2">
