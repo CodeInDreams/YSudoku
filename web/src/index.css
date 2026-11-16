@@ -62,3 +62,21 @@
 .dark[data-accent="violet"] { --primary: 263.4 70% 50.4%; --primary-foreground: 210 20% 98%; }
 :root[data-accent="yellow"] { --primary: 47.9 95.8% 51.2%; --primary-foreground: 26 83.3% 14.1%; --ring: 47.9 95.8% 51.2%; }
 .dark[data-accent="yellow"] { --primary: 47.9 95.8% 51.2%; --primary-foreground: 26 83.3% 14.1%; }
+
+.rules-markdown { color: hsl(var(--foreground)); font-size: 14px; line-height: 1.75; }
+.rules-markdown > :first-child { margin-top: 0; }
+.rules-markdown > :last-child { margin-bottom: 0; }
+.rules-markdown p { margin: 0.55em 0; }
+.rules-markdown ul, .rules-markdown ol { margin: 0.55em 0; padding-left: 1.25rem; }
+.rules-markdown ul { list-style: disc; }
+.rules-markdown ol { list-style: decimal; }
+.rules-markdown li { margin: 0.2em 0; }
+.rules-markdown strong { font-weight: 600; }
+.rules-markdown h1, .rules-markdown h2, .rules-markdown h3 { font-weight: 600; margin: 1em 0 0.4em; line-height: 1.35; }
+.rules-markdown h1 { font-size: 1.15rem; }
+.rules-markdown h2 { font-size: 1.05rem; }
+.rules-markdown h3 { font-size: 1rem; }
+.rules-markdown code { background: hsl(var(--muted)); border-radius: 4px; padding: 0.1em 0.3em; font-size: 0.9em; }
+.rules-markdown blockquote { border-left: 2px solid hsl(var(--border)); padding-left: 0.75rem; color: hsl(var(--muted-foreground)); margin: 0.6em 0; }
+.rules-markdown table { border-collapse: collapse; margin: 0.6em 0; font-size: 13px; }
+.rules-markdown th, .rules-markdown td { border: 1px solid hsl(var(--border)); padding: 4px 8px; }

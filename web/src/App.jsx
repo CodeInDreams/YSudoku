@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle, ArrowUpDown, Check, ChevronDown, ChevronLeft, ChevronRight,
-  Database, FolderOpen, Github, Loader2, Moon, Pause, Play, RotateCw,
-  Search, Settings2, Star, Sun, X,
+  Database, FilePenLine, FolderOpen, Github, Languages, Loader2, Moon, Pause, Play,
+  Save, Search, Settings, ShieldCheck, Sparkles, Star, Sun, X,
 } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
@@ -10,11 +10,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { Badge } from "./components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { Textarea } from "./components/ui/textarea";
+import { Switch } from "./components/ui/switch";
+import { Popover, PopoverContent, PopoverTrigger } from "./components/ui/popover";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Progress } from "./components/ui/progress";
 import { Slider } from "./components/ui/slider";
 import {
-  DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "./components/ui/dropdown-menu";
 import { detectLang, translate } from "./i18n";
 
@@ -827,18 +830,48 @@ export default function App() {
             <Button variant="ghost" size="icon" onClick={() => setDark((value) => !value)} title={dark ? t("header.light") : t("header.dark")}>
               {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" title={t("settings.title")}><Settings2 className="h-4 w-4" /></Button></DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel>{t("settings.title")}</DropdownMenuLabel>
-                <DropdownMenuLabel className="pb-1 pt-0 text-[10px] uppercase tracking-wider">{t("header.language")}</DropdownMenuLabel>
-                <DropdownMenuItem onClick={() => setLang("zh")} className={lang === "zh" ? "bg-accent font-medium" : ""}><span className="flex-1">中文</span>{lang === "zh" && <Check className="h-4 w-4" />}</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setLang("en")} className={lang === "en" ? "bg-accent font-medium" : ""}><span className="flex-1">English</span>{lang === "en" && <Check className="h-4 w-4" />}</DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuCheckboxItem checked={llm} onCheckedChange={setLlm} title={t("help.llm")}>{t("header.llm")}</DropdownMenuCheckboxItem>
-                <DropdownMenuCheckboxItem checked={audit} onCheckedChange={setAudit} title={t("help.audit")}>{t("header.audit")}</DropdownMenuCheckboxItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <Popover>
+              <PopoverTrigger asChild><Button variant="ghost" size="icon" title={t("settings.title")}><Settings className="h-4 w-4" /></Button></PopoverTrigger>
+              <PopoverContent align="end" className="w-[min(360px,calc(100vw-24px))] p-0">
+                <div className="border-b px-4 py-3">
+                  <div className="text-sm font-semibold">{t("settings.title")}</div>
+                </div>
+                <div className="divide-y">
+                  <div className="flex items-center gap-3 px-4 py-3">
+                    <Languages className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium">{t("settings.language")}</div>
+                      <div className="text-xs text-muted-foreground">{t("settings.languageDesc")}</div>
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs">{lang === "zh" ? "中文" : "English"}<ChevronDown className="h-3 w-3 opacity-60" /></Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-32">
+                        <DropdownMenuItem onClick={() => setLang("zh")} className={lang === "zh" ? "bg-accent font-medium" : ""}><span className="flex-1">中文</span>{lang === "zh" && <Check className="h-4 w-4" />}</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setLang("en")} className={lang === "en" ? "bg-accent font-medium" : ""}><span className="flex-1">English</span>{lang === "en" && <Check className="h-4 w-4" />}</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                  <div className="flex items-center gap-3 px-4 py-3">
+                    <Sparkles className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium">{t("header.llm")}</div>
+                      <div className="text-xs text-muted-foreground">{t("settings.llmDesc")}</div>
+                    </div>
+                    <Switch checked={llm} onCheckedChange={setLlm} title={t("help.llm")} />
+                  </div>
+                  <div className="flex items-center gap-3 px-4 py-3">
+                    <ShieldCheck className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium">{t("header.audit")}</div>
+                      <div className="text-xs text-muted-foreground">{t("settings.auditDesc")}</div>
+                    </div>
+                    <Switch checked={audit} onCheckedChange={setAudit} title={t("help.audit")} />
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
         </div>
       </header>
@@ -850,7 +883,6 @@ export default function App() {
               title={analysis?.puzzle?.title || t("page.waiting")}
               description={analysis ? `${analysis.puzzle.author || ""} · ${t("page.givens", { n: analysis.puzzle.givens.filter(Boolean).length })}${isSolved ? ` · ${statusLabel(analysis.status)}` : ""}` : t("empty.solve")}
               badges={analysis ? <><Badge variant="outline">{n}×{n}</Badge><Badge variant={isSolved ? "success" : "outline"}>{statusLabel(analysis.status)}</Badge></> : null}
-              actions={analysis ? <Button variant="outline" size="sm" onClick={refreshRules} disabled={busy}><RotateCw className="mr-1 h-3.5 w-3.5" />{t("rules.refresh")}</Button> : null}
             />
             {!analysis ? emptySolve : (
               <>
@@ -871,18 +903,23 @@ export default function App() {
 
         {view === "rules" && (
           <>
-            <PageHead title={t("rules.title")} description={analysis ? t("rules.desc", { model: "deepseek-flash" }) : t("empty.solve")}
-              actions={analysis ? <Button variant="outline" size="sm" onClick={refreshRules} disabled={busy}><RotateCw className="mr-1 h-3.5 w-3.5" />{t("rules.refresh")}</Button> : null} />
+            <PageHead title={t("rules.title")} description={analysis ? t("rules.desc", { model: "deepseek-flash" }) : t("empty.solve")} />
             {!analysis ? emptySolve : (
               <div className="space-y-6">
-                <Card>
-                  <CardHeader className="py-3.5">
-                    <CardTitle className="text-sm">{t("rules.notes")}</CardTitle>
-                    <p className="text-xs text-muted-foreground">{t("rules.notesHint")}</p>
+                <Card className="overflow-hidden">
+                  <CardHeader className="flex-row items-start gap-3 space-y-0 border-b py-3.5">
+                    <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-muted"><FilePenLine className="h-4 w-4 text-muted-foreground" /></div>
+                    <div className="min-w-0">
+                      <CardTitle className="text-sm">{t("rules.notes")}</CardTitle>
+                      <p className="mt-0.5 text-xs text-muted-foreground">{t("rules.notesHint")}</p>
+                    </div>
                   </CardHeader>
-                  <CardContent className="space-y-3 pt-0">
-                    <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={4} placeholder={t("rules.notesPlaceholder")} className="text-sm" />
-                    <div className="flex justify-end"><Button size="sm" onClick={refreshRules} disabled={busy}><RotateCw className="mr-1 h-3.5 w-3.5" />{t("rules.apply")}</Button></div>
+                  <CardContent className="pt-4">
+                    <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={4} placeholder={t("rules.notesPlaceholder")} className="min-h-[104px] resize-y bg-muted/30 text-sm leading-6" />
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-[11px] text-muted-foreground">{t("rules.saveHint")}</span>
+                      <Button size="sm" onClick={refreshRules} disabled={busy}><Save className="mr-1 h-3.5 w-3.5" />{t("rules.save")}</Button>
+                    </div>
                   </CardContent>
                 </Card>
                 <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(300px,.7fr)]">
@@ -902,7 +939,7 @@ export default function App() {
                 </div>
                 <Card>
                   <CardHeader className="py-3.5"><CardTitle className="text-sm">{t("rules.original")}</CardTitle><p className="text-xs text-muted-foreground">{t("rules.originalHint")}</p></CardHeader>
-                  <CardContent className="pt-0"><pre className="whitespace-pre-wrap break-words rounded-md bg-muted px-3 py-3 font-sans text-sm leading-7">{analysis.puzzle.rules || "—"}</pre></CardContent>
+                  <CardContent className="pt-0"><div className="rules-markdown rounded-lg bg-muted/40 px-4 py-3"><ReactMarkdown remarkPlugins={[remarkGfm]}>{analysis.puzzle.rules || "—"}</ReactMarkdown></div></CardContent>
                 </Card>
               </div>
             )}
