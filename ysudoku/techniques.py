@@ -781,6 +781,53 @@ def als(st: State, constraints=None):
     return _wrap(st)
 
 
+def _bivalue_cells(st):
+    return [c for c in range(st.n2) if st.vals[c] == 0 and st.dom[c].bit_count() == 2]
+
+
+def _trigger_bivalue(st):
+    return bool(_bivalue_cells(st))
+
+
+def _trigger_two_bivalue(st):
+    return len(_bivalue_cells(st)) >= 2
+
+
+def _trigger_strong_link(st):
+    for unit in st.units:
+        for digit in range(1, st.n + 1):
+            if sum(1 for c in unit.cells if st.has(c, digit)) == 2:
+                return True
+    return False
+
+
+def _trigger_x_wing(st):
+    for digit in range(1, st.n + 1):
+        rows = sum(1 for r in range(st.n)
+                   if sum(1 for c in range(st.n) if st.has(r * st.n + c, digit)) == 2)
+        cols = sum(1 for c in range(st.n)
+                   if sum(1 for r in range(st.n) if st.has(r * st.n + c, digit)) == 2)
+        if rows >= 2 or cols >= 2:
+            return True
+    return False
+
+
+def _trigger_small_domain(st):
+    return any(st.vals[c] == 0 and st.dom[c].bit_count() <= 3 for c in range(st.n2))
+
+
+TRIGGERS = {
+    "x_wing": _trigger_x_wing,
+    "xy_wing": _trigger_bivalue,
+    "w_wing": _trigger_two_bivalue,
+    "coloring": _trigger_strong_link,
+    "medusa": _trigger_strong_link,
+    "x_chain": _trigger_strong_link,
+    "als": _trigger_bivalue,
+    "forcing_chain": _trigger_small_domain,
+}
+
+
 TECHNIQUES = [
     ("naked_single", 1, naked_single),
     ("hidden_single", 1, hidden_single),

@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from .narrate import Step, build_step
 from .search import count_solutions, satisfiable
 from .state import Contradiction, State, bits, build_units, cell_name
-from .techniques import TECHNIQUES
+from .techniques import TECHNIQUES, TRIGGERS
 
 
 @dataclass
@@ -29,6 +29,7 @@ class Solver:
         self.constraints = list(rules.constraints)
         self.allow_chains = allow_chains
         self.steps: list[Step] = []
+        self.focus: set[int] = set()
         self.invalid: str | None = None
         try:
             for cell, value in puzzle.givens.items():
@@ -41,7 +42,13 @@ class Solver:
         return self.state.dom.copy(), self.state.vals.copy()
 
     def next_step(self):
-        for constraint in self.constraints:
+        # Constraints that touch the last step's cells first: humans continue
+        # around the area they were just reasoning about.
+        ordered = sorted(
+            self.constraints,
+            key=lambda c: -len(set(c.cells()) & self.focus),
+        )
+        for constraint in ordered:
             pre_dom, pre_vals = self._pre()
             self.state.begin()
             try:
@@ -54,10 +61,14 @@ class Solver:
             if events:
                 step = build_step(len(self.steps), events, self.state.n)
                 step.pre_dom, step.pre_vals = pre_dom, pre_vals
+                self.focus = {e.cell for e in events}
                 return step, None
 
         for name, _tier, technique in TECHNIQUES:
             if name == "forcing_chain" and not self.allow_chains:
+                continue
+            trigger = TRIGGERS.get(name)
+            if trigger is not None and not trigger(self.state):
                 continue
             pre_dom, pre_vals = self._pre()
             try:
@@ -68,6 +79,7 @@ class Solver:
             if events:
                 step = build_step(len(self.steps), events, self.state.n)
                 step.pre_dom, step.pre_vals = pre_dom, pre_vals
+                self.focus = {e.cell for e in events}
                 return step, None
         return None, None
 

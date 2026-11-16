@@ -128,7 +128,8 @@ Frames are cached per step and the next two steps are prefetched in the backgrou
 
 The explanation layer (P2/P3/P4) is drawn as a transparent SVG overlay on top of the screenshot:
 focus cells, unit/group boxes, candidate digits after an elimination, link lines, chips and
-coloured groups. This keeps the mirror read-only and works for any grid size; SudokuPad's native
+coloured groups. Candidates are only drawn for cells that the current step actually reasons about —
+there is no up-front "fill every cell's pencils" pass. This keeps the mirror read-only and works for any grid size; SudokuPad's native
 colour/line palette is not scripted.
 
 ### Rule sheet for vision models
