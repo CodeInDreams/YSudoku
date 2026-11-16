@@ -134,6 +134,113 @@ function fmtBytes(n) {
   return `${(n / 1024 / 1024).toFixed(2)} MB`;
 }
 
+function SectionLabel({ children, extra }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">{children}</span>
+      {extra}
+    </div>
+  );
+}
+
+function Digits({ digits, tone = "neutral" }) {
+  const styles = {
+    neutral: "border bg-background text-foreground",
+    danger: "border-rose-200 bg-rose-50 text-rose-700 line-through dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300",
+    success: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300",
+  };
+  return (
+    <div className="flex flex-wrap gap-1">
+      {digits.map((digit, index) => (
+        <span key={`${digit}-${index}`} className={`grid h-5 min-w-5 place-items-center rounded px-1 font-mono text-[11px] ${styles[tone]}`}>{digit}</span>
+      ))}
+    </div>
+  );
+}
+
+function StepNarrative({ step, lang, n, t }) {
+  const lines = String(step.detail || "").split("\n");
+  const lead = [];
+  const combos = [];
+  let comboCount = null;
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) continue;
+    const countMatch = line.match(/共\s*(\d+)\s*组/);
+    if (countMatch) { comboCount = Number(countMatch[1]); continue; }
+    if (/^\{.*\}$/.test(line)) {
+      const digits = line.replace(/[{}]/g, "").split(/[、,，\s]+/).filter(Boolean);
+      if (digits.length) combos.push(digits);
+      continue;
+    }
+    if (/^R\d+C\d+\s*[≠=]/.test(line)) continue;
+    if (line.includes("按这些组合") || line.includes("当前可行的数字组合")) continue;
+    lead.push(line);
+  }
+  const places = [];
+  const elims = new Map();
+  for (const ev of step.events || []) {
+    if (ev.kind === "place") places.push(ev);
+    else if (ev.kind === "elim") {
+      if (!elims.has(ev.cell)) elims.set(ev.cell, []);
+      const list = elims.get(ev.cell);
+      if (!list.includes(ev.value)) list.push(ev.value);
+    }
+  }
+  const cellName = (cell) => `R${Math.floor(cell / n) + 1}C${(cell % n) + 1}`;
+  const candidates = step.candidates || [];
+  return (
+    <div className="space-y-3">
+      {lang === "zh" && lead.length > 0 && <p className="whitespace-pre-wrap text-[13px] leading-7 text-foreground/90">{lead.join("\n")}</p>}
+      {combos.length > 0 && (
+        <div className="rounded-lg border bg-muted/30 p-3">
+          <SectionLabel extra={<Badge variant="outline">{t("step.combinationCount", { n: comboCount || combos.length })}</Badge>}>{t("step.combinations")}</SectionLabel>
+          <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+            {combos.map((digits, index) => (
+              <div key={index} className="flex items-center justify-center gap-1 rounded-md border bg-background px-2 py-1.5 shadow-sm">
+                {digits.map((digit, i) => <span key={i} className="grid h-5 w-5 place-items-center rounded bg-muted font-mono text-[11px]">{digit}</span>)}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {places.length > 0 && (
+        <div className="rounded-lg border border-emerald-200/70 bg-emerald-50/40 p-3 dark:border-emerald-900 dark:bg-emerald-950/20">
+          <SectionLabel>{t("step.placed")}</SectionLabel>
+          <div className="mt-2 space-y-1.5">
+            {places.map((ev, index) => (
+              <div key={index} className="flex items-center gap-2 text-xs"><span className="font-mono text-muted-foreground">{cellName(ev.cell)}</span><span className="text-muted-foreground">=</span><Digits digits={[ev.value]} tone="success" /></div>
+            ))}
+          </div>
+        </div>
+      )}
+      {elims.size > 0 && (
+        <div className="rounded-lg border border-rose-200/70 bg-rose-50/40 p-3 dark:border-rose-900 dark:bg-rose-950/20">
+          <SectionLabel>{t("step.eliminated")}</SectionLabel>
+          <div className="mt-2 space-y-1.5">
+            {[...elims.entries()].map(([cell, digits]) => (
+              <div key={cell} className="flex items-center gap-2 text-xs"><span className="font-mono text-muted-foreground">{cellName(cell)}</span><span className="text-rose-400">≠</span><Digits digits={digits} tone="danger" /></div>
+            ))}
+          </div>
+        </div>
+      )}
+      {candidates.length > 0 && (
+        <div className="rounded-lg border bg-muted/30 p-3">
+          <SectionLabel>{t("step.candidates")}</SectionLabel>
+          <div className="mt-2 grid gap-1.5">
+            {candidates.map((candidate) => (
+              <div key={candidate.cell} className="flex items-center justify-between gap-2 rounded-md border bg-background px-2 py-1.5">
+                <span className="font-mono text-[11px] text-muted-foreground">{cellName(candidate.cell)}</span>
+                <Digits digits={candidate.digits} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PageHead({ title, description, badges, actions }) {
   return (
     <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
@@ -469,12 +576,12 @@ export default function App() {
   const boardCard = analysis && (
     <Card className="overflow-hidden">
       <CardHeader className="flex-row items-center gap-3 space-y-0 border-b py-3.5">
-        <div><CardTitle className="text-sm">{t("board.title")}</CardTitle><p className="mt-0.5 text-xs text-muted-foreground">{t("board.descCandidates", { i: idx + 1, c: candidateCount })}</p></div>
+        <div><CardTitle className="text-sm">{t("board.title")}</CardTitle><p className="mt-0.5 text-xs text-muted-foreground">{t(candidateCount === 1 ? "board.descCandidate" : "board.descCandidates", { i: idx + 1, c: candidateCount })}</p></div>
         <div className="ml-auto flex items-center gap-1.5"><Badge variant="outline">{t("board.readonly")}</Badge><Badge variant="outline">{t("board.readonly.badge")}</Badge></div>
       </CardHeader>
       <CardContent className="p-5">
-        <div className="relative mx-auto flex aspect-square w-full max-w-[540px] items-center justify-center overflow-hidden rounded-[2px] border bg-white">
-          {!ready && !deleted && <div className="absolute inset-0 z-10 grid place-items-center gap-2 bg-white/80 text-xs text-slate-500"><Loader2 className="h-5 w-5 animate-spin text-primary" />{t("board.loading")}</div>}
+        <div className="relative mx-auto flex aspect-square w-full max-w-[540px] items-center justify-center overflow-hidden rounded-[2px] border bg-white dark:border-border dark:bg-neutral-800">
+          {!ready && !deleted && <div className="absolute inset-0 z-10 grid place-items-center gap-2 bg-white/80 text-xs text-slate-500 dark:bg-neutral-800/90 dark:text-neutral-300"><Loader2 className="h-5 w-5 animate-spin text-primary" />{t("board.loading")}</div>}
           {deleted && (
             <div className="absolute inset-0 z-20 grid place-items-center bg-background/90 p-6 text-center">
               <div className="max-w-xs space-y-2">
@@ -486,7 +593,7 @@ export default function App() {
           )}
           {frameSrc && !deleted && (
             <img src={frameSrc} alt="SudokuPad"
-              className={`h-full w-full object-contain ${ready ? "opacity-100" : "opacity-0"}`}
+              className={`h-full w-full object-contain transition-[filter] dark:brightness-[0.88] dark:contrast-[1.03] ${ready ? "opacity-100" : "opacity-0"}`}
               onLoad={() => setReady(true)} />
           )}
           {overlay && ready && frameStep === idx && !deleted && (
@@ -512,7 +619,7 @@ export default function App() {
               })}
             </svg>
           )}
-          <span className="pointer-events-none absolute right-2 top-2 rounded-md border border-slate-200 bg-white/90 px-2 py-0.5 text-[10.5px] text-slate-500 shadow-sm">{t("board.liveFrame", { i: idx + 1, n: steps.length })}</span>
+          <span className="pointer-events-none absolute right-2 top-2 rounded-md border border-slate-200 bg-white/90 px-2 py-0.5 text-[10.5px] text-slate-500 shadow-sm dark:border-neutral-700 dark:bg-neutral-900/80 dark:text-neutral-300">{t("board.liveFrame", { i: idx + 1, n: steps.length })}</span>
         </div>
       </CardContent>
       <div className="flex items-center gap-2 border-t px-4 py-3">
@@ -557,12 +664,7 @@ export default function App() {
               <div className="space-y-3">
                 <div className="flex items-center gap-2"><h2 className="text-sm font-semibold">{stepTitle(current)}</h2><Badge variant="outline">{t("step.tier", { tier: current.tier })}</Badge></div>
                 <p className="text-[11px] text-muted-foreground">{t("step.of", { i: idx + 1, n: steps.length })}</p>
-                <p className="whitespace-pre-wrap text-[13px] leading-7 text-foreground/90">{lang === "en" ? englishSummary(current) : current.detail}</p>
-                {current.candidates?.length ? (
-                  <div className="rounded-md bg-muted px-3 py-2 font-mono text-[11px] leading-6">
-                    {current.candidates.map((c) => `R${Math.floor(c.cell / n) + 1}C${(c.cell % n) + 1} {${c.digits.join(",")}}`).join("  ")}
-                  </div>
-                ) : null}
+                <StepNarrative step={current} lang={lang} n={n} t={t} />
                 {current.audit === "ok" && <div className="rounded-md bg-emerald-50 px-2 py-1 text-[11px] text-emerald-700 dark:bg-emerald-950 dark:text-emerald-200">✓ {t("step.audited")}</div>}
                 {current.audit === "bad" && <div className="rounded-md bg-rose-50 px-2 py-1 text-[11px] text-rose-700 dark:bg-rose-950 dark:text-rose-200">✗ {t("step.auditBad")}</div>}
                 <div className="flex gap-2 pt-1">
