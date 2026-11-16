@@ -158,6 +158,8 @@ class Handler(BaseHTTPRequestHandler):
             file = DIST_DIR / "index.html"
         elif path.startswith("/assets/") and DIST_DIR.exists():
             file = DIST_DIR / path.lstrip("/")
+        elif path in ("/favicon.svg", "/favicon.ico") and (DIST_DIR / path.lstrip("/")).exists():
+            file = DIST_DIR / path.lstrip("/")
         elif path.startswith("/mockups/") and DIST_DIR.exists():
             file = DIST_DIR / path.lstrip("/")
             if file.is_dir():

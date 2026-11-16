@@ -19,6 +19,8 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "./components/ui/dropdown-menu";
 import { detectLang, translate } from "./i18n";
+import logoLight from "./assets/logo-light.svg";
+import logoDark from "./assets/logo-dark.svg";
 
 const TECH_EN = {
   cage: "Killer cage", hidden_single: "Hidden single", naked_single: "Naked single",
@@ -815,7 +817,7 @@ export default function App() {
       <header className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur">
         <div className="mx-auto flex min-h-14 max-w-[1440px] flex-wrap items-center gap-2 px-4 py-2 lg:flex-nowrap lg:gap-3 lg:px-6 lg:py-0">
           <div className="flex items-center gap-2.5">
-            <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-sm text-primary-foreground">◈</div>
+            <img src={dark ? logoDark : logoLight} alt="YSudoku" className="h-8 w-8 rounded-lg" />
             <div><div className="text-sm font-semibold leading-tight tracking-tight">YSudoku</div><div className="hidden text-[10.5px] text-muted-foreground sm:block">{t("brand.sub")}</div></div>
           </div>
           <nav className="flex h-14 items-stretch gap-3 sm:gap-4">

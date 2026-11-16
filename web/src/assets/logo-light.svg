@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="YSudoku">
+  <rect width="32" height="32" rx="8" fill="#18181b"/>
+  <g stroke="#ffffff" stroke-opacity=".16" stroke-width=".7">
+    <path d="M10.67 4v24M21.33 4v24M4 10.67h24M4 21.33h24"/>
+  </g>
+  <path d="M8.75 9.5 16 16.75 23.25 9.5" fill="none" stroke="#fafafa" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M16 16.75V24" fill="none" stroke="#fafafa" stroke-width="2.6" stroke-linecap="round"/>
+  <circle cx="16" cy="25.1" r="1.55" fill="#fafafa"/>
+</svg>
