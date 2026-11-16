@@ -181,6 +181,8 @@ class Handler(BaseHTTPRequestHandler):
                 elif path in ("/api/store/refresh_rules", "/api/store/resolve"):
                     target = str(body.get("target") or "")
                     demo = bool(body.get("demo"))
+                    if demo and not target:
+                        target = str(STATIC_DIR.parent.parent / "fixtures" / "demo-globosite.json")
                     key, payload = _stored_analysis(
                         target, body, demo=demo,
                         force_rules=(path == "/api/store/refresh_rules"),
