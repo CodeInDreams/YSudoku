@@ -53,6 +53,8 @@ def main(argv=None) -> int:
     parser.add_argument("--save-rules", action="store_true", help="把编译出的规则写入 rules/ 共享目录")
     parser.add_argument("--allow-chains", action="store_true", help="允许反证（试探）作为最后手段，步骤会标注 T4")
     parser.add_argument("--browser", action="store_true", help="解出后用 Playwright 在真实 SudokuPad 里自动填入（需 tools/ 依赖）")
+    parser.add_argument("--no-global", action="store_true", help="禁用 CP-SAT 全局盘外线索求解")
+    parser.add_argument("--global-timeout", type=float, default=60.0, help="CP-SAT 全局求解超时（秒）")
     args = parser.parse_args(argv)
 
     if args.web or not args.target:
@@ -67,6 +69,8 @@ def main(argv=None) -> int:
         use_cache=not args.no_cache,
         save_rules=args.save_rules,
         allow_chains=args.allow_chains,
+        use_global=not args.no_global,
+        global_time_limit=args.global_timeout,
     )
     if args.json:
         print(json.dumps(analysis.to_json(), ensure_ascii=False, indent=1))

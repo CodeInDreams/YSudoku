@@ -126,7 +126,7 @@
     buildStepList();
     resetView();
     resetBoard();
-    if (data.status === "solved-search" && data.final) {
+    if ((data.status === "solved-search" || data.status === "solved-global") && data.final) {
       S.vals = data.final.slice();
       S.dom = S.vals.map((v, i) => (v ? 1 << (v - 1) : S.data.initial[i]));
       render();
@@ -776,6 +776,9 @@
     if (d.status === "solved-search") {
       node.classList.add("ok");
       node.textContent = `混沌构造：搜索求解完成` + (d.message ? ` · ${d.message}` : "");
+    } else if (d.status === "solved-global") {
+      node.classList.add("ok");
+      node.textContent = `全局线索：CP-SAT 求解完成` + (d.message ? ` · ${d.message}` : "");
     } else if (d.status === "solved") {
       node.classList.add("ok");
       node.textContent = `已解出 · ${d.steps.length} 步` + (d.solution_check ? ` · ${d.solution_check}` : "");

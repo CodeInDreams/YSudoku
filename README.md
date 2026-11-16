@@ -102,6 +102,22 @@ export SUDOKU_LLM_MODEL=qwen2.5:7b
 
 Without a key the web UI greys out **LLM rules** and shows "no key · local heuristics".
 
+### Global outside clues (optional)
+
+Some puzzles put *global* clues outside the grid: Full Rank (the rank of a line among all 36
+directional numbers), X-Sums, or even "every clue value appears twice, once as each type".
+Cell-by-cell propagation cannot handle those. Install the optional CP-SAT solver:
+
+```bash
+pip install "ysudoku[global-clues]"     # or simply: pip install ortools
+```
+
+YSudoku encodes the grid, all 36 directional line numbers, the rank comparisons, the prefix sums
+and the unknown type pairing into CP-SAT. *Double Take* by Flinty & palpot (`439w9opvs4`) solves in
+about 5 seconds and recovers the 12-clue type assignment; the result is checked against the
+official solution. Without OR-Tools such puzzles are reported as unsupported (with a hint), never
+silently stalled.
+
 ### Rule cache
 
 Compiled specs are cached by a fingerprint of *puzzle id + rules text + element inventory*:
@@ -138,7 +154,8 @@ For the boundaries of LLM-authored rules, the typed DSL and its trust guardrails
 | Dots / clues | Kropki (consecutive / 1:2), XV, quadruple circles (`?` supported) |
 | Global | Diagonal, anti-knight, anti-king, jigsaw regions, 6×6, modular 2×2, entropy 2×2 |
 | Chaos | Cages, quadruples, **region-count rules** (trisection / unbalanced circles) with exact count GAC + connectivity reachability |
-| Other | Odd/even, clone, sandwich, skyscraper, region-sum line, outside clues (underlays/overlays) |
+| Other | Odd/even, clone, sandwich, skyscraper, region-sum line |
+| Outside clues | Sandwich / skyscraper / X-Sums; Full Rank + unknown type pairing via optional CP-SAT |
 | L2 custom | Typed predicates (`sum` / `count` / `ordered` / `all_different` / …), composed by the LLM, marked as *hypothesis* |
 
 Technique tiers: T1 constraint-local → T2 naked/hidden singles, locked candidates, subsets, 45 rule →
@@ -189,7 +206,8 @@ docs/            rule DSL and trust design
 - **Chaos construction** is a search solver, not step-by-step human reasoning. Region-count rules
   now use exact GAC and connectivity reachability, but *Tringle and Cross* still times out at ~0.9M nodes.
   Vision/region-border rules are not supported.
-- **Full Rank / mixed outside-clue types**: X-Sums and sandwich/skyscraper clues are supported, but Full Rank and unknown type pairing are not; such puzzles are reported as unsupported instead of stalling.
+- **Full Rank / mixed outside-clue types** require the optional OR-Tools dependency; without it
+  they are reported as unsupported (Double Take is the regression case).
 - **Fog puzzles / puzzles with a scratch table** are unsupported (the grid payload itself is incomplete).
 - Author-specific drawing conventions depend on LLM compilation; without a key, heuristics may misread them.
 - Hard puzzles can still stall. The solver reports *stuck* instead of silently brute-forcing.

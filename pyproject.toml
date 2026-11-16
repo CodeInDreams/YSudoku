@@ -22,6 +22,9 @@ Homepage = "https://github.com/CodeInDreams/ysudoku"
 Repository = "https://github.com/CodeInDreams/ysudoku"
 Issues = "https://github.com/CodeInDreams/ysudoku/issues"
 
+[project.optional-dependencies]
+global-clues = ["ortools>=9.10"]
+
 [project.scripts]
 ysudoku = "ysudoku.cli:main"
 

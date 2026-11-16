@@ -27,6 +27,7 @@ class Analysis:
     status: str = "solved"
     message: str = ""
     chaos_regions: list = field(default_factory=list)
+    clue_types: list = field(default_factory=list)
     demo: bool = False
     provenance: str = ""
     source_url: str = ""
@@ -60,6 +61,7 @@ class Analysis:
             "provenance": self.provenance,
             "source_url": self.source_url,
             "constraints": [c.to_dict() for c in self.rules.constraints],
+            "clue_types": self.clue_types,
             "steps": [step.to_dict(n) for step in self.result.steps],
             "status": self.status,
             "message": self.message,
@@ -67,6 +69,62 @@ class Analysis:
             "solution_check": self.solution_check,
             "audit": self.audit,
         }
+
+
+def _try_global(puzzle, rules, solver, source, warnings, time_limit, target, demo):
+    from . import global_clues
+    if not global_clues.available():
+        warnings.append("检测到盘外全局线索；安装可选依赖 ortools 后可启用 CP-SAT 全局求解")
+        return None
+    try:
+        result = global_clues.solve(puzzle, time_limit=time_limit)
+    except Exception as exc:  # noqa: BLE001 - optional solver
+        warnings.append(f"全局线索求解失败：{exc}")
+        return None
+    if not result or result.get("status") != "solved":
+        status = result.get("status") if result else "no result"
+        warnings.append(f"全局线索求解未完成（{status}）")
+        return None
+    grid = result["grid"]
+    values = [v for row in grid for v in row]
+    types = result.get("types") or []
+    errors = check_solution(puzzle, rules, values)
+    errors += global_clues.verify(puzzle, values, types)
+    if errors:
+        warnings.append("全局解校验失败：" + "；".join(errors[:3]))
+        return None
+    diff = compare_with_solution(puzzle, values)
+    clean = [
+        w for w in warnings
+        if "Full Rank 约束暂未实现" not in w
+        and "未被任何规则使用" not in w
+        and "暂不自动映射" not in w
+    ]
+    rank_count = types.count("R")
+    return Analysis(
+        puzzle=puzzle,
+        spec={"rules": [], "globals": [], "notes": "cp-sat"},
+        rules=rules,
+        result=SolveResult("solved", [], values),
+        initial=solver.initial,
+        source=source,
+        warnings=clean + [
+            f"CP-SAT 全局求解：{rank_count} 条 Full Rank / {len(types) - rank_count} 条 X-Sums",
+        ],
+        status="solved-global",
+        message="全局盘外线索由 CP-SAT 求解（Full Rank / X-Sums / 类型配对）",
+        clue_types=types,
+        solution_check=diff or "全局线索自检通过",
+        demo=demo,
+        provenance=(
+            f"真实题示例：{puzzle.title} — {puzzle.author}"
+            if demo and puzzle.source_url
+            else "内置生成示例（程序生成，非已发表题目）"
+            if demo
+            else str(target)
+        ),
+        source_url=puzzle.source_url or (str(target) if str(target).startswith("http") else ""),
+    )
 
 
 def _puzzle_id(target: str) -> str:
@@ -89,6 +147,8 @@ def analyze(
     allow_chains: bool = False,
     chaos_time_limit: float = 8.0,
     demo: bool = False,
+    use_global: bool = True,
+    global_time_limit: float = 60.0,
 ) -> Analysis:
     from .sudokupad import load
 
@@ -149,6 +209,11 @@ def analyze(
     }
     mapped_clues = clue_ids & used_ids
     if clue_ids and not mapped_clues:
+        if use_global:
+            attempted = _try_global(puzzle, rules, solver, source, warnings,
+                                    global_time_limit, target, demo)
+            if attempted is not None:
+                return attempted
         return Analysis(
             puzzle=puzzle, spec=spec, rules=rules,
             result=SolveResult("unsupported", [], []),
@@ -204,6 +269,12 @@ def analyze(
         )
 
     result = solver.run(max_steps=max_steps)
+
+    if result.status == "stuck" and puzzle.clues and use_global:
+        attempted = _try_global(puzzle, rules, solver, source, warnings,
+                                global_time_limit, target, demo)
+        if attempted is not None:
+            return attempted
 
     # If the trusted rules stall, ask the LLM to re-read the rule text and fix
     # the spec (never shown the solution, only the diagnostics).
