@@ -150,7 +150,7 @@ function SectionLabel({ children, extra, tone = "neutral" }) {
 function Digits({ digits, tone = "neutral" }) {
   const styles = {
     neutral: "border bg-background text-foreground",
-    danger: "border-rose-300 bg-rose-100 font-medium text-rose-700 line-through dark:border-rose-600 dark:bg-rose-500/20 dark:text-rose-100",
+    danger: "border-rose-300 bg-rose-100 font-medium text-rose-700 dark:border-rose-600 dark:bg-rose-500/20 dark:text-rose-100",
     success: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300",
   };
   return (
