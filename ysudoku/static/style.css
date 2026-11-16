@@ -298,3 +298,8 @@ input[type=range] { accent-color: var(--accent); }
   color: #33415c; backdrop-filter: blur(1px);
 }
 .board-controls .switch { display: none; }
+
+.live-overlay {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  pointer-events: none; overflow: visible;
+}

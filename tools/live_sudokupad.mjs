@@ -88,7 +88,7 @@ async function open(url) {
 
 async function shot() {
   const { box } = board;
-  const pad = Math.max(4, box.width * 0.006);
+  const pad = 0;  // exact board crop so the SVG overlay aligns
   latest = await page.screenshot({
     clip: {
       x: Math.max(0, box.x - pad),
@@ -107,19 +107,35 @@ function center(r, c) {
   return [box.x + (c + 0.5) * unit, box.y + (r + 0.5) * unit];
 }
 
-async function apply(places, reset) {
+async function apply(places, reset, corners) {
   if (!page || !puzzleUrl) throw new Error("no puzzle");
-  if (!reset && (!places || places.length === 0) && latest) return latest;
+  const hasWork = (places && places.length) || (corners && corners.length);
+  if (!reset && !hasWork && latest) return latest;
   if (reset) {
     await open(puzzleUrl);
   }
-  for (const [cell, digit] of places) {
+  for (const [cell, digit] of places || []) {
     const r = Math.floor(cell / board.n);
     const c = cell % board.n;
     const [x, y] = center(r, c);
     await page.mouse.click(x, y);
     await page.keyboard.type(String(digit));
     await page.waitForTimeout(35);
+  }
+  if (corners && corners.length) {
+    await page.click("#control-corner").catch(() => {});
+    for (const [cell, digits] of corners) {
+      const r = Math.floor(cell / board.n);
+      const c = cell % board.n;
+      const [x, y] = center(r, c);
+      await page.mouse.click(x, y);
+      await page.keyboard.press("Delete").catch(() => {});
+      for (const digit of digits || []) {
+        await page.keyboard.type(String(digit));
+        await page.waitForTimeout(18);
+      }
+    }
+    await page.click("#control-normal").catch(() => {});
   }
   await page.waitForTimeout(120);
   return shot();
@@ -162,7 +178,7 @@ const server = http.createServer((req, res) => {
         touch();
         busy = true;
         try {
-          await apply(body.places || [], Boolean(body.reset));
+          await apply(body.places || [], Boolean(body.reset), body.corners || []);
           return json(res, 200, { ok: true, bytes: latest.length });
         } finally {
           busy = false;

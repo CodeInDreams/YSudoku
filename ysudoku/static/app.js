@@ -95,24 +95,71 @@
     return out;
   }
 
-  async function refreshFrame() {
-    try {
-      const res = await fetch(`/api/live/frame?t=${Date.now()}`, { cache: "no-store" });
-      if (!res.ok) return;
-      const blob = await res.blob();
-      const img = $("live-frame");
-      if (img.dataset.url) URL.revokeObjectURL(img.dataset.url);
-      const url = URL.createObjectURL(blob);
-      img.dataset.url = url;
-      img.src = url;
-    } catch (err) { /* keep the last frame */ }
+  function digitsOf(mask, n) {
+    const out = [];
+    for (let v = 1; v <= n; v++) if (mask & (1 << (v - 1))) out.push(v);
+    return out;
+  }
+
+  function valuesUpTo(idx) {
+    const vals = (S.data.puzzle.givens || []).slice();
+    if (!S.data || idx < 0) return vals;
+    for (let i = 0; i <= idx && i < S.data.steps.length; i++) {
+      for (const ev of S.data.steps[i].events || []) {
+        if (ev.kind === "place") vals[ev.cell] = ev.value;
+      }
+    }
+    return vals;
+  }
+
+  function cornersUpTo(idx) {
+    const map = new Map();
+    if (!S.data || idx < 0) return map;
+    const dom = S.data.initial.slice();
+    for (let i = 0; i <= idx && i < S.data.steps.length; i++) {
+      for (const ev of S.data.steps[i].events || []) {
+        if (ev.kind === "elim") {
+          dom[ev.cell] &= ~(1 << (ev.value - 1));
+        } else if (ev.kind === "place") {
+          dom[ev.cell] = 1 << (ev.value - 1);
+        } else {
+          continue;
+        }
+        const digits = digitsOf(dom[ev.cell], S.n);
+        if (ev.kind !== "place" && digits.length > 1) map.set(ev.cell, digits);
+        else map.delete(ev.cell);
+      }
+    }
+    return map;
+  }
+
+  async function liveFrameBlob() {
+    const res = await fetch(`/api/live/frame?t=${Date.now()}`, { cache: "no-store" });
+    if (!res.ok) throw new Error("截图读取失败");
+    return res.blob();
+  }
+
+  function displayLiveFrame(blob) {
+    const img = $("live-frame");
+    if (img.dataset.url) URL.revokeObjectURL(img.dataset.url);
+    const url = URL.createObjectURL(blob);
+    img.dataset.url = url;
+    img.src = url;
+  }
+
+  function displayCachedFrame(idx) {
+    const blob = S.live && S.live.cache && S.live.cache.get(idx);
+    if (blob) displayLiveFrame(blob);
   }
 
   async function startLive(url) {
     const loading = $("live-loading");
     $("live-view").classList.remove("hidden");
     loading.classList.remove("hidden");
-    S.live = { ready: false, step: -1, applied: 0, busy: false, pending: null, timer: null, url };
+    S.live = {
+      ready: false, step: -1, applied: 0, busy: false, queue: [],
+      cache: new Map(), corners: new Map(), url: url || "",
+    };
     if (!url) {
       loading.classList.add("hidden");
       $("live-badge").textContent = "没有 SudokuPad 链接";
@@ -126,60 +173,150 @@
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || "启动失败");
       S.live.ready = true;
-      await refreshFrame();
+      const blob = await liveFrameBlob();
+      S.live.cache.set(-1, blob);
+      displayLiveFrame(blob);
       loading.classList.add("hidden");
-      seekLive(S.idx);
+      prefetchLive(S.idx);
     } catch (err) {
       loading.classList.add("hidden");
       $("live-badge").textContent = `SudokuPad 镜像启动失败：${err.message || err}`;
     }
   }
 
-  function scheduleLive(idx) {
-    if (!S.live || !S.live.ready) return;
-    S.live.pending = idx;
-    clearTimeout(S.live.timer);
-    S.live.timer = setTimeout(() => {
-      const target = S.live.pending;
-      S.live.pending = null;
-      seekLive(target);
-    }, 110);
+  function prefetchLive(idx) {
+    if (!S.live || !S.live.ready || !S.data) return;
+    const total = S.data.steps.length;
+    for (let i = Math.max(-1, idx); i <= idx + 2 && i < total; i++) {
+      if (i < 0) continue;
+      if (S.live.cache.has(i)) {
+        if (i === S.idx) displayCachedFrame(i);
+        continue;
+      }
+      if (!S.live.queue.includes(i)) S.live.queue.push(i);
+    }
+    pumpLive();
   }
 
-  async function seekLive(idx, forceReset = false) {
-    if (!S.live || !S.live.ready || S.live.busy) {
-      if (S.live) S.live.pending = idx;
-      return;
-    }
-    const places = placementsUpTo(idx);
-    const reset = forceReset || idx < S.live.step || places.length < S.live.applied;
-    const send = reset ? places : places.slice(S.live.applied);
-    if (!reset && !send.length && idx === S.live.step) return;
-    S.live.busy = true;
-    $("live-loading").classList.remove("hidden");
+  async function pumpLive() {
+    const live = S.live;
+    if (!live || !live.ready || live.busy || !live.queue.length) return;
+    live.busy = true;
+    const idx = live.queue.shift();
     try {
-      const res = await fetch("/api/live/place", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ places: send, reset }),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (res.status === 410) {
-        await startLive(S.live.url);
-        return;
+      if (!live.cache.has(idx)) {
+        const places = placementsUpTo(idx);
+        const reset = idx < live.step || places.length < live.applied;
+        const send = reset ? places : places.slice(live.applied);
+        const cornerSend = [];
+        const res = await fetch("/api/live/place", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ places: send, corners: cornerSend, reset }),
+        });
+        if (res.status === 410) {
+          await startLive(live.url);
+          return;
+        }
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.error || "操作失败");
+        live.step = idx;
+        live.applied = places.length;
+        live.cache.set(idx, await liveFrameBlob());
       }
-      if (!res.ok) throw new Error(body.error || "操作失败");
-      S.live.step = idx;
-      S.live.applied = places.length;
-      await refreshFrame();
+      if (idx === S.idx) displayCachedFrame(idx);
     } catch (err) {
       $("live-badge").textContent = `SudokuPad 操作失败：${err.message || err}`;
     } finally {
-      S.live.busy = false;
-      $("live-loading").classList.add("hidden");
-      if (S.live.pending !== null) {
-        const next = S.live.pending;
-        S.live.pending = null;
-        scheduleLive(next);
+      live.busy = false;
+      if (live.queue.length) pumpLive();
+    }
+  }
+
+  const LIVE_COLORS = ["#58a6ff", "#ffb454", "#38d39f", "#ff5c7a", "#7c5cff", "#2dd4bf"];
+
+  function renderLiveOverlay(step) {
+    const svg = $("live-overlay");
+    if (!svg) return;
+    const n = S.n || 9;
+    svg.setAttribute("viewBox", `0 0 ${n} ${n}`);
+    svg.innerHTML = "";
+    if (!step || !step.visual) return;
+    const add = (name, attrs, text) => {
+      const node = document.createElementNS(SVG_NS, name);
+      for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+      if (text !== undefined) node.textContent = text;
+      svg.appendChild(node);
+      return node;
+    };
+    const rcOf = (cell) => [Math.floor(cell / n), cell % n];
+    const cellRect = (cell, attrs) => {
+      const [r, c] = rcOf(cell);
+      return add("rect", { x: c + 0.03, y: r + 0.03, width: 0.94, height: 0.94, rx: 0.06, ...attrs });
+    };
+
+    (step.visual.groups || []).forEach((group, i) => {
+      if (!group.cells || !group.cells.length) return;
+      const color = LIVE_COLORS[i % LIVE_COLORS.length];
+      const rows = group.cells.map((cell) => rcOf(cell)[0]);
+      const cols = group.cells.map((cell) => rcOf(cell)[1]);
+      add("rect", {
+        x: Math.min(...cols) + 0.02, y: Math.min(...rows) + 0.02,
+        width: Math.max(...cols) - Math.min(...cols) + 0.96,
+        height: Math.max(...rows) - Math.min(...rows) + 0.96,
+        rx: 0.08, fill: color, "fill-opacity": 0.14,
+        stroke: color, "stroke-opacity": 0.65, "stroke-width": 0.05,
+      });
+    });
+
+    for (const cell of step.visual.focus || []) {
+      cellRect(cell, { fill: "rgba(255,210,138,.18)", stroke: "#ffb454",
+                       "stroke-opacity": .9, "stroke-width": .05 });
+    }
+    for (const cell of step.visual.premise || []) {
+      cellRect(cell, { fill: "none", stroke: "#7c5cff", "stroke-dasharray": ".12 .1",
+                       "stroke-width": .04 });
+    }
+
+    for (const link of step.visual.links || []) {
+      const points = (link.points || []).map(([y, x]) => `${x},${y}`).join(" ");
+      add("polyline", {
+        points, fill: "none", stroke: link.color || "#58a6ff",
+        "stroke-width": link.kind === "dot" ? .06 : .09,
+        "stroke-dasharray": link.dashed ? ".16 .12" : "",
+        "stroke-opacity": .95, "stroke-linecap": "round",
+      });
+    }
+
+    for (const chip of step.visual.chips || []) {
+      const [r, c] = rcOf(chip.cell);
+      add("text", {
+        x: c + 0.5, y: r + 0.56, "text-anchor": "middle",
+        "font-size": "0.28", "font-family": "ui-monospace, monospace",
+        fill: chip.color || "#ffb454", "font-weight": "700",
+      }, chip.text);
+    }
+
+    const touched = new Map();
+    for (const ev of step.events || []) {
+      if (ev.kind !== "elim" && ev.kind !== "place") continue;
+      if (!touched.has(ev.cell)) touched.set(ev.cell, (step.pre_dom && step.pre_dom[ev.cell]) || 0);
+      let mask = touched.get(ev.cell);
+      if (ev.kind === "elim") mask &= ~(1 << (ev.value - 1));
+      else mask = 1 << (ev.value - 1);
+      touched.set(ev.cell, mask);
+    }
+    for (const [cell, mask] of touched) {
+      const [r, c] = rcOf(cell);
+      const digits = digitsOf(mask, n);
+      if (digits.length > 1) {
+        digits.forEach((v) => {
+          add("text", {
+            x: c + 0.18 + ((v - 1) % 3) * 0.27,
+            y: r + 0.22 + Math.floor((v - 1) / 3) * 0.23,
+            "font-size": "0.12", fill: "#33415c",
+            "font-family": "ui-monospace, monospace",
+          }, String(v));
+        });
       }
     }
   }
@@ -800,7 +937,8 @@
       if (i >= 0) renderPanel(steps[i]);
       updateControls();
       renderOverlay();
-      scheduleLive(S.idx);
+      prefetchLive(S.idx);
+      renderLiveOverlay(i >= 0 ? steps[i] : null);
       return;
     }
     if (!animate) {
@@ -809,7 +947,8 @@
       if (i >= 0) renderPanel(steps[i]);
       updateControls();
       renderOverlay();
-      scheduleLive(S.idx);
+      prefetchLive(S.idx);
+      renderLiveOverlay(i >= 0 ? steps[i] : null);
       return;
     }
     const step = steps[i];
@@ -824,7 +963,8 @@
     updateControls();
     renderPanel(step);
     renderOverlay();
-    scheduleLive(S.idx);
+    renderLiveOverlay(step);
+    prefetchLive(S.idx);
   }
 
   function renderPanel(step) {

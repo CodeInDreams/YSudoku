@@ -121,8 +121,15 @@ YSUDOKU_LIVE_IDLE_SECONDS=600   # default; 0 disables recycling
 YSUDOKU_LIVE_MIN_IDLE=0         # default; keep 0 to release the browser completely
 ```
 
-A recycled session returns 410 and the UI restarts it automatically. Pencil marks, colours and
-lines are the next stage (P2); the old reasoning board is hidden.
+A recycled session returns 410 and the UI restarts it automatically.
+
+Frames are cached per step and the next two steps are prefetched in the background, so pressing
+"next" reuses an existing screenshot instead of waiting for SudokuPad again.
+
+The explanation layer (P2/P3/P4) is drawn as a transparent SVG overlay on top of the screenshot:
+focus cells, unit/group boxes, candidate digits after an elimination, link lines, chips and
+coloured groups. This keeps the mirror read-only and works for any grid size; SudokuPad's native
+colour/line palette is not scripted.
 
 ### Rule sheet for vision models
 

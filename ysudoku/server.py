@@ -97,7 +97,8 @@ class Handler(BaseHTTPRequestHandler):
                 if urlparse(self.path).path == "/api/live/start":
                     result = live.start(str(body.get("url") or ""))
                 else:
-                    result = live.place(body.get("places") or [], bool(body.get("reset")))
+                    result = live.place(body.get("places") or [], bool(body.get("reset")),
+                                        body.get("corners") or [])
                 self._send(200, json.dumps(result).encode(), "application/json")
             except live.LiveGone as exc:
                 self._send(410, json.dumps({"error": str(exc), "restart": True},

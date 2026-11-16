@@ -100,9 +100,11 @@ def start(url: str) -> dict:
     return json.loads(_request("/start", {"url": url}, timeout=120))
 
 
-def place(places: list[list[int]], reset: bool) -> dict:
+def place(places: list[list[int]], reset: bool, corners: list | None = None) -> dict:
     ensure()
-    return json.loads(_request("/place", {"places": places, "reset": reset}, timeout=120))
+    return json.loads(_request("/place", {
+        "places": places, "reset": reset, "corners": corners or [],
+    }, timeout=120))
 
 
 def frame() -> bytes:
