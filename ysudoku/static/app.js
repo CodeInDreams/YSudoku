@@ -269,6 +269,7 @@
     $("live-view").classList.remove("hidden");
     loading.classList.remove("hidden");
     S.live = { session: null, url: url || "" };
+    $("live-overlay").innerHTML = "";
     $("live-view").classList.remove("live-ready");
     $("live-frame").classList.remove("ready");
     if (!url) {
@@ -446,9 +447,6 @@
     setLoading(false);
     startLive(data.source_url || "");
     refreshHistory();
-    if (data.steps.length) {
-      setTimeout(() => showStep(0, true), 350);
-    }
   }
 
   function resetView() {
