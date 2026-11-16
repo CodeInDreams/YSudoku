@@ -721,7 +721,7 @@ export default function App() {
         </Button>
         <Button variant="outline" size="icon" className="h-8 w-8" onClick={nextStep} disabled={idx >= steps.length - 1 || deleted}><ChevronRight className="h-4 w-4" /></Button>
         <span className="ml-2 hidden text-xs text-muted-foreground sm:inline">{t("player.speed")}</span>
-        <Slider value={[speed]} min={200} max={2400} step={100} onValueChange={([value]) => setSpeed(value)} className="w-28" />
+        <Slider value={[2600 - speed]} min={200} max={2400} step={100} onValueChange={([value]) => setSpeed(2600 - value)} className="w-28" />
         <span className="ml-auto font-mono text-[11px] text-muted-foreground">{t("player.step", { i: idx + 1, n: steps.length })}</span>
       </div>
       <div className="border-t px-4 py-3">
