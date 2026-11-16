@@ -84,29 +84,30 @@ async function open(url) {
   const parts = (viewBox || "-16 -16 608 608").trim().split(/\s+/).map(Number);
   const units = parts[2] || 608;
   const n = Math.max(1, Math.round((units - 32) / 64));
-  board = { box, n };
+  const pad = 16 / units;
+  const grid = {
+    x: box.x + box.width * pad,
+    y: box.y + box.height * pad,
+    width: box.width * (1 - 2 * pad),
+    height: box.height * (1 - 2 * pad),
+  };
+  board = { box, grid, n };
   puzzleUrl = url;
 }
 
 async function shot() {
-  const { box } = board;
-  const pad = 0;  // exact board crop so the SVG overlay aligns
+  const { grid } = board;
   latest = await page.screenshot({
-    clip: {
-      x: Math.max(0, box.x - pad),
-      y: Math.max(0, box.y - pad),
-      width: Math.min(1200 - box.x, box.width + pad * 2),
-      height: Math.min(1000 - box.y, box.height + pad * 2),
-    },
+    clip: { x: grid.x, y: grid.y, width: grid.width, height: grid.height },
     type: "png",
   });
   return latest;
 }
 
 function center(r, c) {
-  const { box, n } = board;
-  const unit = (box.width) / n;
-  return [box.x + (c + 0.5) * unit, box.y + (r + 0.5) * unit];
+  const { grid, n } = board;
+  const unit = grid.width / n;
+  return [grid.x + (c + 0.5) * unit, grid.y + (r + 0.5) * unit];
 }
 
 async function readBoard() {
