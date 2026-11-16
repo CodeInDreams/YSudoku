@@ -170,7 +170,7 @@ class Handler(BaseHTTPRequestHandler):
             "/api/solve", "/api/demo", "/api/live/start", "/api/live/place",
             "/api/live/build", "/api/history/clear",
             "/api/store/settings", "/api/store/delete", "/api/store/favorite",
-            "/api/store/refresh_rules", "/api/store/resolve", "/api/store/rerender",
+            "/api/store/refresh_rules",
         ):
             self._send(404, b'{"error":"not found"}', "application/json")
             return
@@ -187,19 +187,13 @@ class Handler(BaseHTTPRequestHandler):
                 elif path == "/api/store/favorite":
                     store.set_favorite(str(body.get("key") or ""), bool(body.get("favorite")))
                     result = {"ok": True}
-                elif path == "/api/store/rerender":
-                    key = str(body.get("key") or "")
-                    store.delete_layer(key, "frames")
-                    result = {"ok": True, "key": key}
-                elif path in ("/api/store/refresh_rules", "/api/store/resolve"):
+                elif path == "/api/store/refresh_rules":
                     target = str(body.get("target") or "")
                     demo = bool(body.get("demo"))
                     if demo and not target:
                         target = str(STATIC_DIR.parent.parent / "fixtures" / "demo-globosite.json")
                     key, payload = _stored_analysis(
-                        target, body, demo=demo,
-                        force_rules=(path == "/api/store/refresh_rules"),
-                        force_steps=(path == "/api/store/resolve"),
+                        target, body, demo=demo, force_rules=True,
                     )
                     result = payload
                 else:

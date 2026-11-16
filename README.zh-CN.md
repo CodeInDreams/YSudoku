@@ -98,8 +98,12 @@ export SUDOKU_LLM_MODEL=qwen2.5:7b
 
 ### Web 前端（shadcn/ui）
 
-`web/` 是 Vite + React + Tailwind + shadcn 风格的前端。Python 服务端优先托管
-`web/dist`，没有构建产物时回退到旧静态界面。
+`web/` 是 Vite + React + Tailwind + shadcn 风格的前端，采用顶部导航的聚焦布局，
+支持浅色/深色与中英文（默认跟随浏览器语言，可在顶栏手动切换）。Python 服务端
+优先托管 `web/dist`，没有构建产物时回退到旧静态界面。
+
+规则、步骤和截图按需生成：打开谜题时只补缺失的层，刷新规则是唯一强制重新编译
+的入口；不再提供手动的“重新解题 / 重新渲染”按钮。
 
 ```bash
 cd web

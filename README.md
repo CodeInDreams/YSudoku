@@ -105,9 +105,16 @@ Without a key the web UI greys out **LLM rules** and shows "no key · local heur
 
 ### Web client (shadcn/ui)
 
-The UI in `web/` is a Vite + React + Tailwind + shadcn-style client. The Python
+The UI in `web/` is a Vite + React + Tailwind + shadcn-style client using the
+focused top-navigation layout, light/dark neutral themes and Chinese/English
+copy (browser language by default, manual switch in the header). The Python
 server serves `web/dist` when it exists and falls back to the legacy static UI
 otherwise.
+
+Cached rules, steps and frames are generated on demand. Opening a puzzle
+regenerates only the missing layers; refreshing rules is the only forced
+compilation entry. Manual re-solve / re-render controls are intentionally
+absent.
 
 ```bash
 cd web

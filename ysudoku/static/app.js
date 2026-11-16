@@ -1331,15 +1331,6 @@
     init(data);
   }
   $("refresh-rules").addEventListener("click", () => refreshLayer("/api/store/refresh_rules"));
-  $("resolve-again").addEventListener("click", () => refreshLayer("/api/store/resolve"));
-  $("rerender").addEventListener("click", async () => {
-    if (!S.key) return;
-    await fetch("/api/store/rerender", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key: S.key }),
-    });
-    startLive(S.data.source_url || "");
-  });
   $("calib-toggle").addEventListener("click", () => {
     $("calib-panel").classList.toggle("hidden");
     $("cal-x").value = cal.x;
