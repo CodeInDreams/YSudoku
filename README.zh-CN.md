@@ -96,6 +96,24 @@ export SUDOKU_LLM_MODEL=qwen2.5:7b
 
 没有 key 时网页会把「LLM 规则」置灰，并显示“未配置 key · 本地启发式”。
 
+### SudokuPad 只读镜像
+
+主视图现在是 **SudokuPad 的只读截图**，不再用自绘棋盘：服务端 Playwright 打开题目，把截图
+裁剪到谜题区域（支持非 9×9），网页只显示图片，不能点击。步骤播放会直接点击 SudokuPad 的格子
+并输入数字，看到的就是 SudokuPad 自己的数字、笼子虚线和渲染效果。
+
+依赖 Node.js + Playwright/Chromium（`tools/` 下 `npm i playwright`，或沿用
+`tools/sudokupad_bridge.mjs` 的路径）。没有依赖时徽标会提示镜像启动失败。
+
+浏览器按单会话池化，默认空闲 10 分钟回收：
+
+```bash
+YSUDOKU_LIVE_IDLE_SECONDS=600   # 默认；0 表示不回收
+YSUDOKU_LIVE_MIN_IDLE=0         # 默认 0，空闲后完全释放浏览器
+```
+
+回收后接口返回 410，前端会自动重启会话。小数字、颜色、画线是下一阶段（P2）；原推理棋盘已隐藏。
+
 ### 规则图（视觉）
 
 规则编译器会把一张**规则图**一起发给模型：棋盘坐标、每个图形元素的编号、盘外线索，以及

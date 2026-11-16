@@ -8,7 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-from . import history
+from . import history, live
 from .pipeline import analyze
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -38,6 +38,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = urlparse(self.path).path
+        if path == "/api/live/health":
+            self._send(200, json.dumps({"ok": live._healthy()}).encode(), "application/json")
+            return
+        if path == "/api/live/frame":
+            try:
+                self._send(200, live.frame(), "image/png")
+            except live.LiveError as exc:
+                self._send(503, json.dumps({"error": str(exc)}, ensure_ascii=False).encode(),
+                           "application/json")
+            return
         if path.startswith("/api/rulesheet/"):
             name = Path(path.split("/")[-1]).name
             file = Path(".cache") / "rulesheets" / name
@@ -74,10 +84,28 @@ class Handler(BaseHTTPRequestHandler):
         self._send(200, file.read_bytes(), _CONTENT_TYPES.get(file.suffix, "application/octet-stream"))
 
     def do_POST(self):
-        if urlparse(self.path).path not in ("/api/solve", "/api/demo"):
+        if urlparse(self.path).path not in (
+            "/api/solve", "/api/demo", "/api/live/start", "/api/live/place",
+            "/api/history/clear",
+        ):
             self._send(404, b'{"error":"not found"}', "application/json")
             return
         length = int(self.headers.get("Content-Length") or 0)
+        if urlparse(self.path).path in ("/api/live/start", "/api/live/place"):
+            try:
+                body = json.loads(self.rfile.read(length) or b"{}")
+                if urlparse(self.path).path == "/api/live/start":
+                    result = live.start(str(body.get("url") or ""))
+                else:
+                    result = live.place(body.get("places") or [], bool(body.get("reset")))
+                self._send(200, json.dumps(result).encode(), "application/json")
+            except live.LiveGone as exc:
+                self._send(410, json.dumps({"error": str(exc), "restart": True},
+                                           ensure_ascii=False).encode(), "application/json")
+            except Exception as exc:  # noqa: BLE001
+                self._send(500, json.dumps({"error": str(exc)}, ensure_ascii=False).encode(),
+                           "application/json")
+            return
         if urlparse(self.path).path == "/api/history/clear":
             history.clear()
             self._send(200, b'{"ok":true}', "application/json")

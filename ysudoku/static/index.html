@@ -44,6 +44,11 @@
       <button type="button" id="tab-board" class="tab active">推理棋盘</button>
       <button type="button" id="tab-embed" class="tab" disabled title="加载题目后可用">SudokuPad 原题</button>
     </div>
+    <div id="live-view" class="live-view hidden">
+      <img id="live-frame" alt="SudokuPad 题目">
+      <div id="live-badge" class="live-badge">SudokuPad · 只读</div>
+      <div id="live-loading" class="loading hidden"><div class="spinner"></div><span>启动 SudokuPad…</span></div>
+    </div>
     <div class="board-wrap" id="board-view">
       <svg id="board" viewBox="0 0 9 9" aria-label="数独棋盘"></svg>
       <div id="loading" class="loading hidden"><div class="spinner"></div><span>解析中…</span></div>

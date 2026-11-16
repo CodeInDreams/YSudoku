@@ -6,6 +6,7 @@
   const S = {
     data: null, n: 9, dom: [], vals: [], regions: [], idx: -1,
     playing: false, timer: null, showCands: true, animating: false,
+    live: { ready: false, step: -1, applied: 0, busy: false, pending: null, timer: null, url: "" },
   };
 
   const TIER_LABEL = { 1: "T1 直接推理", 2: "T2 基础技巧", 3: "T3 进阶技巧" };
@@ -83,6 +84,106 @@
     $("go").disabled = on;
   }
 
+  function placementsUpTo(idx) {
+    const out = [];
+    if (!S.data || idx < 0) return out;
+    for (let i = 0; i <= idx && i < S.data.steps.length; i++) {
+      for (const ev of S.data.steps[i].events || []) {
+        if (ev.kind === "place") out.push([ev.cell, ev.value]);
+      }
+    }
+    return out;
+  }
+
+  async function refreshFrame() {
+    try {
+      const res = await fetch(`/api/live/frame?t=${Date.now()}`, { cache: "no-store" });
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const img = $("live-frame");
+      if (img.dataset.url) URL.revokeObjectURL(img.dataset.url);
+      const url = URL.createObjectURL(blob);
+      img.dataset.url = url;
+      img.src = url;
+    } catch (err) { /* keep the last frame */ }
+  }
+
+  async function startLive(url) {
+    const loading = $("live-loading");
+    $("live-view").classList.remove("hidden");
+    loading.classList.remove("hidden");
+    S.live = { ready: false, step: -1, applied: 0, busy: false, pending: null, timer: null, url };
+    if (!url) {
+      loading.classList.add("hidden");
+      $("live-badge").textContent = "没有 SudokuPad 链接";
+      return;
+    }
+    try {
+      const res = await fetch("/api/live/start", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || "启动失败");
+      S.live.ready = true;
+      await refreshFrame();
+      loading.classList.add("hidden");
+      seekLive(S.idx);
+    } catch (err) {
+      loading.classList.add("hidden");
+      $("live-badge").textContent = `SudokuPad 镜像启动失败：${err.message || err}`;
+    }
+  }
+
+  function scheduleLive(idx) {
+    if (!S.live || !S.live.ready) return;
+    S.live.pending = idx;
+    clearTimeout(S.live.timer);
+    S.live.timer = setTimeout(() => {
+      const target = S.live.pending;
+      S.live.pending = null;
+      seekLive(target);
+    }, 110);
+  }
+
+  async function seekLive(idx, forceReset = false) {
+    if (!S.live || !S.live.ready || S.live.busy) {
+      if (S.live) S.live.pending = idx;
+      return;
+    }
+    const places = placementsUpTo(idx);
+    const reset = forceReset || idx < S.live.step || places.length < S.live.applied;
+    const send = reset ? places : places.slice(S.live.applied);
+    if (!reset && !send.length && idx === S.live.step) return;
+    S.live.busy = true;
+    $("live-loading").classList.remove("hidden");
+    try {
+      const res = await fetch("/api/live/place", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ places: send, reset }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.status === 410) {
+        await startLive(S.live.url);
+        return;
+      }
+      if (!res.ok) throw new Error(body.error || "操作失败");
+      S.live.step = idx;
+      S.live.applied = places.length;
+      await refreshFrame();
+    } catch (err) {
+      $("live-badge").textContent = `SudokuPad 操作失败：${err.message || err}`;
+    } finally {
+      S.live.busy = false;
+      $("live-loading").classList.add("hidden");
+      if (S.live.pending !== null) {
+        const next = S.live.pending;
+        S.live.pending = null;
+        scheduleLive(next);
+      }
+    }
+  }
+
   function init(data) {
     S.data = data;
     S.n = data.puzzle.size;
@@ -145,6 +246,7 @@
     updateControls();
     showStep(-1, false);
     setLoading(false);
+    startLive(data.source_url || "");
     refreshHistory();
     if (data.steps.length) {
       setTimeout(() => showStep(0, true), 350);
@@ -698,6 +800,7 @@
       if (i >= 0) renderPanel(steps[i]);
       updateControls();
       renderOverlay();
+      scheduleLive(S.idx);
       return;
     }
     if (!animate) {
@@ -706,6 +809,7 @@
       if (i >= 0) renderPanel(steps[i]);
       updateControls();
       renderOverlay();
+      scheduleLive(S.idx);
       return;
     }
     const step = steps[i];
@@ -720,6 +824,7 @@
     updateControls();
     renderPanel(step);
     renderOverlay();
+    scheduleLive(S.idx);
   }
 
   function renderPanel(step) {

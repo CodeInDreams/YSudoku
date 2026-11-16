@@ -103,6 +103,27 @@ export SUDOKU_LLM_MODEL=qwen2.5:7b
 
 Without a key the web UI greys out **LLM rules** and shows "no key · local heuristics".
 
+### Live SudokuPad view (read-only)
+
+The main board is now a **read-only mirror of SudokuPad**, not a separate SVG board: a local
+Playwright Chromium opens the puzzle, crops the screenshot to the puzzle area (any grid size) and
+streams it to the page. Step playback clicks and types the placements in SudokuPad itself, so
+digits, cage outlines and SudokuPad's own rendering are what you see; the web page only displays an
+image and cannot be clicked.
+
+Requirements: Node.js + Playwright/Chromium (`npm i playwright` in `tools/`, or the paths already
+used by `tools/sudokupad_bridge.mjs`). Without them the badge reports that the mirror failed.
+
+The browser is pooled as a single session and recycled after 10 minutes idle:
+
+```bash
+YSUDOKU_LIVE_IDLE_SECONDS=600   # default; 0 disables recycling
+YSUDOKU_LIVE_MIN_IDLE=0         # default; keep 0 to release the browser completely
+```
+
+A recycled session returns 410 and the UI restarts it automatically. Pencil marks, colours and
+lines are the next stage (P2); the old reasoning board is hidden.
+
 ### Rule sheet for vision models
 
 The rule compiler sends the model a **rendered rule sheet**: grid coordinates, a number on every
