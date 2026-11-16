@@ -14,7 +14,6 @@ import { Switch } from "./components/ui/switch";
 import { Popover, PopoverContent, PopoverTrigger } from "./components/ui/popover";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Progress } from "./components/ui/progress";
 import { Slider } from "./components/ui/slider";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -136,10 +135,13 @@ function fmtBytes(n) {
   return `${(n / 1024 / 1024).toFixed(2)} MB`;
 }
 
-function SectionLabel({ children, extra }) {
+function SectionLabel({ children, extra, tone = "neutral" }) {
+  const color = tone === "danger" ? "text-rose-700 dark:text-rose-200"
+    : tone === "success" ? "text-emerald-700 dark:text-emerald-200"
+      : "text-muted-foreground";
   return (
     <div className="flex items-center gap-2">
-      <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">{children}</span>
+      <span className={`text-[10px] font-medium uppercase tracking-[0.12em] ${color}`}>{children}</span>
       {extra}
     </div>
   );
@@ -148,7 +150,7 @@ function SectionLabel({ children, extra }) {
 function Digits({ digits, tone = "neutral" }) {
   const styles = {
     neutral: "border bg-background text-foreground",
-    danger: "border-rose-200 bg-rose-50 text-rose-700 line-through dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300",
+    danger: "border-rose-300 bg-rose-100 font-medium text-rose-700 line-through dark:border-rose-600 dark:bg-rose-500/20 dark:text-rose-100",
     success: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300",
   };
   return (
@@ -207,8 +209,8 @@ function StepNarrative({ step, lang, n, t }) {
         </div>
       )}
       {places.length > 0 && (
-        <div className="rounded-lg border border-emerald-200/70 bg-emerald-50/40 p-3 dark:border-emerald-900 dark:bg-emerald-950/20">
-          <SectionLabel>{t("step.placed")}</SectionLabel>
+        <div className="rounded-lg border border-emerald-200/70 bg-emerald-50/40 p-3 dark:border-emerald-800/80 dark:bg-emerald-950/30">
+          <SectionLabel tone="success">{t("step.placed")}</SectionLabel>
           <div className="mt-2 space-y-1.5">
             {places.map((ev, index) => (
               <div key={index} className="flex items-center gap-2 text-xs"><span className="font-mono text-muted-foreground">{cellName(ev.cell)}</span><span className="text-muted-foreground">=</span><Digits digits={[ev.value]} tone="success" /></div>
@@ -217,11 +219,11 @@ function StepNarrative({ step, lang, n, t }) {
         </div>
       )}
       {elims.size > 0 && (
-        <div className="rounded-lg border border-rose-200/70 bg-rose-50/40 p-3 dark:border-rose-900 dark:bg-rose-950/20">
-          <SectionLabel>{t("step.eliminated")}</SectionLabel>
+        <div className="rounded-lg border border-rose-200/70 bg-rose-50/50 p-3 dark:border-rose-700/70 dark:bg-rose-950/40">
+          <SectionLabel tone="danger">{t("step.eliminated")}</SectionLabel>
           <div className="mt-2 space-y-1.5">
             {[...elims.entries()].map(([cell, digits]) => (
-              <div key={cell} className="flex items-center gap-2 text-xs"><span className="font-mono text-muted-foreground">{cellName(cell)}</span><span className="text-rose-400">≠</span><Digits digits={digits} tone="danger" /></div>
+              <div key={cell} className="flex items-center gap-2 text-xs"><span className="font-mono text-muted-foreground">{cellName(cell)}</span><span className="text-rose-500 dark:text-rose-300">≠</span><Digits digits={digits} tone="danger" /></div>
             ))}
           </div>
         </div>
@@ -572,8 +574,8 @@ export default function App() {
   }, [store, url]);
 
   const overlay = useMemo(() => {
-    if (!analysis || idx < 0 || deleted) return null;
-    const state = candidateStateUpTo(analysis, idx);
+    if (!analysis || frameStep < 0 || deleted) return null;
+    const state = candidateStateUpTo(analysis, frameStep);
     const negatives = [];
     for (const [cell, set] of state) {
       if (set.size <= 6) continue;
@@ -581,8 +583,8 @@ export default function App() {
       for (let v = 1; v <= n; v++) if (!set.has(v)) excluded.push(v);
       if (excluded.length && excluded.length <= 3) negatives.push({ cell, digits: excluded });
     }
-    return { visual: steps[idx]?.visual || {}, negatives };
-  }, [analysis, idx, n, steps, deleted]);
+    return { visual: steps[frameStep]?.visual || {}, negatives };
+  }, [analysis, frameStep, n, steps, deleted]);
 
   const resolvedRules = useMemo(() => {
     const merged = new Map();
@@ -625,10 +627,11 @@ export default function App() {
           )}
           {frameSrc && !deleted && (
             <img src={frameSrc} alt="SudokuPad"
-              className={`h-full w-full object-contain transition-[filter] dark:brightness-[0.88] dark:contrast-[1.03] ${ready ? "opacity-100" : "opacity-0"}`}
+              className={`h-full w-full object-contain transition-opacity ${ready ? "opacity-100" : "opacity-0"}`}
+              style={{ filter: dark ? "brightness(0.8) contrast(1.04)" : undefined }}
               onLoad={() => setReady(true)} />
           )}
-          {overlay && ready && frameStep === idx && !deleted && (
+          {overlay && ready && !deleted && (
             <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox={`0 0 ${n} ${n}`} preserveAspectRatio="none">
               {(overlay.visual.groups || []).map((group, i) => {
                 if (!group.cells?.length) return null;
@@ -665,8 +668,7 @@ export default function App() {
         <Slider value={[speed]} min={200} max={2400} step={100} onValueChange={([value]) => setSpeed(value)} className="w-28" />
         <span className="ml-auto font-mono text-[11px] text-muted-foreground">{t("player.step", { i: idx + 1, n: steps.length })}</span>
       </div>
-      <div className="space-y-2 border-t px-4 py-3">
-        <Progress value={steps.length ? Math.max(0, ((idx + 1) / steps.length) * 100) : 0} />
+      <div className="border-t px-4 py-3">
         <Slider
           value={[Math.max(0, idx)]}
           min={0}
