@@ -206,10 +206,28 @@
     const MAX_POSITIVE = 6;
     for (const step of S.data.steps) {
       const actions = [];
+      const pre = step.pre_dom || [];
+      for (const [cell, set] of Array.from(state.entries())) {
+        const desired = new Set(digitsOf(pre[cell] || 0, S.n));
+        const removed = [...set].filter((d) => !desired.has(d));
+        const added = [...desired].filter((d) => !set.has(d));
+        if (marked.has(cell)) {
+          for (const d of removed) actions.push({ op: "elim", cell, value: d });
+          if (added.length) actions.push({ op: "mark", cell, digits: added });
+        }
+        state.set(cell, desired);
+      }
       for (const ev of step.events || []) {
         if (ev.kind === "place") {
-          state.delete(ev.cell);
-          marked.delete(ev.cell);
+          if (state.has(ev.cell)) {
+            const set = state.get(ev.cell);
+            if (!set.has(ev.value)) {
+              throw new Error(`候选不变量被破坏：第 ${step.index + 1} 步 ${ev.cell} 填 ${ev.value}，候选为 ${[...set]}`);
+            }
+            if (marked.has(ev.cell)) actions.push({ op: "clear", cell: ev.cell, digits: [...set] });
+            state.delete(ev.cell);
+            marked.delete(ev.cell);
+          }
           actions.push({ op: "place", cell: ev.cell, value: ev.value });
         } else if (ev.kind === "elim") {
           if (!state.has(ev.cell)) {
@@ -228,6 +246,7 @@
             set.delete(ev.value);
             if (set.size === 1) {
               const [value] = set;
+              if (marked.has(ev.cell)) actions.push({ op: "clear", cell: ev.cell, digits: [...set] });
               actions.push({ op: "place", cell: ev.cell, value });
               state.delete(ev.cell);
               marked.delete(ev.cell);
@@ -245,87 +264,24 @@
     return steps;
   }
 
-  let frameRetry = null;
-
-  function showLiveFrame(idx) {
-    if (!S.live || !S.live.session) return;
-    const img = $("live-frame");
-    clearTimeout(frameRetry);
-    img.onload = () => {
-      img.classList.add("ready");
-      $("live-view").classList.add("live-ready");
-      $("live-loading").classList.add("hidden");
-    };
-    img.onerror = () => {
-      img.classList.remove("ready");
-      $("live-view").classList.remove("live-ready");
-      $("live-loading").classList.remove("hidden");
-      frameRetry = setTimeout(() => showLiveFrame(idx), 400);
-    };
-    img.src = `/api/live/frame?session=${S.live.session}&step=${idx}&t=${Date.now()}`;
-  }
-
-  async function startLive(url) {
-    const loading = $("live-loading");
-    $("live-view").classList.remove("hidden");
-    loading.classList.remove("hidden");
-    S.live = { session: null, url: url || "" };
-    $("live-overlay").innerHTML = "";
-    $("live-view").classList.remove("live-ready");
-    $("live-frame").classList.remove("ready");
-    if (!url) {
-      loading.classList.add("hidden");
-      $("live-badge").textContent = "没有 SudokuPad 链接";
-      return;
-    }
-    try {
-      const steps = buildStepActions();
-      let hash = 2166136261;
-      const serialized = "frame-v3:" + JSON.stringify(steps);
-      for (let i = 0; i < serialized.length; i++) {
-        hash ^= serialized.charCodeAt(i);
-        hash = Math.imul(hash, 16777619);
-      }
-      const res = await fetch("/api/live/build", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          url, steps, key: S.key || "", steps_hash: (hash >>> 0).toString(16),
-        }),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.error || "构建失败");
-      S.live.session = body.session;
-      S.live.count = body.count;
-      showLiveFrame(S.idx);
-    } catch (err) {
-      loading.classList.add("hidden");
-      $("live-badge").textContent = `SudokuPad 镜像构建失败：${err.message || err}`;
-    }
-  }
-
-  function prefetchLive(idx) {
-    showLiveFrame(idx);
-  }
-
   const LIVE_COLORS = ["#58a6ff", "#ffb454", "#38d39f", "#ff5c7a", "#7c5cff", "#2dd4bf"];
 
   function candidateStateUpTo(idx) {
     const state = new Map();
     for (let i = 0; i <= idx && i < S.data.steps.length; i++) {
       const step = S.data.steps[i];
+      const pre = step.pre_dom || [];
+      for (const cell of state.keys()) {
+        state.set(cell, new Set(digitsOf(pre[cell] || 0, S.n)));
+      }
       for (const ev of step.events || []) {
         if (ev.kind === "place") {
           state.delete(ev.cell);
         } else if (ev.kind === "elim") {
           if (!state.has(ev.cell)) {
-            const mask = (step.pre_dom && step.pre_dom[ev.cell]) || 0;
-            const digits = digitsOf(mask, S.n);
-            if (!digits.length) continue;
-            state.set(ev.cell, new Set(digits));
+            state.set(ev.cell, new Set(digitsOf(pre[ev.cell] || 0, S.n)));
           }
-          const set = state.get(ev.cell);
-          set.delete(ev.value);
-          if (!set.size) state.delete(ev.cell);
+          state.get(ev.cell).delete(ev.value);
         }
       }
     }
@@ -391,6 +347,68 @@
         }, String(v));
       });
     }
+  }
+
+  let frameRetry = null;
+
+  function showLiveFrame(idx) {
+    if (!S.live || !S.live.session) return;
+    const img = $("live-frame");
+    clearTimeout(frameRetry);
+    img.onload = () => {
+      img.classList.add("ready");
+      $("live-view").classList.add("live-ready");
+      $("live-loading").classList.add("hidden");
+    };
+    img.onerror = () => {
+      img.classList.remove("ready");
+      $("live-view").classList.remove("live-ready");
+      $("live-loading").classList.remove("hidden");
+      frameRetry = setTimeout(() => showLiveFrame(idx), 400);
+    };
+    img.src = `/api/live/frame?session=${S.live.session}&step=${idx}&t=${Date.now()}`;
+  }
+
+  async function startLive(url) {
+    const loading = $("live-loading");
+    $("live-view").classList.remove("hidden");
+    loading.classList.remove("hidden");
+    S.live = { session: null, url: url || "" };
+    $("live-overlay").innerHTML = "";
+    $("live-view").classList.remove("live-ready");
+    $("live-frame").classList.remove("ready");
+    if (!url) {
+      loading.classList.add("hidden");
+      $("live-badge").textContent = "没有 SudokuPad 链接";
+      return;
+    }
+    try {
+      const steps = buildStepActions();
+      let hash = 2166136261;
+      const serialized = "frame-v5:" + JSON.stringify(steps);
+      for (let i = 0; i < serialized.length; i++) {
+        hash ^= serialized.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+      }
+      const res = await fetch("/api/live/build", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url, steps, key: S.key || "", steps_hash: (hash >>> 0).toString(16),
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || "构建失败");
+      S.live.session = body.session;
+      S.live.count = body.count;
+      showLiveFrame(S.idx);
+    } catch (err) {
+      loading.classList.add("hidden");
+      $("live-badge").textContent = `SudokuPad 镜像构建失败：${err.message || err}`;
+    }
+  }
+
+  function prefetchLive(idx) {
+    showLiveFrame(idx);
   }
 
   function init(data) {
