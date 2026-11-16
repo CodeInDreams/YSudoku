@@ -20,6 +20,8 @@ let puzzleUrl = "";
 let board = null;
 let latest = null;
 let busy = false;
+let cornerState = new Map();
+let digitState = new Set();
 let lastUsed = Date.now();
 
 function touch() { lastUsed = Date.now(); }
@@ -113,6 +115,8 @@ async function apply(places, reset, corners) {
   if (!reset && !hasWork && latest) return latest;
   if (reset) {
     await open(puzzleUrl);
+    cornerState = new Map();
+    digitState = new Set();
   }
   for (const [cell, digit] of places || []) {
     const r = Math.floor(cell / board.n);
@@ -120,23 +124,40 @@ async function apply(places, reset, corners) {
     const [x, y] = center(r, c);
     await page.mouse.click(x, y);
     await page.keyboard.type(String(digit));
+    digitState.add(cell);
     await page.waitForTimeout(35);
   }
-  if (corners && corners.length) {
-    await page.click("#control-corner").catch(() => {});
-    for (const [cell, digits] of corners) {
-      const r = Math.floor(cell / board.n);
-      const c = cell % board.n;
-      const [x, y] = center(r, c);
-      await page.mouse.click(x, y);
-      await page.keyboard.press("Delete").catch(() => {});
-      for (const digit of digits || []) {
-        await page.keyboard.type(String(digit));
-        await page.waitForTimeout(18);
-      }
+
+  const target = new Map((corners || []).map(([cell, digits]) => [cell, (digits || []).join("")]));
+  await page.click("#control-corner").catch(() => {});
+  const clickCell = async (cell) => {
+    const r = Math.floor(cell / board.n);
+    const c = cell % board.n;
+    const [x, y] = center(r, c);
+    await page.mouse.click(x, y);
+  };
+  for (const [cell, wanted] of target) {
+    if (digitState.has(cell)) continue;
+    const current = cornerState.get(cell) || "";
+    if (current === wanted) continue;
+    await clickCell(cell);
+    // Delete only when corner marks actually exist on this cell; otherwise
+    // SudokuPad would fall back to clearing the whole cell (digit included).
+    if (current) await page.keyboard.press("Delete").catch(() => {});
+    for (const digit of wanted) {
+      await page.keyboard.type(digit);
+      await page.waitForTimeout(18);
     }
-    await page.click("#control-normal").catch(() => {});
   }
+  for (const [cell, current] of cornerState) {
+    if (target.has(cell) || digitState.has(cell) || !current) continue;
+    await clickCell(cell);
+    await page.keyboard.press("Delete").catch(() => {});
+  }
+  // solved cells must not keep visible pencil marks
+  for (const cell of digitState) cornerState.delete(cell);
+  for (const [cell, value] of target) if (!digitState.has(cell)) cornerState.set(cell, value);
+  await page.click("#control-normal").catch(() => {});
   await page.waitForTimeout(120);
   return shot();
 }
