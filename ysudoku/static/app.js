@@ -9,6 +9,7 @@
   };
 
   const TIER_LABEL = { 1: "T1 直接推理", 2: "T2 基础技巧", 3: "T3 进阶技巧" };
+  const THEME_KEY = "ysudoku.theme";
   const CAL_KEY = "ysudoku.overlay.cal";
   let cal = { x: 0.07, y: 0.07, size: 0.86 };
   try {
@@ -235,6 +236,12 @@
       node.textContent = chip.text;
       svg.appendChild(node);
     }
+  }
+
+  function applyTheme(theme) {
+    document.documentElement.dataset.theme = theme;
+    const button = $("theme-toggle");
+    if (button) button.textContent = theme === "light" ? "🌙" : "☀️";
   }
 
   function countGiven() {
@@ -860,6 +867,18 @@
   });
   $("speed").addEventListener("input", () => {
     if (S.playing) { clearTimeout(S.timer); playLoop(); }
+  });
+
+  let theme = null;
+  try { theme = localStorage.getItem(THEME_KEY); } catch (err) { /* ignore */ }
+  if (!theme) {
+    theme = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  }
+  applyTheme(theme);
+  $("theme-toggle").addEventListener("click", () => {
+    const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+    try { localStorage.setItem(THEME_KEY, next); } catch (err) { /* ignore */ }
+    applyTheme(next);
   });
 
   checkHealth();

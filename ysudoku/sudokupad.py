@@ -29,6 +29,14 @@ def _http_get(url: str, timeout: float = 25.0) -> str:
         return response.read().decode("utf-8", "replace")
 
 
+_SUDOKU_LINK = re.compile(r"https://sudokupad\.app/[A-Za-z0-9_=-]+")
+
+
+def extract_sudokupad_link(html: str) -> str | None:
+    match = _SUDOKU_LINK.search(html)
+    return match.group(0) if match else None
+
+
 def _extract_target(target: str) -> tuple[str, str]:
     """Return (kind, value) where kind is id | payload | file | json."""
     target = target.strip()
@@ -44,6 +52,8 @@ def _extract_target(target: str) -> tuple[str, str]:
 
     if target.startswith("http://") or target.startswith("https://"):
         parsed = urlparse(target)
+        if "logic-masters.de" in parsed.netloc:
+            return "lm", target
         query = parse_qs(parsed.query)
         for key in ("puzzle", "id"):
             if key in query and query[key]:
@@ -77,6 +87,16 @@ def load(target: str, use_cache: bool = True) -> dict:
         return json.loads(value)
     if kind == "payload":
         return decode_payload(value)
+    if kind == "lm":
+        html = _http_get(value)
+        sudoku_url = extract_sudokupad_link(html)
+        if not sudoku_url:
+            raise LoadError("这个 Logic Masters 页面没有 SudokuPad 链接（可能只有 Penpa+）")
+        data = load(sudoku_url, use_cache=use_cache)
+        meta = data.setdefault("metadata", {})
+        meta["lm_url"] = value
+        meta["source_url"] = sudoku_url
+        return data
     if kind == "file":
         text = Path(value).read_text(encoding="utf-8")
         return _payload_from_raw(text)
