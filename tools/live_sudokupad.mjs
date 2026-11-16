@@ -19,7 +19,7 @@ let page = null;
 let puzzleUrl = "";
 let board = null;
 let latest = null;
-let busy = false;
+let work = Promise.resolve();
 let ledger = new Map();  // cell -> { digit: number, corners: Set<number> }
 let lastUsed = Date.now();
 
@@ -109,6 +109,33 @@ function center(r, c) {
   return [box.x + (c + 0.5) * unit, box.y + (r + 0.5) * unit];
 }
 
+async function readBoard() {
+  return await page.evaluate((n) => {
+    const values = new Array(n * n).fill(0);
+    const corners = Array.from({ length: n * n }, () => []);
+    const toCell = (x, y) => {
+      const c = Math.floor((x - 32) / 64);
+      const r = Math.floor((y - 32) / 64);
+      if (r < 0 || r >= n || c < 0 || c >= n) return -1;
+      return r * n + c;
+    };
+    for (const t of document.querySelectorAll("#cell-values text")) {
+      const x = parseFloat(t.getAttribute("x"));
+      const y = parseFloat(t.getAttribute("y"));
+      const cell = toCell(x, y - 3.8);
+      if (cell >= 0) values[cell] = Number(t.textContent);
+    }
+    for (const t of document.querySelectorAll("#cell-pencilmarks text")) {
+      const x = parseFloat(t.getAttribute("x"));
+      const y = parseFloat(t.getAttribute("y"));
+      const cell = toCell(x, y);
+      const v = Number(t.getAttribute("data-val") || t.textContent);
+      if (cell >= 0 && v) corners[cell].push(v);
+    }
+    return { values, corners };
+  }, board.n);
+}
+
 async function apply(digits, corners, reset) {
   if (!page || !puzzleUrl) throw new Error("no puzzle");
   const digitList = digits || [];
@@ -120,6 +147,7 @@ async function apply(digits, corners, reset) {
     ledger = new Map();
   }
 
+  const state = await readBoard();
   const clickCell = async (cell) => {
     const r = Math.floor(cell / board.n);
     const c = cell % board.n;
@@ -128,11 +156,11 @@ async function apply(digits, corners, reset) {
   };
 
   for (const [cell, value] of digitList) {
-    const entry = ledger.get(cell);
-    if (entry && entry.digit === Number(value)) continue;
+    if (state.values[cell] === Number(value)) continue;
     await clickCell(cell);
     await page.keyboard.type(String(value));
-    ledger.set(cell, { digit: Number(value), corners: new Set() });
+    state.values[cell] = Number(value);
+    state.corners[cell] = [];
     await page.waitForTimeout(35);
   }
 
@@ -143,26 +171,25 @@ async function apply(digits, corners, reset) {
   }
   await page.click("#control-corner").catch(() => {});
   for (const [cell, wanted] of target) {
-    const entry = ledger.get(cell);
-    if (entry && entry.digit) continue;  // never touch a solved cell
-    const current = entry ? entry.corners : new Set();
+    if (state.values[cell]) continue;  // solved cells keep their digit
+    const current = new Set(state.corners[cell] || []);
     if (current.size === wanted.size && [...wanted].every((d) => current.has(d))) continue;
     await clickCell(cell);
-    // SudokuPad semantics: Delete clears the current dial's marks; if there are
-    // none it clears the whole cell.  Only Delete when corner marks exist.
+    // Delete only if this cell really has pencil marks; otherwise SudokuPad
+    // falls back to clearing the cell (including its value).
     if (current.size) await page.keyboard.press("Delete").catch(() => {});
     for (const digit of wanted) {
       await page.keyboard.type(String(digit));
       await page.waitForTimeout(18);
     }
-    ledger.set(cell, { digit: 0, corners: new Set(wanted) });
+    state.corners[cell] = [...wanted];
   }
-  for (const [cell, entry] of ledger) {
-    if (entry.digit || target.has(cell)) continue;
-    if (!entry.corners.size) continue;
+  for (let cell = 0; cell < board.n * board.n; cell++) {
+    if (target.has(cell) || state.values[cell]) continue;
+    if (!(state.corners[cell] || []).length) continue;
     await clickCell(cell);
     await page.keyboard.press("Delete").catch(() => {});
-    entry.corners = new Set();
+    state.corners[cell] = [];
   }
   await page.click("#control-normal").catch(() => {});
   await page.waitForTimeout(120);
@@ -196,21 +223,17 @@ const server = http.createServer((req, res) => {
       if (url.pathname === "/start") {
         if (!body.url) return json(res, 400, { error: "url required" });
         touch();
-        await open(body.url);
-        await shot();
+        await (work = work.then(async () => { await open(body.url); await shot(); }, async () => { await open(body.url); await shot(); }));
         return json(res, 200, { ok: true, n: board.n });
       }
       if (url.pathname === "/place") {
         if (!page) return json(res, 410, { error: "browser recycled", restart: true });
-        if (busy) return json(res, 429, { error: "busy" });
         touch();
-        busy = true;
-        try {
-          await apply(body.digits || body.places || [], body.corners || [], Boolean(body.reset));
-          return json(res, 200, { ok: true, bytes: latest.length });
-        } finally {
-          busy = false;
-        }
+        await (work = work.then(
+          () => apply(body.digits || body.places || [], body.corners || [], Boolean(body.reset)),
+          () => apply(body.digits || body.places || [], body.corners || [], Boolean(body.reset)),
+        ));
+        return json(res, 200, { ok: true, bytes: latest.length });
       }
       return json(res, 404, { error: "not found" });
     } catch (err) {

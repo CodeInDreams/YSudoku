@@ -309,15 +309,6 @@
       });
     }
 
-    for (const chip of step.visual.chips || []) {
-      const [r, c] = rcOf(chip.cell);
-      add("text", {
-        x: c + 0.5, y: r + 0.56, "text-anchor": "middle",
-        "font-size": "0.28", "font-family": "ui-monospace, monospace",
-        fill: chip.color || "#ffb454", "font-weight": "700",
-      }, chip.text);
-    }
-
     const touched = new Map();
     for (const ev of step.events || []) {
       if (ev.kind !== "elim" && ev.kind !== "place") continue;
