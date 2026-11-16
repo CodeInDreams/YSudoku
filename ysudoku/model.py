@@ -118,6 +118,10 @@ class Puzzle:
                             for c in range(bc, bc + w)])
         return out
 
+    @property
+    def is_chaos(self) -> bool:
+        return (not self.regions) and "chaos" in (self.rules_text or "").lower()
+
     def is_standard_boxes(self) -> bool:
         boxes = {frozenset(b) for b in self.box_regions()}
         return len(self.regions) == len(boxes) and all(

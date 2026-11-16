@@ -70,16 +70,18 @@ def singleton(mask: int) -> int:
     return mask.bit_length()
 
 
-def build_units(puzzle, diagonals: tuple[bool, bool] = (False, False)) -> list[Unit]:
+def build_units(puzzle, diagonals: tuple[bool, bool] = (False, False),
+                chaos: bool = False) -> list[Unit]:
     n = puzzle.size
     units: list[Unit] = []
     for r in range(n):
         units.append(Unit("row", r, [r * n + c for c in range(n)]))
     for c in range(n):
         units.append(Unit("col", c, [r * n + c for r in range(n)]))
-    regions = puzzle.regions or puzzle.box_regions()
-    for i, region in enumerate(regions):
-        units.append(Unit("region", i, list(region)))
+    if not chaos:
+        regions = puzzle.regions or puzzle.box_regions()
+        for i, region in enumerate(regions):
+            units.append(Unit("region", i, list(region)))
     if diagonals[0]:
         units.append(Unit("diagonal", 0, [i * n + i for i in range(n)]))
     if diagonals[1]:

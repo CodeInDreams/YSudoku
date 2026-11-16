@@ -23,7 +23,8 @@ class Solver:
     def __init__(self, puzzle, rules, allow_chains: bool = False):
         self.puzzle = puzzle
         self.rules = rules
-        self.units = build_units(puzzle, (rules.diagonal_main, rules.diagonal_anti))
+        self.units = build_units(puzzle, (rules.diagonal_main, rules.diagonal_anti),
+                                 chaos=puzzle.is_chaos)
         self.state = State(puzzle.size, self.units)
         self.constraints = list(rules.constraints)
         self.allow_chains = allow_chains
@@ -96,7 +97,8 @@ class Solver:
 
 def check_solution(puzzle, rules, values: list[int]) -> list[str]:
     errors: list[str] = []
-    units = build_units(puzzle, (rules.diagonal_main, rules.diagonal_anti))
+    units = build_units(puzzle, (rules.diagonal_main, rules.diagonal_anti),
+                        chaos=puzzle.is_chaos)
     want = set(range(1, puzzle.size + 1))
     for unit in units:
         vals = [values[c] for c in unit.cells]
@@ -123,7 +125,8 @@ def compare_with_solution(puzzle, values: list[int]) -> str | None:
 
 def audit_steps(puzzle, rules, steps: list[Step], node_limit: int = 12_000,
                 max_checks: int = 240) -> dict:
-    units = build_units(puzzle, (rules.diagonal_main, rules.diagonal_anti))
+    units = build_units(puzzle, (rules.diagonal_main, rules.diagonal_anti),
+                        chaos=puzzle.is_chaos)
     checks = ok = bad = unknown = 0
     for step in steps:
         step_checks = 0
