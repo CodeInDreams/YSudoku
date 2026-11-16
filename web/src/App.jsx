@@ -11,6 +11,8 @@ import { Badge } from "./components/ui/badge";
 import { Switch } from "./components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { Textarea } from "./components/ui/textarea";
+import { Progress } from "./components/ui/progress";
+import { Slider } from "./components/ui/slider";
 import { Popover, PopoverContent, PopoverTrigger } from "./components/ui/popover";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -520,11 +522,19 @@ export default function App() {
         </Button>
         <Button variant="outline" size="icon" className="h-8 w-8" onClick={nextStep} disabled={idx >= steps.length - 1 || deleted}><ChevronRight className="h-4 w-4" /></Button>
         <span className="ml-2 hidden text-xs text-muted-foreground sm:inline">{t("player.speed")}</span>
-        <input type="range" min="200" max="2400" step="100" value={speed} onChange={(e) => setSpeed(Number(e.target.value))} className="w-28 accent-primary" />
+        <Slider value={[speed]} min={200} max={2400} step={100} onValueChange={([value]) => setSpeed(value)} className="w-28" />
         <span className="ml-auto font-mono text-[11px] text-muted-foreground">{t("player.step", { i: idx + 1, n: steps.length })}</span>
       </div>
-      <div className="border-t px-4 py-2">
-        <input type="range" min="-1" max={Math.max(0, steps.length - 1)} value={idx} onChange={(e) => { setPlaying(false); setIdx(Number(e.target.value)); }} className="w-full accent-primary" disabled={!steps.length || deleted} />
+      <div className="space-y-2 border-t px-4 py-3">
+        <Progress value={steps.length ? Math.max(0, ((idx + 1) / steps.length) * 100) : 0} />
+        <Slider
+          value={[Math.max(0, idx)]}
+          min={0}
+          max={Math.max(0, steps.length - 1)}
+          step={1}
+          onValueChange={([value]) => { setPlaying(false); setIdx(value); }}
+          disabled={!steps.length || deleted}
+        />
       </div>
     </Card>
   );
