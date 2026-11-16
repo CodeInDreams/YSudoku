@@ -632,13 +632,9 @@ export default function App() {
                 <DropdownMenuItem onClick={() => setLang("en")} className={lang === "en" ? "bg-accent font-medium" : ""}><span className="flex-1">English</span>{lang === "en" && <Check className="h-4 w-4" />}</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" title={t("header.theme")}>{dark ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}</Button></DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-36">
-                <DropdownMenuItem onClick={() => setDark(false)} className={!dark ? "bg-accent font-medium" : ""}><Sun className="h-4 w-4" /><span className="flex-1">{t("header.light")}</span>{!dark && <Check className="h-4 w-4" />}</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setDark(true)} className={dark ? "bg-accent font-medium" : ""}><Moon className="h-4 w-4" /><span className="flex-1">{t("header.dark")}</span>{dark && <Check className="h-4 w-4" />}</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <Button variant="ghost" size="icon" onClick={() => setDark((value) => !value)} title={dark ? t("header.light") : t("header.dark")}>
+              {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </Button>
             <div className="hidden h-7 w-7 place-items-center rounded-full bg-muted text-[10px] font-semibold sm:grid">YS</div>
           </div>
         </div>
