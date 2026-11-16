@@ -843,7 +843,7 @@ export default function App() {
           </form>
           <div className="ml-auto flex items-center gap-1">
             <Button variant="ghost" size="sm" asChild className="gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
-              <a href="https://github.com/CodeInDreams/ysudoku" target="_blank" rel="noreferrer" title="GitHub"><GithubMark className="h-4 w-4" /><span className="hidden sm:inline">{stars ? stars : "Star"}</span></a>
+              <a href="https://github.com/CodeInDreams/ysudoku" target="_blank" rel="noreferrer" title="GitHub"><GithubMark className="h-4 w-4 text-foreground" /><span className="hidden sm:inline">{stars ? stars : "Star"}</span></a>
             </Button>
             <Button variant="ghost" size="icon" onClick={() => setDark((value) => !value)} title={dark ? t("header.light") : t("header.dark")}>
               {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
