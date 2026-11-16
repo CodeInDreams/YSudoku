@@ -133,6 +133,31 @@
     return map;
   }
 
+  function stateUpTo(idx) {
+    const digits = new Map();
+    const dom = S.data.initial.slice();
+    const touched = new Set();
+    for (let i = 0; i <= idx && i < S.data.steps.length; i++) {
+      for (const ev of S.data.steps[i].events || []) {
+        if (ev.kind === "place") {
+          digits.set(ev.cell, ev.value);
+          dom[ev.cell] = 1 << (ev.value - 1);
+          touched.add(ev.cell);
+        } else if (ev.kind === "elim") {
+          dom[ev.cell] &= ~(1 << (ev.value - 1));
+          touched.add(ev.cell);
+        }
+      }
+    }
+    const corners = new Map();
+    for (const cell of touched) {
+      if (digits.has(cell)) continue;
+      const ds = digitsOf(dom[cell], S.n);
+      if (ds.length > 1 && ds.length < S.n) corners.set(cell, ds);
+    }
+    return { digits: Array.from(digits.entries()), corners: Array.from(corners.entries()) };
+  }
+
   async function liveFrameBlob() {
     const res = await fetch(`/api/live/frame?t=${Date.now()}`, { cache: "no-store" });
     if (!res.ok) throw new Error("截图读取失败");
@@ -205,13 +230,11 @@
     const idx = live.queue.shift();
     try {
       if (!live.cache.has(idx)) {
-        const places = placementsUpTo(idx);
-        const reset = idx < live.step || places.length < live.applied;
-        const send = reset ? places : places.slice(live.applied);
-        const cornerSend = [];
+        const state = stateUpTo(idx);
+        const reset = idx < live.step;
         const res = await fetch("/api/live/place", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ places: send, corners: cornerSend, reset }),
+          body: JSON.stringify({ digits: state.digits, corners: [], reset }),
         });
         if (res.status === 410) {
           await startLive(live.url);
@@ -220,7 +243,6 @@
         const body = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(body.error || "操作失败");
         live.step = idx;
-        live.applied = places.length;
         live.cache.set(idx, await liveFrameBlob());
       }
       if (idx === S.idx) displayCachedFrame(idx);
