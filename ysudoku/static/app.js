@@ -357,20 +357,19 @@
       const [r, c] = rcOf(cell);
       const excluded = [];
       for (let v = 1; v <= n; v++) if (!set.has(v)) excluded.push(v);
-      if (!excluded.length || excluded.length > 5) continue;
+      if (!excluded.length || excluded.length > 3) continue;
+      const stepX = 0.17;
+      const startX = c + 0.5 - (excluded.length * stepX) / 2;
       excluded.forEach((v, idx) => {
-        const x = c + 0.18 + (idx % 3) * 0.27;
-        const y = r + 0.22 + Math.floor(idx / 3) * 0.23;
         add("text", {
-          x, y, "font-size": "0.15", fill: "#b91c1c",
-          "font-family": "ui-monospace, monospace",
-          "text-decoration": "line-through",
+          x: startX + idx * stepX + stepX / 2,
+          y: r + 0.88,
+          "text-anchor": "middle",
+          "font-family": "system-ui, -apple-system, 'Segoe UI', sans-serif",
+          "font-size": "0.16", "font-weight": "600",
+          fill: "#b91c1c", "text-decoration": "line-through",
           style: "text-decoration: line-through",
         }, String(v));
-        add("line", {
-          x1: x, y1: y + 0.01, x2: x + 0.14, y2: y + 0.01,
-          stroke: "#b91c1c", "stroke-width": 0.012,
-        });
       });
     }
   }
