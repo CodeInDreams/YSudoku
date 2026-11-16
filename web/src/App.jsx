@@ -183,6 +183,7 @@ export default function App() {
   const [settings, setSettings] = useState({ max_rules: 100, max_steps: 100, max_frames: 10, max_mb: 500 });
 
   const t = (key, vars) => translate(lang, key, vars);
+  const puzzleUnit = (count) => (lang === "zh" ? "个谜题" : count === 1 ? "puzzle" : "puzzles");
   const steps = analysis?.steps || [];
   const n = analysis?.puzzle?.size || 9;
   const current = idx >= 0 ? steps[idx] : null;
@@ -717,7 +718,7 @@ export default function App() {
             <PageHead title={t("history.title")} description={t("history.desc")} />
             <div className="grid gap-4 sm:grid-cols-3">
               {[["rules", "layers.rules"], ["steps", "layers.steps"], ["frames", "layers.frames"]].map(([layer, key]) => (
-                <Card key={layer}><CardContent className="p-4"><div className="text-xs text-muted-foreground">{t(key)}</div><div className="mt-1 text-lg font-semibold">{store?.info?.counts?.[layer] || 0}</div><div className="text-xs text-muted-foreground">{fmtBytes(store?.info?.sizes?.[layer])}</div></CardContent></Card>
+                <Card key={layer}><CardContent className="p-4"><div className="text-xs text-muted-foreground">{t(key)}</div><div className="mt-1 text-lg font-semibold">{store?.info?.counts?.[layer] || 0} <span className="text-xs font-normal text-muted-foreground">{puzzleUnit(store?.info?.counts?.[layer] || 0)}</span></div><div className="text-xs text-muted-foreground">{fmtBytes(store?.info?.sizes?.[layer])}</div></CardContent></Card>
               ))}
             </div>
             <Card className="mt-4">
@@ -739,7 +740,7 @@ export default function App() {
               <CardContent className="p-0">{entryTable(filteredEntries)}</CardContent>
             </Card>
             <Card className="mt-4">
-              <CardHeader className="py-3.5"><CardTitle className="text-sm">{t("history.settings")}</CardTitle></CardHeader>
+              <CardHeader className="py-3.5"><CardTitle className="text-sm">{t("history.settings")}</CardTitle><p className="text-xs text-muted-foreground">{t("history.settingsDesc")}</p></CardHeader>
               <CardContent className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
                 {[["max_rules", "history.maxRules"], ["max_steps", "history.maxSteps"], ["max_frames", "history.maxFrames"], ["max_mb", "history.maxMb"]].map(([key, label]) => (
                   <label key={key} className="flex items-center justify-between gap-2 rounded-md border px-2.5 py-2"><span className="text-muted-foreground">{t(label)}</span><input type="number" min="0" value={settings[key] ?? ""} onChange={(e) => setSettings((s) => ({ ...s, [key]: Number(e.target.value) }))} className="w-14 bg-transparent text-right outline-none" /></label>
