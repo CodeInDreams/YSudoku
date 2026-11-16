@@ -249,6 +249,23 @@ async function apply(digits, corners, reset, pen) {
   return shot();
 }
 
+async function useTool(id) {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const ok = await page.evaluate((toolId) =>
+      Boolean(document.getElementById(toolId)?.classList.contains("selected")), id).catch(() => false);
+    if (ok) return true;
+    const locator = page.locator(`#${id}`);
+    const box = await locator.boundingBox().catch(() => null);
+    if (box) {
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2).catch(() => {});
+    } else {
+      await page.click(`#${id}`, { force: true }).catch(() => {});
+    }
+    await page.waitForTimeout(90);
+  }
+  return false;
+}
+
 async function act(action) {
   if (action.op === "batch") {
     await page.click("#control-select").catch(() => {});
@@ -260,14 +277,18 @@ async function act(action) {
       await page.waitForTimeout(20);
     }
     await page.click("#control-select").catch(() => {});
-    if (action.tool === "centre") await page.click("#control-centre").catch(() => {});
-    else await page.click("#control-normal").catch(() => {});
+    if (action.tool === "centre" && !(await useTool("control-centre"))) {
+      throw new Error("centre tool unavailable");
+    }
+    if (action.tool !== "centre" && !(await useTool("control-normal"))) {
+      throw new Error("digit tool unavailable");
+    }
     for (const digit of action.digits || []) {
       await page.keyboard.type(String(digit));
       await page.waitForTimeout(20);
     }
   } else if (action.op === "place") {
-    await page.click("#control-normal").catch(() => {});
+    if (!(await useTool("control-normal"))) throw new Error("digit tool unavailable");
     const r = Math.floor(action.cell / board.n);
     const c = action.cell % board.n;
     const [x, y] = center(r, c);
@@ -275,7 +296,7 @@ async function act(action) {
     await page.keyboard.type(String(action.value));
     await page.waitForTimeout(30);
   } else if (action.op === "mark" || action.op === "elim" || action.op === "clear") {
-    await page.click("#control-centre").catch(() => {});
+    if (!(await useTool("control-centre"))) throw new Error("centre tool unavailable");
     const r = Math.floor(action.cell / board.n);
     const c = action.cell % board.n;
     const [x, y] = center(r, c);

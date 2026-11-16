@@ -203,6 +203,8 @@ class Handler(BaseHTTPRequestHandler):
                     if key and digest and store.has_frames(key, digest):
                         result = {"ok": True, "session": key, "cached": True}
                     else:
+                        if key:
+                            store.delete_layer(key, "frames")
                         directory = str(store.frames_dir(key)) if key else None
                         result = live.build(str(body.get("url") or ""),
                                             body.get("steps") or [],

@@ -281,7 +281,7 @@
     try {
       const steps = buildStepActions();
       let hash = 2166136261;
-      const serialized = JSON.stringify(steps);
+      const serialized = "frame-v3:" + JSON.stringify(steps);
       for (let i = 0; i < serialized.length; i++) {
         hash ^= serialized.charCodeAt(i);
         hash = Math.imul(hash, 16777619);
