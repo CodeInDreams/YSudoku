@@ -149,6 +149,10 @@ class Handler(BaseHTTPRequestHandler):
             file = DIST_DIR / "index.html"
         elif path.startswith("/assets/") and DIST_DIR.exists():
             file = DIST_DIR / path.lstrip("/")
+        elif path.startswith("/mockups/") and DIST_DIR.exists():
+            file = DIST_DIR / path.lstrip("/")
+            if file.is_dir():
+                file = file / "index.html"
         elif path in ("/", "/index.html"):
             file = STATIC_DIR / "index.html"
         elif path.startswith("/static/"):
