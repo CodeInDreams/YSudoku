@@ -250,8 +250,14 @@
     if (!S.live || !S.live.session) return;
     const img = $("live-frame");
     clearTimeout(frameRetry);
-    img.onload = () => $("live-loading").classList.add("hidden");
+    img.onload = () => {
+      img.classList.add("ready");
+      $("live-view").classList.add("live-ready");
+      $("live-loading").classList.add("hidden");
+    };
     img.onerror = () => {
+      img.classList.remove("ready");
+      $("live-view").classList.remove("live-ready");
       $("live-loading").classList.remove("hidden");
       frameRetry = setTimeout(() => showLiveFrame(idx), 400);
     };
@@ -263,6 +269,8 @@
     $("live-view").classList.remove("hidden");
     loading.classList.remove("hidden");
     S.live = { session: null, url: url || "" };
+    $("live-view").classList.remove("live-ready");
+    $("live-frame").classList.remove("ready");
     if (!url) {
       loading.classList.add("hidden");
       $("live-badge").textContent = "没有 SudokuPad 链接";
