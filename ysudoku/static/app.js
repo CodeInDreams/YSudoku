@@ -350,7 +350,7 @@
           add("text", {
             x: c + 0.18 + ((v - 1) % 3) * 0.27,
             y: r + 0.22 + Math.floor((v - 1) / 3) * 0.23,
-            "font-size": "0.12", fill: "#33415c",
+            "font-size": "0.17", fill: "#1f2937",
             "font-family": "ui-monospace, monospace",
           }, String(v));
         });
@@ -1009,6 +1009,16 @@
     $("step-title").textContent = step.title;
     $("step-tier").textContent = TIER_LABEL[step.tier] || `T${step.tier}`;
     $("step-detail").textContent = step.detail;
+    const candLine = $("step-candidates");
+    if (step.candidates && step.candidates.length) {
+      const name = (cell) => `R${Math.floor(cell / S.n) + 1}C${(cell % S.n) + 1}`;
+      candLine.textContent = "候选：" + step.candidates
+        .map((c) => `${name(c.cell)} {${c.digits.join("、")}}`)
+        .join("；");
+      candLine.classList.remove("hidden");
+    } else {
+      candLine.classList.add("hidden");
+    }
     const audit = $("step-audit");
     audit.className = "audit";
     if (step.audit === "ok") { audit.textContent = "✓ 已用穷举反证校验：结论唯一必然"; audit.classList.remove("hidden"); }

@@ -41,6 +41,24 @@ class Solver:
     def _pre(self):
         return self.state.dom.copy(), self.state.vals.copy()
 
+    def _candidates(self, events, pre_dom):
+        masks: dict[int, int] = {}
+        for ev in events:
+            if ev.kind not in ("elim", "place"):
+                continue
+            if ev.cell not in masks:
+                masks[ev.cell] = pre_dom[ev.cell]
+            if ev.kind == "elim":
+                masks[ev.cell] &= ~(1 << (ev.value - 1))
+            else:
+                masks[ev.cell] = 1 << (ev.value - 1)
+        out = []
+        for cell, mask in masks.items():
+            digits = [v for v in range(1, self.state.n + 1) if mask & (1 << (v - 1))]
+            if digits:
+                out.append({"cell": cell, "digits": digits})
+        return out[:8]
+
     def next_step(self):
         # Constraints that touch the last step's cells first: humans continue
         # around the area they were just reasoning about.
@@ -61,6 +79,7 @@ class Solver:
             if events:
                 step = build_step(len(self.steps), events, self.state.n)
                 step.pre_dom, step.pre_vals = pre_dom, pre_vals
+                step.candidates = self._candidates(events, pre_dom)
                 self.focus = {e.cell for e in events}
                 return step, None
 
@@ -79,6 +98,7 @@ class Solver:
             if events:
                 step = build_step(len(self.steps), events, self.state.n)
                 step.pre_dom, step.pre_vals = pre_dom, pre_vals
+                step.candidates = self._candidates(events, pre_dom)
                 self.focus = {e.cell for e in events}
                 return step, None
         return None, None

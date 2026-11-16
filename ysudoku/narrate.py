@@ -74,6 +74,7 @@ class Step:
     visual: dict = field(default_factory=dict)
     pre_dom: list[int] = field(default_factory=list, repr=False)
     pre_vals: list[int] = field(default_factory=list, repr=False)
+    candidates: list[dict] = field(default_factory=list)
     audit: str = "unchecked"
 
     def to_dict(self, n: int) -> dict:
@@ -84,6 +85,8 @@ class Step:
             "title": self.title,
             "detail": self.detail,
             "visual": self.visual,
+            "pre_dom": self.pre_dom,
+            "candidates": self.candidates,
             "audit": self.audit,
             "events": [e.to_dict() for e in self.events],
         }
