@@ -118,6 +118,17 @@ function center(r, c) {
   return [grid.x + (c + 0.5) * unit, grid.y + (r + 0.5) * unit];
 }
 
+async function cellPoint(r, c) {
+  const box = await page.locator("svg.boardsvg").boundingBox();
+  const viewBox = await page.locator("svg.boardsvg").getAttribute("viewBox");
+  const parts = (viewBox || "-16 -16 608 608").trim().split(/\s+/).map(Number);
+  const units = parts[2] || 608;
+  const pad = 16 / units;
+  const unit = (box.width * (1 - 2 * pad)) / board.n;
+  return [box.x + box.width * pad + (c + 0.5) * unit,
+          box.y + box.height * pad + (r + 0.5) * unit];
+}
+
 async function readBoard() {
   return await page.evaluate((n) => {
     const values = new Array(n * n).fill(0);
@@ -167,7 +178,7 @@ async function apply(digits, corners, reset, pen) {
   const clickCell = async (cell) => {
     const r = Math.floor(cell / board.n);
     const c = cell % board.n;
-    const [x, y] = center(r, c);
+    const [x, y] = await cellPoint(r, c);
     await page.mouse.click(x, y);
   };
 
@@ -229,7 +240,7 @@ async function apply(digits, corners, reset, pen) {
       if (action.op === "circle" && cells.length) {
         const r = Math.floor(cells[0] / board.n);
         const c = cells[0] % board.n;
-        const [x, y] = center(r, c);
+        const [x, y] = await cellPoint(r, c);
         await page.mouse.click(x, y);
       } else if (action.op === "connect" && cells.length >= 2) {
         const [r1, c1] = [Math.floor(cells[0] / board.n), cells[0] % board.n];
@@ -266,13 +277,22 @@ async function useTool(id) {
   return false;
 }
 
+async function clearSelection() {
+  await page.keyboard.press("Escape").catch(() => {});
+  await page.evaluate(() => {
+    const select = document.getElementById("control-select");
+    if (select && /selected/.test(select.className)) select.click();
+  }).catch(() => {});
+  await page.waitForTimeout(15);
+}
+
 async function act(action) {
   if (action.op === "batch") {
     await page.click("#control-select").catch(() => {});
     for (const cell of action.cells || []) {
       const r = Math.floor(cell / board.n);
       const c = cell % board.n;
-      const [x, y] = center(r, c);
+      const [x, y] = await cellPoint(r, c);
       await page.mouse.click(x, y);
       await page.waitForTimeout(20);
     }
@@ -288,18 +308,42 @@ async function act(action) {
       await page.waitForTimeout(20);
     }
   } else if (action.op === "place") {
-    if (!(await useTool("control-normal"))) throw new Error("digit tool unavailable");
+    await clearSelection();
     const r = Math.floor(action.cell / board.n);
     const c = action.cell % board.n;
-    const [x, y] = center(r, c);
+    const [x, y] = await cellPoint(r, c);
     await page.mouse.click(x, y);
+    if (!(await useTool("control-normal"))) throw new Error("digit tool unavailable");
     await page.keyboard.type(String(action.value));
     await page.waitForTimeout(30);
+    const placed = await readBoard();
+    if (placed.values[action.cell] !== Number(action.value)) {
+      throw new Error(`place mismatch at cell ${action.cell}: wanted ${action.value}`);
+    }
+  } else if (action.op === "candidates") {
+    await clearSelection();
+    const r = Math.floor(action.cell / board.n);
+    const c = action.cell % board.n;
+    const [x, y] = await cellPoint(r, c);
+    await page.mouse.click(x, y);
+    if (!(await useTool("control-centre"))) throw new Error("centre tool unavailable");
+    const current = await readBoard();
+    if (current.values[action.cell]) throw new Error(`candidate action on solved cell ${action.cell}`);
+    const before = new Set(current.corners[action.cell] || []);
+    const wanted = new Set((action.digits || []).map(Number));
+    for (const digit of before) if (!wanted.has(digit)) await page.keyboard.type(String(digit));
+    for (const digit of wanted) if (!before.has(digit)) await page.keyboard.type(String(digit));
+    await page.waitForTimeout(20);
+    const after = await readBoard();
+    const got = new Set(after.corners[action.cell] || []);
+    if (after.values[action.cell] || got.size !== wanted.size || [...wanted].some((d) => !got.has(d))) {
+      throw new Error(`candidate mismatch at cell ${action.cell}`);
+    }
   } else if (action.op === "mark" || action.op === "elim" || action.op === "clear") {
     if (!(await useTool("control-centre"))) throw new Error("centre tool unavailable");
     const r = Math.floor(action.cell / board.n);
     const c = action.cell % board.n;
-    const [x, y] = center(r, c);
+    const [x, y] = await cellPoint(r, c);
     await page.mouse.click(x, y);
     for (const digit of action.digits || [action.value]) {
       if (digit == null) continue;
@@ -309,13 +353,44 @@ async function act(action) {
   }
 }
 
+async function clearCellValue(cell) {
+  await clearSelection();
+  const r = Math.floor(cell / board.n);
+  const c = cell % board.n;
+  const [x, y] = await cellPoint(r, c);
+  await page.mouse.click(x, y);
+  if (!(await useTool("control-normal"))) throw new Error("digit tool unavailable");
+  await page.keyboard.press("Backspace");
+  await page.waitForTimeout(25);
+  const after = await readBoard();
+  if (after.values[cell]) throw new Error(`could not clear stray value at cell ${cell}`);
+}
+
 async function buildSession(url, steps, session, targetDir) {
   await open(url);
   const dir = targetDir || path.join(process.cwd(), ".cache", "frames", session);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "-1.png"), await shot());
+  const expected = new Map();
   for (let i = 0; i < steps.length; i++) {
-    for (const action of steps[i] || []) await act(action);
+    for (const action of steps[i] || []) {
+      if (action.op === "place") expected.set(action.cell, Number(action.value));
+      await act(action);
+    }
+    // Safety net: only values scheduled by a place action may remain.
+    let actual = await readBoard();
+    const stray = actual.values
+      .map((value, cell) => (value && expected.get(cell) !== value ? cell : -1))
+      .filter((cell) => cell >= 0);
+    for (const cell of stray) await clearCellValue(cell);
+    if (stray.length) {
+      actual = await readBoard();
+      const left = actual.values
+        .map((value, cell) => (value && expected.get(cell) !== value ? cell : -1))
+        .filter((cell) => cell >= 0);
+      if (left.length) throw new Error(`stray values remain: ${left.join(",")}`);
+    }
+    await clearSelection();
     fs.writeFileSync(path.join(dir, `${i}.png`), await shot());
   }
   await page.click("#control-normal").catch(() => {});

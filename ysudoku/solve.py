@@ -59,48 +59,95 @@ class Solver:
                 out.append({"cell": cell, "digits": digits})
         return out[:8]
 
+    def _commit(self, events, pre_dom, pre_vals):
+        step = build_step(len(self.steps), events, self.state.n)
+        step.pre_dom, step.pre_vals = pre_dom, pre_vals
+        step.candidates = self._candidates(events, pre_dom)
+        self.focus = {e.cell for e in events}
+        return step
+
+    def _technique_step(self, name, technique):
+        trigger = TRIGGERS.get(name)
+        if trigger is not None and not trigger(self.state):
+            return None
+        pre_dom, pre_vals = self._pre()
+        try:
+            events = technique(self.state, self.constraints)
+        except Contradiction as exc:
+            self.state.record = False
+            return None, f"技巧推导出矛盾：{exc}"
+        if not events:
+            return None
+        return self._commit(events, pre_dom, pre_vals)
+
+    def _constraint_step(self, constraint):
+        pre_dom, pre_vals = self._pre()
+        self.state.begin()
+        try:
+            constraint.prune(self.state)
+        except Contradiction as exc:
+            self.state.record = False
+            self.state.events = []
+            return None, f"规则「{constraint.describe()}」推导出矛盾：{exc}"
+        events = self.state.end()
+        if events:
+            return self._commit(events, pre_dom, pre_vals)
+        return None
+
     def next_step(self):
-        # Constraints that touch the last step's cells first: humans continue
-        # around the area they were just reasoning about.
-        ordered = sorted(
-            self.constraints,
-            key=lambda c: -len(set(c.cells()) & self.focus),
-        )
+        # Explicit user/predicate constraints are authoritative and run first.
+        for constraint in self.constraints:
+            if getattr(constraint, "kind", "") != "custom":
+                continue
+            result = self._constraint_step(constraint)
+            if isinstance(result, tuple):
+                return result
+            if result is not None:
+                return result, None
+
+        # Singles first: after every placement, close all naked/hidden singles
+        # before spending a step on a global rule.
+        by_name = {name: (name, technique) for name, _tier, technique in TECHNIQUES}
+        for name in ("naked_single", "hidden_single"):
+            _name, technique = by_name[name]
+            result = self._technique_step(name, technique)
+            if isinstance(result, tuple):
+                return result
+            if result is not None:
+                return result, None
+
+        # Then constraints, preferring ones around the last step and ones whose
+        # cells have the fewest remaining candidates.
+        def constraint_key(constraint):
+            cells = constraint.cells()
+            overlap = len(set(cells) & self.focus)
+            smallest = min(
+                (self.state.dom[cell].bit_count() for cell in cells
+                 if not self.state.vals[cell]),
+                default=self.state.n + 1,
+            )
+            return (-overlap, smallest)
+
+        ordered = sorted(self.constraints, key=constraint_key)
         for constraint in ordered:
-            pre_dom, pre_vals = self._pre()
-            self.state.begin()
-            try:
-                constraint.prune(self.state)
-            except Contradiction as exc:
-                self.state.record = False
-                self.state.events = []
-                return None, f"规则「{constraint.describe()}」推导出矛盾：{exc}"
-            events = self.state.end()
-            if events:
-                step = build_step(len(self.steps), events, self.state.n)
-                step.pre_dom, step.pre_vals = pre_dom, pre_vals
-                step.candidates = self._candidates(events, pre_dom)
-                self.focus = {e.cell for e in events}
-                return step, None
+            if getattr(constraint, "kind", "") == "custom":
+                continue
+            result = self._constraint_step(constraint)
+            if isinstance(result, tuple):
+                return result
+            if result is not None:
+                return result, None
 
         for name, _tier, technique in TECHNIQUES:
+            if name in ("naked_single", "hidden_single"):
+                continue
             if name == "forcing_chain" and not self.allow_chains:
                 continue
-            trigger = TRIGGERS.get(name)
-            if trigger is not None and not trigger(self.state):
-                continue
-            pre_dom, pre_vals = self._pre()
-            try:
-                events = technique(self.state, self.constraints)
-            except Contradiction as exc:
-                self.state.record = False
-                return None, f"技巧推导出矛盾：{exc}"
-            if events:
-                step = build_step(len(self.steps), events, self.state.n)
-                step.pre_dom, step.pre_vals = pre_dom, pre_vals
-                step.candidates = self._candidates(events, pre_dom)
-                self.focus = {e.cell for e in events}
-                return step, None
+            result = self._technique_step(name, technique)
+            if isinstance(result, tuple):
+                return result
+            if result is not None:
+                return result, None
         return None, None
 
     def run(self, max_steps: int = 4000) -> SolveResult:
