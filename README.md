@@ -28,7 +28,8 @@ python3 -m ysudoku --web
 ```
 
 The **Example** button loads a real puzzle — *Globosite* by lgastako (229 steps, ~2 s) — with a
-link to the original SudokuPad page. You can also paste any SudokuPad link.
+link to the original SudokuPad page. You can paste a SudokuPad link, a **Logic Masters puzzle page**
+(the SudokuPad link is extracted automatically), a bare puzzle id, or a local JSON file.
 
 Text-only reasoning from the CLI:
 
@@ -168,6 +169,8 @@ Every step carries a structured reason and an animation script; T4 steps are alw
 
 - Left: candidates, region borders, constraint outlines (cages, arrows, fish links)
 - Right: conclusion, premises, effects; expandable rule interpretation and step list
+- Light/dark theme toggle (follows the system by default, remembered per browser)
+- Responsive phone layout: stacked header, full-width board, touch-sized controls
 - Controls: previous / next / play-pause / speed / scrubber / arrow keys
 - **SudokuPad original + annotations**: embeds the official page and projects highlights/links on
   top. Use **Calibrate** (three sliders) to align; the overlay is click-through, so the original
