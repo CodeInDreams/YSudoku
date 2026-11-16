@@ -348,3 +348,33 @@ input[type=range] { accent-color: var(--accent); }
   .side { overflow-y: auto; }
   .live-view { width: min(100%, calc(100vh - 260px)); }
 }
+
+.panel-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 6px; }
+.storage-info { margin: 8px 0; font-size: 12px; color: var(--muted); line-height: 1.7; }
+.store-controls { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+.store-controls input[type=text] {
+  flex: 1 1 110px; min-width: 90px; padding: 7px 9px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--panel-2); color: var(--text); font-size: 12px;
+}
+.store-controls select {
+  padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--panel-2); color: var(--text); font-size: 12px;
+}
+.store-settings { margin-top: 10px; font-size: 12px; }
+.store-settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 8px 0; }
+.store-settings-grid label { display: flex; justify-content: space-between; gap: 6px; align-items: center; }
+.store-settings-grid input {
+  width: 64px; padding: 5px 6px; border-radius: 6px; border: 1px solid var(--line);
+  background: var(--panel-2); color: var(--text);
+}
+.history-layer { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 5px; }
+.layer-chip {
+  font-size: 10.5px; padding: 1px 6px; border-radius: 6px;
+  background: var(--panel-2); color: var(--muted);
+}
+.layer-chip button { padding: 0 4px; font-size: 10.5px; border: none; background: transparent; color: var(--red); }
+.history-row .star {
+  border: none; background: transparent; padding: 0 2px; color: var(--muted);
+  font-size: 14px; float: right;
+}
+.history-row .star.on { color: #f5b301; }

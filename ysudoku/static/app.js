@@ -58,6 +58,7 @@
   // ------------------------------------------------------------------ load
   async function loadPuzzle(url, endpoint = "/api/solve") {
     if (!url && endpoint === "/api/solve") return;
+    S.target = endpoint === "/api/demo" ? "" : url;
     setLoading(true);
     try {
       const res = await fetch(endpoint, {
@@ -278,9 +279,18 @@
       return;
     }
     try {
+      const steps = buildStepActions();
+      let hash = 2166136261;
+      const serialized = JSON.stringify(steps);
+      for (let i = 0; i < serialized.length; i++) {
+        hash ^= serialized.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+      }
       const res = await fetch("/api/live/build", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url, steps: buildStepActions() }),
+        body: JSON.stringify({
+          url, steps, key: S.key || "", steps_hash: (hash >>> 0).toString(16),
+        }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || "构建失败");
@@ -385,6 +395,7 @@
 
   function init(data) {
     S.data = data;
+    S.key = data.storage?.key || null;
     S.n = data.puzzle.size;
     S.regions = (data.chaos_regions && data.chaos_regions.length)
       ? data.chaos_regions
@@ -555,40 +566,127 @@
     stuck: "卡住", unsupported: "不支持", invalid: "规则冲突",
   };
 
+  let STORE = null;
+
+  function fmtBytes(n) {
+    if (!n) return "0 B";
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    return `${(n / 1024 / 1024).toFixed(2)} MB`;
+  }
+
   async function refreshHistory() {
     try {
-      const res = await fetch("/api/history");
+      const res = await fetch("/api/store");
       if (!res.ok) return;
-      renderHistory(await res.json());
+      STORE = await res.json();
+      renderStorage();
+      renderHistory();
     } catch (err) { /* history is best-effort */ }
   }
 
-  function renderHistory(entries) {
+  function renderStorage() {
+    if (!STORE) return;
+    const info = STORE.info || {};
+    const box = $("storage-info");
+    if (box) {
+      const sizes = info.sizes || {};
+      const counts = info.counts || {};
+      box.innerHTML = "";
+      const line1 = document.createElement("div");
+      line1.textContent = `位置：${info.location || ""}`;
+      const line2 = document.createElement("div");
+      line2.textContent = `规则 ${counts.rules || 0} 个 · ${fmtBytes(sizes.rules)}｜`
+        + `步骤 ${counts.steps || 0} 个 · ${fmtBytes(sizes.steps)}｜`
+        + `截图 ${counts.frames || 0} 个 · ${fmtBytes(sizes.frames)}`;
+      box.appendChild(line1);
+      box.appendChild(line2);
+    }
+    const settings = info.settings || {};
+    for (const [id, key] of [["max-rules", "max_rules"], ["max-steps", "max_steps"],
+                              ["max-frames", "max_frames"], ["max-mb", "max_mb"]]) {
+      const input = $(id);
+      if (input && document.activeElement !== input) input.value = settings[key] ?? "";
+    }
+  }
+
+  async function toggleFavorite(entry) {
+    await fetch("/api/store/favorite", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: entry.key, favorite: !entry.favorite }),
+    });
+    refreshHistory();
+  }
+
+  async function deleteLayer(entry, layer) {
+    const label = { rules: "规则理解", steps: "推理步骤", frames: "截图" }[layer] || layer;
+    if (!window.confirm(`删除「${entry.title}」的${label}？`)) return;
+    await fetch("/api/store/delete", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: entry.key, layer }),
+    });
+    refreshHistory();
+  }
+
+  function renderHistory() {
     const box = $("history");
-    if (!box) return;
+    if (!box || !STORE) return;
+    const query = ($("history-search")?.value || "").trim().toLowerCase();
+    const favoritesOnly = $("history-fav")?.checked;
+    const sort = $("history-sort")?.value || "recent";
+    let entries = (STORE.entries || []).filter((entry) => {
+      if (favoritesOnly && !entry.favorite) return false;
+      if (!query) return true;
+      return `${entry.title || ""} ${entry.author || ""}`.toLowerCase().includes(query);
+    });
+    entries.sort((a, b) => sort === "title"
+      ? String(a.title).localeCompare(String(b.title))
+      : (b.at || 0) - (a.at || 0));
     box.innerHTML = "";
-    if (!entries || !entries.length) {
+    if (!entries.length) {
       const empty = document.createElement("div");
       empty.className = "muted";
       empty.textContent = "还没有记录。";
       box.appendChild(empty);
       return;
     }
-    for (const entry of entries.slice(0, 40)) {
+    for (const entry of entries.slice(0, 80)) {
       const row = document.createElement("div");
       row.className = "history-row";
+      const star = document.createElement("button");
+      star.className = `star${entry.favorite ? " on" : ""}`;
+      star.textContent = entry.favorite ? "★" : "☆";
+      star.title = entry.favorite ? "取消收藏" : "收藏";
+      star.addEventListener("click", (event) => { event.stopPropagation(); toggleFavorite(entry); });
+      row.appendChild(star);
       const title = document.createElement("div");
       title.className = "history-title";
-      title.textContent = entry.title || entry.id || entry.target || "未命名";
+      title.textContent = entry.title || entry.key;
       const meta = document.createElement("div");
       meta.className = "history-meta";
-      const at = (entry.at || "").replace("T", " ").slice(0, 16);
-      const status = STATUS_LABEL[entry.status] || entry.status;
-      meta.textContent = `${at} · ${status} · ${entry.steps || 0} 步`;
+      const at = entry.at ? new Date(entry.at * 1000).toLocaleString() : "";
+      meta.textContent = `${at} · ${STATUS_LABEL[entry.status] || entry.status || ""} · ${entry.steps_count || 0} 步`;
+      const layers = document.createElement("div");
+      layers.className = "history-layer";
+      for (const [layer, label] of [["rules", "规则"], ["steps", "步骤"], ["frames", "截图"]]) {
+        if (!entry.layers || !entry.layers[layer]) continue;
+        const chip = document.createElement("span");
+        chip.className = "layer-chip";
+        chip.textContent = `${label} ${fmtBytes(entry.sizes?.[layer] || 0)} `;
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.textContent = "×";
+        remove.title = `删除${label}`;
+        remove.addEventListener("click", (event) => { event.stopPropagation(); deleteLayer(entry, layer); });
+        chip.appendChild(remove);
+        layers.appendChild(chip);
+      }
       row.appendChild(title);
       row.appendChild(meta);
+      row.appendChild(layers);
       row.addEventListener("click", () => {
         stopPlay();
+        $("url").value = entry.demo ? "" : entry.target;
         loadPuzzle(entry.demo ? "" : entry.target, entry.demo ? "/api/demo" : "/api/solve");
       });
       box.appendChild(row);
@@ -1187,10 +1285,42 @@
     stopPlay();
     loadPuzzle($("url").value.trim());
   });
-  $("history-clear").addEventListener("click", async (event) => {
-    event.preventDefault();
-    try { await fetch("/api/history/clear", { method: "POST" }); } catch (err) { /* ignore */ }
+  for (const id of ["history-search", "history-sort", "history-fav"]) {
+    const node = $(id);
+    if (node) node.addEventListener("input", renderHistory);
+    if (node) node.addEventListener("change", renderHistory);
+  }
+  $("save-store-settings").addEventListener("click", async () => {
+    await fetch("/api/store/settings", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        max_rules: Number($("max-rules").value || 0),
+        max_steps: Number($("max-steps").value || 0),
+        max_frames: Number($("max-frames").value || 0),
+        max_mb: Number($("max-mb").value || 0),
+      }),
+    });
     refreshHistory();
+  });
+  async function refreshLayer(endpoint) {
+    if (!S.data) return;
+    const res = await fetch(endpoint, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target: S.target || "", demo: !!S.data.demo }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.error) { showStatus("bad", data.error || "刷新失败"); return; }
+    init(data);
+  }
+  $("refresh-rules").addEventListener("click", () => refreshLayer("/api/store/refresh_rules"));
+  $("resolve-again").addEventListener("click", () => refreshLayer("/api/store/resolve"));
+  $("rerender").addEventListener("click", async () => {
+    if (!S.key) return;
+    await fetch("/api/store/rerender", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: S.key }),
+    });
+    startLive(S.data.source_url || "");
   });
   $("calib-toggle").addEventListener("click", () => {
     $("calib-panel").classList.toggle("hidden");

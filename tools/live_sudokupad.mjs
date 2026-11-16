@@ -288,9 +288,9 @@ async function act(action) {
   }
 }
 
-async function buildSession(url, steps, session) {
+async function buildSession(url, steps, session, targetDir) {
   await open(url);
-  const dir = path.join(process.cwd(), ".cache", "frames", session);
+  const dir = targetDir || path.join(process.cwd(), ".cache", "frames", session);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "-1.png"), await shot());
   for (let i = 0; i < steps.length; i++) {
@@ -339,11 +339,12 @@ const server = http.createServer((req, res) => {
       if (url.pathname === "/build") {
         if (!body.url) return json(res, 400, { error: "url required" });
         touch();
-        const session = Date.now().toString(36);
+        const session = String(body.session || Date.now().toString(36));
         const steps = body.steps || [];
+        const targetDir = body.dir || null;
         work = work.then(
-          () => buildSession(body.url, steps, session),
-          () => buildSession(body.url, steps, session),
+          () => buildSession(body.url, steps, session, targetDir),
+          () => buildSession(body.url, steps, session, targetDir),
         ).catch(() => {});
         return json(res, 200, { ok: true, session, count: steps.length });
       }

@@ -108,9 +108,15 @@ def place(digits: list[list[int]], reset: bool, corners: list | None = None,
     }, timeout=120))
 
 
-def build(url: str, steps: list[list[dict]]) -> dict:
+def build(url: str, steps: list[list[dict]], directory: str | None = None,
+          session: str | None = None) -> dict:
     ensure()
-    return json.loads(_request("/build", {"url": url, "steps": steps}, timeout=900))
+    payload = {"url": url, "steps": steps}
+    if directory:
+        payload["dir"] = directory
+    if session:
+        payload["session"] = session
+    return json.loads(_request("/build", payload, timeout=900))
 
 
 def frame(session: str | None = None, step: int | str | None = None) -> bytes:

@@ -8,10 +8,64 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import history, live
+import time
+
+from . import history, live, store
 from .pipeline import analyze
 
 STATIC_DIR = Path(__file__).parent / "static"
+def _stored_analysis(target: str, body: dict, demo: bool = False,
+                     force_rules: bool = False, force_steps: bool = False):
+    key = store.key_for(target)
+    if force_rules:
+        for layer in ("rules", "steps", "frames"):
+            store.delete_layer(key, layer)
+    elif force_steps:
+        for layer in ("steps", "frames"):
+            store.delete_layer(key, layer)
+
+    rules = store.load_rules(key)
+    meta = store._meta(key)
+    if not force_rules and not force_steps and rules:
+        cached = store.load_analysis(key)
+        if cached and meta.get("rules_hash") == rules.get("hash"):
+            cached["storage"] = {
+                "key": key, "location": store.storage_info()["location"],
+                "settings": store.load_settings(),
+            }
+            return key, cached
+
+    analysis = analyze(
+        target,
+        demo=demo,
+        use_llm=(force_rules or not rules),
+        spec_override=rules["spec"] if rules and not force_rules else None,
+        do_audit=bool(body.get("audit", False)),
+        allow_chains=True if demo else bool(body.get("chains", True)),
+        use_global=bool(body.get("global", True)),
+        global_time_limit=float(body.get("global_timeout", 60)),
+    )
+    payload = analysis.to_json()
+    info = {
+        "target": "" if demo else target,
+        "demo": demo,
+        "title": analysis.puzzle.title,
+        "author": analysis.puzzle.author,
+        "at": time.time(),
+        "status": analysis.status,
+        "steps_count": len(analysis.result.steps),
+    }
+    if analysis.spec:
+        store.save_rules(key, analysis.spec, info)
+    if analysis.status != "invalid":
+        store.save_analysis(key, payload, info)
+    payload["storage"] = {
+        "key": key, "location": store.storage_info()["location"],
+        "settings": store.load_settings(),
+    }
+    return key, payload
+
+
 _CONTENT_TYPES = {
     ".html": "text/html; charset=utf-8",
     ".css": "text/css; charset=utf-8",
@@ -38,14 +92,27 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = urlparse(self.path).path
+        if path == "/api/store":
+            info = store.storage_info()
+            payload = {"info": info, "entries": store.list_entries()}
+            self._send(200, json.dumps(payload, ensure_ascii=False).encode(), "application/json")
+            return
         if path == "/api/live/health":
             self._send(200, json.dumps({"ok": live._healthy()}).encode(), "application/json")
             return
         if path == "/api/live/frame":
             try:
                 query = parse_qs(urlparse(self.path).query)
-                self._send(200, live.frame(query.get("session", [None])[0],
-                                           query.get("step", [None])[0]), "image/png")
+                session = query.get("session", [None])[0]
+                step = query.get("step", [None])[0]
+                if session and step is not None:
+                    frame = store.frame_path(session, step)
+                    if frame.exists():
+                        self._send(200, frame.read_bytes(), "image/png")
+                    else:
+                        self._send(404, b'{"error":"frame not ready"}', "application/json")
+                    return
+                self._send(200, live.frame(), "image/png")
             except live.LiveError as exc:
                 self._send(503, json.dumps({"error": str(exc)}, ensure_ascii=False).encode(),
                            "application/json")
@@ -89,15 +156,59 @@ class Handler(BaseHTTPRequestHandler):
         if urlparse(self.path).path not in (
             "/api/solve", "/api/demo", "/api/live/start", "/api/live/place",
             "/api/live/build", "/api/history/clear",
+            "/api/store/settings", "/api/store/delete", "/api/store/favorite",
+            "/api/store/refresh_rules", "/api/store/resolve", "/api/store/rerender",
         ):
             self._send(404, b'{"error":"not found"}', "application/json")
             return
         length = int(self.headers.get("Content-Length") or 0)
+        if urlparse(self.path).path.startswith("/api/store/"):
+            try:
+                body = json.loads(self.rfile.read(length) or b"{}")
+                path = urlparse(self.path).path
+                if path == "/api/store/settings":
+                    result = store.save_settings(**body)
+                elif path == "/api/store/delete":
+                    store.delete_layer(str(body.get("key") or ""), str(body.get("layer") or ""))
+                    result = {"ok": True}
+                elif path == "/api/store/favorite":
+                    store.set_favorite(str(body.get("key") or ""), bool(body.get("favorite")))
+                    result = {"ok": True}
+                elif path == "/api/store/rerender":
+                    key = str(body.get("key") or "")
+                    store.delete_layer(key, "frames")
+                    result = {"ok": True, "key": key}
+                elif path in ("/api/store/refresh_rules", "/api/store/resolve"):
+                    target = str(body.get("target") or "")
+                    demo = bool(body.get("demo"))
+                    key, payload = _stored_analysis(
+                        target, body, demo=demo,
+                        force_rules=(path == "/api/store/refresh_rules"),
+                        force_steps=(path == "/api/store/resolve"),
+                    )
+                    result = payload
+                else:
+                    result = {"error": "unknown store action"}
+                self._send(200, json.dumps(result, ensure_ascii=False).encode(), "application/json")
+            except Exception as exc:  # noqa: BLE001
+                self._send(500, json.dumps({"error": str(exc)}, ensure_ascii=False).encode(),
+                           "application/json")
+            return
         if urlparse(self.path).path in ("/api/live/start", "/api/live/place", "/api/live/build"):
             try:
                 body = json.loads(self.rfile.read(length) or b"{}")
                 if urlparse(self.path).path == "/api/live/build":
-                    result = live.build(str(body.get("url") or ""), body.get("steps") or [])
+                    key = str(body.get("key") or "")
+                    digest = str(body.get("steps_hash") or "")
+                    if key and digest and store.has_frames(key, digest):
+                        result = {"ok": True, "session": key, "cached": True}
+                    else:
+                        directory = str(store.frames_dir(key)) if key else None
+                        result = live.build(str(body.get("url") or ""),
+                                            body.get("steps") or [],
+                                            directory=directory, session=key or None)
+                        if key and digest:
+                            store.set_frames_hash(key, digest)
                 elif urlparse(self.path).path == "/api/live/start":
                     result = live.start(str(body.get("url") or ""))
                 else:
@@ -129,21 +240,10 @@ class Handler(BaseHTTPRequestHandler):
             self._send(400, b'{"error":"missing url"}', "application/json")
             return
         try:
-            analysis = analyze(
-                target,
+            key, payload = _stored_analysis(
+                target, body,
                 demo=(urlparse(self.path).path == "/api/demo"),
-                use_llm=False if urlparse(self.path).path == "/api/demo" else bool(body.get("llm", True)),
-                do_audit=bool(body.get("audit", False)),
-                allow_chains=True if urlparse(self.path).path == "/api/demo" else bool(body.get("chains", True)),
-                use_global=bool(body.get("global", True)),
-                global_time_limit=float(body.get("global_timeout", 60)),
             )
-            try:
-                history.record(target, analysis,
-                               demo=(urlparse(self.path).path == "/api/demo"))
-            except Exception:  # noqa: BLE001 - history must never break a solve
-                pass
-            payload = analysis.to_json()
         except Exception as exc:  # noqa: BLE001 - surfaced to the UI
             payload = {"error": str(exc)}
             self._send(500, json.dumps(payload, ensure_ascii=False).encode("utf-8"), "application/json")

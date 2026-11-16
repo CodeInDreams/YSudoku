@@ -104,6 +104,7 @@
 
     <details class="panel" open>
       <summary>本题规则理解</summary>
+      <div class="panel-actions"><button type="button" class="mini" id="refresh-rules">刷新规则</button></div>
       <div id="rules" class="rules"></div>
     </details>
 
@@ -114,13 +115,35 @@
 
     <details class="panel">
       <summary>推理步骤列表</summary>
+      <div class="panel-actions">
+        <button type="button" class="mini" id="resolve-again">重新解题</button>
+        <button type="button" class="mini" id="rerender">重新渲染</button>
+      </div>
       <ol id="step-list" class="step-list"></ol>
     </details>
 
     <details class="panel" id="history-panel" open>
       <summary>历史记录</summary>
-      <div class="history-head"><button type="button" id="history-clear" class="mini">清空</button></div>
+      <div id="storage-info" class="storage-info"></div>
+      <div class="store-controls">
+        <input id="history-search" type="text" placeholder="搜索标题/作者">
+        <select id="history-sort">
+          <option value="recent">最近</option>
+          <option value="title">标题</option>
+        </select>
+        <label class="switch"><input id="history-fav" type="checkbox"> 只看收藏</label>
+      </div>
       <div id="history" class="history"></div>
+      <details class="store-settings">
+        <summary>存储设置</summary>
+        <div class="store-settings-grid">
+          <label>规则 <input id="max-rules" type="number" min="0"></label>
+          <label>步骤 <input id="max-steps" type="number" min="0"></label>
+          <label>截图 <input id="max-frames" type="number" min="0"></label>
+          <label>总量 MB <input id="max-mb" type="number" min="0"></label>
+        </div>
+        <button type="button" class="mini" id="save-store-settings">保存</button>
+      </details>
     </details>
 
     <details class="panel">
