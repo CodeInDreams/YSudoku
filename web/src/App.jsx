@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { Badge } from "./components/ui/badge";
 import { Switch } from "./components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
+import { Textarea } from "./components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "./components/ui/popover";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -26,6 +27,8 @@ const RULE_EN = {
   killer: "Killer cages", cage: "Killer cages", whisper: "Whispers", renban: "Renbans",
   arrow: "Arrows", thermo: "Thermometers", sandwich: "Sandwiches", xsum: "X-Sums",
   region: "Regions", skyscraper: "Skyscrapers", consecutive: "Consecutive",
+  modular: "Global modularity (2×2: 1/4/7, 2/5/8, 3/6/9)",
+  entropy: "Global entropy (2×2: low/mid/high)",
 };
 
 function digitsOf(mask, n) {
@@ -175,6 +178,7 @@ export default function App() {
   const [sort, setSort] = useState("recent");
   const [favOnly, setFavOnly] = useState(false);
   const [error, setError] = useState("");
+  const [notes, setNotes] = useState("");
   const [deleted, setDeleted] = useState(false);
   const [frameErrors, setFrameErrors] = useState(0);
   const [lang, setLang] = useState(detectLang);
@@ -291,14 +295,15 @@ export default function App() {
     return () => { cancelled = true; };
   }, [session, idx, retry, deleted]);
 
-  function applyAnalysis(data) {
+  function applyAnalysis(data, keepView = false) {
     setAnalysis(data);
+    if (!keepView) setView("solve");
     setIdx(-1);
     setPlaying(false);
     setDeleted(false);
     setFrameErrors(0);
     setError("");
-    setView("solve");
+    setNotes(data.notes || data.rules?.notes || "");
     startLive(data);
     refreshStore();
   }
@@ -350,8 +355,8 @@ export default function App() {
     if (!analysis) return;
     setBusy(true); setPlaying(false);
     try {
-      const data = await postJson("/api/store/refresh_rules", { target: target || "", demo: !!analysis.demo });
-      applyAnalysis(data);
+      const data = await postJson("/api/store/refresh_rules", { target: target || "", demo: !!analysis.demo, notes });
+      applyAnalysis(data, true);
       setInspectorTab("explain");
     } catch (err) { setError(`${t("error.refresh")}: ${err.message}`); }
     finally { setBusy(false); }
@@ -438,6 +443,16 @@ export default function App() {
     return { visual: steps[idx]?.visual || {}, negatives };
   }, [analysis, idx, n, steps, deleted]);
 
+  const resolvedRules = useMemo(() => {
+    const merged = new Map();
+    for (const rule of analysis?.rules?.resolved || []) {
+      if (rule.kind === "_ignored") continue;
+      const label = ruleLabel(rule);
+      merged.set(label, (merged.get(label) || 0) + Number(rule.count || 1));
+    }
+    return [...merged.entries()].map(([label, count]) => ({ label, count }));
+  }, [analysis, lang]);
+
   const currentEntry = (store?.entries || []).find((entry) => entry.key === analysis?.storage?.key);
   const isSolved = ["solved", "solved-global", "solved-search"].includes(analysis?.status);
 
@@ -455,7 +470,7 @@ export default function App() {
         <div className="ml-auto flex items-center gap-1.5"><Badge variant="outline">{t("board.readonly")}</Badge><Badge variant="outline">{t("board.readonly.badge")}</Badge></div>
       </CardHeader>
       <CardContent className="p-4">
-        <div className="relative mx-auto flex aspect-square w-full max-w-[540px] items-center justify-center overflow-hidden rounded-md border bg-white">
+        <div className="relative mx-auto flex aspect-square w-full max-w-[540px] items-center justify-center overflow-hidden rounded-[2px] border bg-white">
           {!ready && !deleted && <div className="absolute inset-0 z-10 grid place-items-center gap-2 bg-white/80 text-xs text-slate-500"><Loader2 className="h-5 w-5 animate-spin text-primary" />{t("board.loading")}</div>}
           {deleted && (
             <div className="absolute inset-0 z-20 grid place-items-center bg-background/90 p-6 text-center">
@@ -560,8 +575,8 @@ export default function App() {
             ) : <p className="py-6 text-center text-xs text-muted-foreground">{t("step.noneHint")}</p>}
           </TabsContent>
           <TabsContent value="rules" className="mt-0 space-y-1">
-            {(analysis.rules?.resolved || []).filter((r) => r.kind !== "_ignored").map((rule, i) => (
-              <div key={i} className="flex items-center justify-between border-b py-1.5 text-xs last:border-0"><span>{ruleLabel(rule)}</span><span className="text-muted-foreground">× {rule.count || 1}</span></div>
+            {resolvedRules.map((rule, i) => (
+              <div key={i} className="flex items-center justify-between border-b py-1.5 text-xs last:border-0"><span>{rule.label}</span><span className="text-muted-foreground">× {rule.count}</span></div>
             ))}
             <Button variant="link" size="sm" className="mt-2 px-0" onClick={() => setView("rules")}>{t("nav.rules")} →</Button>
           </TabsContent>
@@ -708,19 +723,35 @@ export default function App() {
             <PageHead title={t("rules.title")} description={analysis ? t("rules.desc", { model: "deepseek-flash" }) : t("empty.solve")}
               actions={analysis ? <Button variant="outline" size="sm" onClick={refreshRules} disabled={busy}><RotateCw className="mr-1 h-3.5 w-3.5" />{t("rules.refresh")}</Button> : null} />
             {!analysis ? emptySolve : (
-              <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(300px,.7fr)]">
+              <div className="space-y-6">
                 <Card>
-                  <CardHeader><CardTitle className="text-sm">{t("rules.title")}</CardTitle><p className="text-xs text-muted-foreground">{t("rules.forced")}</p></CardHeader>
-                  <CardContent className="space-y-1 pt-0">
-                    {(analysis.rules?.resolved || []).filter((r) => r.kind !== "_ignored").map((rule, i) => (
-                      <div key={i} className="flex items-center justify-between border-b py-2 text-sm last:border-0"><span>{ruleLabel(rule)}</span><span className="text-xs text-muted-foreground">× {rule.count || 1}</span></div>
-                    ))}
-                    {analysis.rules?.warnings?.length ? <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"><AlertTriangle className="mr-1 inline h-3.5 w-3.5" />{analysis.rules.warnings[0]}</div> : null}
+                  <CardHeader className="py-3.5">
+                    <CardTitle className="text-sm">{t("rules.notes")}</CardTitle>
+                    <p className="text-xs text-muted-foreground">{t("rules.notesHint")}</p>
+                  </CardHeader>
+                  <CardContent className="space-y-3 pt-0">
+                    <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={4} placeholder={t("rules.notesPlaceholder")} className="text-sm" />
+                    <div className="flex justify-end"><Button size="sm" onClick={refreshRules} disabled={busy}><RotateCw className="mr-1 h-3.5 w-3.5" />{t("rules.apply")}</Button></div>
                   </CardContent>
                 </Card>
+                <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(300px,.7fr)]">
+                  <Card>
+                    <CardHeader><CardTitle className="text-sm">{t("rules.title")}</CardTitle><p className="text-xs text-muted-foreground">{t("rules.forced")}</p></CardHeader>
+                    <CardContent className="space-y-1 pt-0">
+                      {resolvedRules.map((rule, i) => (
+                        <div key={i} className="flex items-center justify-between border-b py-2 text-sm last:border-0"><span>{rule.label}</span><span className="text-xs text-muted-foreground">× {rule.count}</span></div>
+                      ))}
+                      {analysis.rules?.warnings?.length ? <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"><AlertTriangle className="mr-1 inline h-3.5 w-3.5" />{analysis.rules.warnings[0]}</div> : null}
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader><CardTitle className="text-sm">{t("rules.sheet")}</CardTitle><p className="text-xs text-muted-foreground">{t("rules.source")}: {analysis.spec_source || analysis.provenance || "—"}</p></CardHeader>
+                    <CardContent>{analysis.rule_sheet ? <img src={analysis.rule_sheet} alt="rule sheet" className="w-full rounded-md border bg-white" /> : <p className="text-xs text-muted-foreground">—</p>}</CardContent>
+                  </Card>
+                </div>
                 <Card>
-                  <CardHeader><CardTitle className="text-sm">{t("rules.sheet")}</CardTitle><p className="text-xs text-muted-foreground">{t("rules.source")}: {analysis.spec_source || analysis.provenance || "—"}</p></CardHeader>
-                  <CardContent>{analysis.rule_sheet ? <img src={analysis.rule_sheet} alt="rule sheet" className="w-full rounded-md border bg-white" /> : <p className="text-xs text-muted-foreground">—</p>}</CardContent>
+                  <CardHeader className="py-3.5"><CardTitle className="text-sm">{t("rules.original")}</CardTitle><p className="text-xs text-muted-foreground">{t("rules.originalHint")}</p></CardHeader>
+                  <CardContent className="pt-0"><pre className="whitespace-pre-wrap break-words rounded-md bg-muted px-3 py-3 font-sans text-sm leading-7">{analysis.puzzle.rules || "—"}</pre></CardContent>
                 </Card>
               </div>
             )}

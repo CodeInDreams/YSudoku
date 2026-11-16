@@ -27,9 +27,13 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
 
     rules = store.load_rules(key)
     meta = store._meta(key)
+    notes = str(body["notes"] if "notes" in body else meta.get("notes", "") or "").strip()
     if not force_rules and not force_steps and rules:
         cached = store.load_analysis(key)
         if cached and meta.get("rules_hash") == rules.get("hash"):
+            cached["notes"] = meta.get("notes", "")
+            if isinstance(cached.get("rules"), dict):
+                cached["rules"]["notes"] = meta.get("notes", "")
             cached["storage"] = {
                 "key": key, "location": store.storage_info()["location"],
                 "settings": store.load_settings(),
@@ -45,8 +49,12 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
         allow_chains=True if demo else bool(body.get("chains", True)),
         use_global=bool(body.get("global", True)),
         global_time_limit=float(body.get("global_timeout", 60)),
+        notes=notes,
     )
     payload = analysis.to_json()
+    payload["notes"] = notes
+    if isinstance(payload.get("rules"), dict):
+        payload["rules"]["notes"] = notes
     info = {
         "target": "" if demo else target,
         "demo": demo,
@@ -55,6 +63,7 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
         "at": time.time(),
         "status": analysis.status,
         "steps_count": len(analysis.result.steps),
+        "notes": notes,
     }
     if analysis.spec:
         store.save_rules(key, analysis.spec, info)

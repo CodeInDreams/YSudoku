@@ -199,6 +199,7 @@ def analyze(
     demo: bool = False,
     use_global: bool = True,
     global_time_limit: float = 60.0,
+    notes: str = "",
 ) -> Analysis:
     from .sudokupad import load
 
@@ -208,6 +209,14 @@ def analyze(
 
     warnings: list[str] = []
     source = "heuristic"
+    original_rules = puzzle.rules_text or ""
+    notes = (notes or "").strip()
+    if notes:
+        puzzle.rules_text = (
+            original_rules
+            + "\n\n=== USER SUPPLEMENT (treat as authoritative rule text) ===\n"
+            + notes
+        )
     fingerprint = rulecache.fingerprint(puzzle, inventory)
     cached = None
     if spec_override is None and use_llm and use_cache:
@@ -245,6 +254,7 @@ def analyze(
     else:
         spec = heuristic_spec(puzzle, inventory)
 
+    puzzle.rules_text = original_rules
     rules = compile_spec(puzzle, inventory, spec, source=source)
     warnings.extend(spec.get("warnings", []))
     warnings.extend(rules.warnings)
