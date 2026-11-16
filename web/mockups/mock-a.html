@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mock A · Sidebar workspace</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute"><defs>
+<symbol id="i-play" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></symbol>
+<symbol id="i-list" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></symbol>
+<symbol id="i-book" viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></symbol>
+<symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+<symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></symbol>
+<symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+<symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+<symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+<symbol id="i-refresh" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></symbol>
+<symbol id="i-star" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></symbol>
+<symbol id="i-settings" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></symbol>
+</defs></svg>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div>
+      <div class="brand"><div class="brand-mark">◈</div><div><div class="brand-name">YSudoku</div><div class="brand-sub">Sudoku explain</div></div></div>
+      <div class="nav mt-16">
+        <div class="nav-label">Workspace</div>
+        <a class="nav-item active" href="#"><svg class="icon"><use href="#i-play"/></svg>Solve</a>
+        <a class="nav-item" href="#"><svg class="icon"><use href="#i-list"/></svg>Steps<span class="count">234</span></a>
+        <a class="nav-item" href="#"><svg class="icon"><use href="#i-book"/></svg>Rules</a>
+        <a class="nav-item" href="#"><svg class="icon"><use href="#i-history"/></svg>History<span class="count">12</span></a>
+      </div>
+      <div class="nav mt-16">
+        <div class="nav-label">Library</div>
+        <a class="nav-item" href="#"><svg class="icon"><use href="#i-star"/></svg>Favorites</a>
+        <a class="nav-item" href="#"><svg class="icon"><use href="#i-settings"/></svg>Settings</a>
+      </div>
+    </div>
+    <div class="sidebar-footer">
+      <div class="storage-card">
+        <div class="storage-title"><span>Storage</span><span class="mono small">18.6 MB</span></div>
+        <div class="progress"><span style="width:38%"></span></div>
+        <div>Rules 3.3 KB · Steps 571 KB</div>
+        <div>Frames 17.9 MB · 1 puzzle</div>
+      </div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="breadcrumb"><span>Workspace</span><span>/</span><strong>Globosite</strong></div>
+      <div class="topbar-spacer"></div>
+      <div class="search"><svg class="icon icon-sm"><use href="#i-search"/></svg><span>Search or jump to…</span><span class="kbd">⌘K</span></div>
+      <button class="btn btn-ghost btn-icon"><svg class="icon"><use href="#i-sun"/></svg></button>
+      <div class="avatar">YS</div>
+    </div>
+
+    <div class="content">
+      <div class="page-head">
+        <div>
+          <div class="row gap-8"><h1 class="page-title">Globosite</h1><span class="badge">9×9</span><span class="badge">Killer</span></div>
+          <p class="page-sub">lgastako · 0 givens · solved in 234 steps · <span style="color:var(--success)">Verified</span></p>
+        </div>
+        <div class="page-actions">
+          <button class="btn btn-outline"><svg class="icon icon-sm"><use href="#i-refresh"/></svg>Re-render</button>
+          <button class="btn btn-outline">Re-solve</button>
+          <button class="btn btn-primary"><svg class="icon icon-sm"><use href="#i-play"/></svg>Play</button>
+        </div>
+      </div>
+
+      <div class="grid-main">
+        <div class="stack gap-16">
+          <div class="card">
+            <div class="card-header">
+              <div><h2 class="card-title">Board</h2><p class="card-description">SudokuPad mirror · step 3 of 234</p></div>
+              <div class="card-actions"><span class="badge">Read-only</span><button class="btn btn-ghost btn-icon btn-sm"><svg class="icon icon-sm"><use href="#i-settings"/></svg></button></div>
+            </div>
+            <div class="board-wrap">
+              <div class="board"><img src="board.png" alt="SudokuPad board"><span class="board-badge">SudokuPad · mirror</span></div>
+            </div>
+            <div class="player">
+              <button class="btn btn-outline btn-icon"><svg class="icon icon-sm"><use href="#i-chevron-left"/></svg></button>
+              <button class="btn btn-primary"><svg class="icon icon-sm"><use href="#i-play"/></svg>Play</button>
+              <button class="btn btn-outline btn-icon"><svg class="icon icon-sm"><use href="#i-chevron-right"/></svg></button>
+              <span class="small muted" style="margin-left:10px">Speed</span>
+              <div class="range"><span></span><i></i></div>
+              <span class="small mono muted">3 / 234</span>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header no-border">
+              <div><h2 class="card-title">History</h2><p class="card-description">Recent solves and cached layers</p></div>
+              <div class="card-actions"><div class="field muted" style="width:160px">Search title</div><button class="btn btn-outline btn-sm">Recent <svg class="icon icon-sm"><use href="#i-chevron-down"/></svg></button></div>
+            </div>
+            <div class="card-content tight" style="padding-top:0">
+              <div class="history-item active"><div class="between"><div class="history-title">Globosite</div><span class="badge badge-success">Solved</span></div><div class="history-meta">lgastako · 234 steps · today · ★</div></div>
+              <div class="history-item"><div class="between"><div class="history-title">Double-slit Experiment</div><span class="badge">Stuck</span></div><div class="history-meta">6 steps · 2 days ago</div></div>
+              <div class="history-item"><div class="between"><div class="history-title">Vol.7 Sandwich #60</div><span class="badge badge-success">Solved</span></div><div class="history-meta">47 steps · 3 days ago</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stack gap-16">
+          <div class="card">
+            <div class="card-header">
+              <div><div class="row gap-8"><h2 class="card-title">Step 35 · Killer cage</h2><span class="badge">T1</span></div><p class="card-description">Direct deduction</p></div>
+              <div class="card-actions"><button class="btn btn-ghost btn-icon btn-sm"><svg class="icon icon-sm"><use href="#i-refresh"/></svg></button></div>
+            </div>
+            <div class="card-content">
+              <p class="step-text">Cage 30 (5 cells, no repeats): R3C9, R4C9, R5C9, R6C9, R7C9.</p>
+              <p class="step-text">Possible combinations: <b>4 groups</b></p>
+              <div class="code-box mt-8">{2,4,7,8,9} &nbsp; {2,5,6,8,9}<br>{3,4,6,8,9} &nbsp; {3,5,6,7,9}</div>
+              <p class="step-text">Eliminate impossible candidates from each cell:</p>
+              <div class="code-box mono small">R3C9 ≠ 1,2,3 · R4C9 ≠ 1,2,3<br>R6C9 ≠ 1,2,3 · R7C9 ≠ 1,2,3</div>
+            </div>
+            <div class="player" style="border-top:1px solid var(--border)">
+              <span class="badge badge-success">✓ Audited</span>
+              <div class="spacer"></div>
+              <button class="btn btn-outline btn-sm">Re-solve</button>
+              <button class="btn btn-primary btn-sm">Next step</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><div><h2 class="card-title">Rules</h2><p class="card-description">Compiled by deepseek-flash</p></div><div class="card-actions"><button class="btn btn-outline btn-sm">Refresh</button></div></div>
+            <div class="card-content" style="padding-top:8px">
+              <div class="rule-row"><span>Killer cages</span><span class="rule-count">× 20</span></div>
+              <div class="rule-row"><span>Region 2×2 (1/4/7, 2/5/8, 3/6/9)</span><span class="rule-count">× 64</span></div>
+              <div class="rule-row"><span>Region 2×2 (low/mid/high)</span><span class="rule-count">× 64</span></div>
+              <div class="rule-row"><span>Source</span><span class="rule-count">local heuristic</span></div>
+            </div>
+          </div>
+
+          <div class="status">Solved · 234 steps · matches embedded solution</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

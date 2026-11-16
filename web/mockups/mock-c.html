@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mock C · Command center</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute"><defs>
+<symbol id="i-play" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+<symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+<symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+<symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+<symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+<symbol id="i-refresh" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></symbol>
+<symbol id="i-star" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></symbol>
+<symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+<symbol id="i-layers" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+</defs></svg>
+
+<div class="topbar" style="height:60px;padding:0 20px">
+  <div class="brand" style="padding:0;margin-right:14px"><div class="brand-mark">◈</div><div><div class="brand-name">YSudoku</div><div class="brand-sub">Command center</div></div></div>
+  <div class="search" style="width:min(460px,36vw);height:34px"><svg class="icon icon-sm"><use href="#i-search"/></svg><span>Paste a SudokuPad link or search puzzles…</span><span class="kbd">⌘K</span></div>
+  <div style="flex:1"></div>
+  <button class="btn btn-outline">Demo</button>
+  <button class="btn btn-primary"><svg class="icon icon-sm"><use href="#i-play"/></svg>Solve</button>
+  <button class="btn btn-ghost btn-icon"><svg class="icon"><use href="#i-moon"/></svg></button>
+  <div class="avatar">YS</div>
+</div>
+
+<div style="display:grid;grid-template-columns:280px minmax(0,1fr) 360px;min-height:calc(100vh - 60px)">
+  <div style="border-right:1px solid var(--border);padding:16px;display:flex;flex-direction:column;gap:14px;background:var(--card)">
+    <div class="between"><span style="font-size:12px;font-weight:600">Library</span><button class="btn btn-ghost btn-icon btn-sm"><svg class="icon icon-sm"><use href="#i-settings"/></svg></button></div>
+    <div class="search" style="width:100%;height:30px;background:var(--background)"><svg class="icon icon-sm"><use href="#i-search"/></svg><span>Filter puzzles…</span></div>
+    <div class="row gap-6"><button class="btn btn-outline btn-sm" style="flex:1">Status <svg class="icon icon-sm"><use href="#i-chevron-down"/></svg></button><button class="btn btn-outline btn-sm" style="flex:1">Sort <svg class="icon icon-sm"><use href="#i-chevron-down"/></svg></button></div>
+    <div class="list">
+      <div class="history-item active"><div class="between"><div class="history-title">Globosite</div><svg class="icon icon-sm" style="color:#f5b301;fill:currentColor"><use href="#i-star"/></svg></div><div class="history-meta">lgastako · 234 steps</div><div class="row gap-4 mt-8"><span class="badge">Rules</span><span class="badge">Steps</span><span class="badge">Frames</span></div></div>
+      <div class="history-item"><div class="history-title">Double-slit Experiment</div><div class="history-meta">6 steps · stuck</div></div>
+      <div class="history-item"><div class="history-title">Vol.7 Sandwich #60</div><div class="history-meta">47 steps · solved</div></div>
+      <div class="history-item"><div class="history-title">Tringle and Cross</div><div class="history-meta">8 steps · stuck</div></div>
+      <div class="history-item"><div class="history-title">Double-slit Experiment</div><div class="history-meta">6 steps · stuck</div></div>
+    </div>
+    <div style="margin-top:auto" class="storage-card">
+      <div class="storage-title"><span>Storage</span><span class="mono small">18.6 MB</span></div>
+      <div class="progress"><span style="width:38%"></span></div>
+      <div class="storage-line"><span>Rules</span><b>3.3 KB</b></div>
+      <div class="storage-line"><span>Steps</span><b>571 KB</b></div>
+      <div class="storage-line"><span>Frames</span><b>17.9 MB</b></div>
+    </div>
+  </div>
+
+  <div style="padding:20px 22px;min-width:0">
+    <div class="between" style="margin-bottom:12px">
+      <div class="row gap-8"><h1 style="font-size:18px;margin:0;letter-spacing:-.02em">Globosite</h1><span class="badge">9×9</span><span class="badge">Killer</span><span class="badge badge-success">Solved</span></div>
+      <div class="row gap-6"><button class="btn btn-outline btn-sm"><svg class="icon icon-sm"><use href="#i-refresh"/></svg>Re-render</button><button class="btn btn-outline btn-sm">Re-solve</button><button class="btn btn-primary btn-sm"><svg class="icon icon-sm"><use href="#i-play"/></svg>Play</button></div>
+    </div>
+    <div class="board" style="max-width:100%;width:100%;aspect-ratio:1;max-height:calc(100vh - 210px)"><img src="board.png" alt="SudokuPad board"><span class="board-badge">Step 3 / 234 · read-only</span></div>
+    <div class="player" style="border:0;padding:10px 0 0">
+      <button class="btn btn-outline btn-icon"><svg class="icon icon-sm"><use href="#i-chevron-left"/></svg></button>
+      <button class="btn btn-primary"><svg class="icon icon-sm"><use href="#i-play"/></svg>Play</button>
+      <button class="btn btn-outline btn-icon"><svg class="icon icon-sm"><use href="#i-chevron-right"/></svg></button>
+      <span class="small muted" style="margin-left:8px">Speed</span>
+      <div class="range"><span></span><i></i></div>
+      <span class="small mono muted">3 / 234</span>
+    </div>
+  </div>
+
+  <div style="border-left:1px solid var(--border);padding:16px 16px 20px;display:flex;flex-direction:column;gap:12px;background:var(--card);overflow:auto">
+    <div class="tabs compact"><div class="tab active">Explain</div><div class="tab">Rules</div><div class="tab">History</div></div>
+    <div class="between"><div class="row gap-8"><span class="step-title">Killer cage</span><span class="badge">T1</span></div><span class="small muted">35 / 234</span></div>
+    <p class="step-text" style="margin-top:0">Cage 30 (5 cells, no repeats): R3C9, R4C9, R5C9, R6C9, R7C9.</p>
+    <div class="code-box" style="font-size:10.5px">Possible combinations<br>{2,4,7,8,9} · {2,5,6,8,9}<br>{3,4,6,8,9} · {3,5,6,7,9}</div>
+    <p class="step-text">Eliminate candidates that never appear in a valid combination:</p>
+    <div class="code-box mono" style="font-size:10.5px;line-height:2">R3C9 ≠ 1,2,3<br>R4C9 ≠ 1,2,3<br>R6C9 ≠ 1,2,3<br>R7C9 ≠ 1,2,3</div>
+    <div class="row gap-6 mt-8"><button class="btn btn-outline btn-sm" style="flex:1">Re-solve</button><button class="btn btn-primary btn-sm" style="flex:1">Next step</button></div>
+    <div class="sep"></div>
+    <div class="between"><span style="font-size:12px;font-weight:600">Steps</span><button class="btn btn-ghost btn-sm">All 234</button></div>
+    <div class="list">
+      <div class="step-row"><span class="step-num">33</span><span>Killer cage</span><span class="badge" style="margin-left:auto">T1</span></div>
+      <div class="step-row"><span class="step-num">34</span><span>Hidden single</span><span class="badge" style="margin-left:auto">T1</span></div>
+      <div class="step-row active"><span class="step-num">35</span><span>Killer cage</span><span class="badge" style="margin-left:auto">T1</span></div>
+      <div class="step-row"><span class="step-num">36</span><span>Class cover</span><span class="badge" style="margin-left:auto">T2</span></div>
+      <div class="step-row"><span class="step-num">37</span><span>Killer cage</span><span class="badge" style="margin-left:auto">T1</span></div>
+    </div>
+    <div class="status" style="margin-top:auto">✓ Verified · matches embedded solution</div>
+  </div>
+</div>
+</body>
+</html>
