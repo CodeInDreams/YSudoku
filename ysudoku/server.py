@@ -6,7 +6,7 @@ import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from . import history, live
 from .pipeline import analyze
@@ -43,7 +43,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/live/frame":
             try:
-                self._send(200, live.frame(), "image/png")
+                query = parse_qs(urlparse(self.path).query)
+                self._send(200, live.frame(query.get("session", [None])[0],
+                                           query.get("step", [None])[0]), "image/png")
             except live.LiveError as exc:
                 self._send(503, json.dumps({"error": str(exc)}, ensure_ascii=False).encode(),
                            "application/json")
@@ -86,15 +88,17 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if urlparse(self.path).path not in (
             "/api/solve", "/api/demo", "/api/live/start", "/api/live/place",
-            "/api/history/clear",
+            "/api/live/build", "/api/history/clear",
         ):
             self._send(404, b'{"error":"not found"}', "application/json")
             return
         length = int(self.headers.get("Content-Length") or 0)
-        if urlparse(self.path).path in ("/api/live/start", "/api/live/place"):
+        if urlparse(self.path).path in ("/api/live/start", "/api/live/place", "/api/live/build"):
             try:
                 body = json.loads(self.rfile.read(length) or b"{}")
-                if urlparse(self.path).path == "/api/live/start":
+                if urlparse(self.path).path == "/api/live/build":
+                    result = live.build(str(body.get("url") or ""), body.get("steps") or [])
+                elif urlparse(self.path).path == "/api/live/start":
                     result = live.start(str(body.get("url") or ""))
                 else:
                     result = live.place(body.get("digits") or body.get("places") or [],

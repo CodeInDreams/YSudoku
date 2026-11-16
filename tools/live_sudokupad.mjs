@@ -7,6 +7,8 @@
  * HTTP; the page itself is never exposed to the browser client.
  */
 import http from "http";
+import fs from "fs";
+import path from "path";
 import { chromium } from "playwright";
 
 const PORT = Number(process.env.YSUDOKU_LIVE_PORT || 8791);
@@ -247,6 +249,41 @@ async function apply(digits, corners, reset, pen) {
   return shot();
 }
 
+async function act(action) {
+  if (action.op === "place") {
+    await page.click("#control-normal").catch(() => {});
+    const r = Math.floor(action.cell / board.n);
+    const c = action.cell % board.n;
+    const [x, y] = center(r, c);
+    await page.mouse.click(x, y);
+    await page.keyboard.type(String(action.value));
+    await page.waitForTimeout(30);
+  } else if (action.op === "mark" || action.op === "elim" || action.op === "clear") {
+    await page.click("#control-centre").catch(() => {});
+    const r = Math.floor(action.cell / board.n);
+    const c = action.cell % board.n;
+    const [x, y] = center(r, c);
+    await page.mouse.click(x, y);
+    for (const digit of action.digits || [action.value]) {
+      if (digit == null) continue;
+      await page.keyboard.type(String(digit));
+      await page.waitForTimeout(12);
+    }
+  }
+}
+
+async function buildSession(url, steps, session) {
+  await open(url);
+  const dir = path.join(process.cwd(), ".cache", "frames", session);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "-1.png"), await shot());
+  for (let i = 0; i < steps.length; i++) {
+    for (const action of steps[i] || []) await act(action);
+    fs.writeFileSync(path.join(dir, `${i}.png`), await shot());
+  }
+  await page.click("#control-normal").catch(() => {});
+}
+
 function json(res, code, obj) {
   const body = Buffer.from(JSON.stringify(obj));
   res.writeHead(code, { "Content-Type": "application/json", "Content-Length": body.length });
@@ -258,6 +295,18 @@ const server = http.createServer((req, res) => {
   if (req.method === "GET" && url.pathname === "/health") {
     return json(res, 200, { ok: true, ready: Boolean(page), browser: Boolean(browser),
                             n: board?.n || 0, idle_for: Math.round((Date.now() - lastUsed) / 1000) });
+  }
+  if (req.method === "GET" && url.pathname === "/frame" && url.searchParams.get("session")) {
+    const session = path.basename(url.searchParams.get("session") || "");
+    const step = path.basename(url.searchParams.get("step") || "0");
+    const file = path.join(process.cwd(), ".cache", "frames", session, `${step}.png`);
+    if (fs.existsSync(file)) {
+      const data = fs.readFileSync(file);
+      res.writeHead(200, { "Content-Type": "image/png", "Content-Length": data.length,
+                           "Cache-Control": "no-store" });
+      return res.end(data);
+    }
+    return json(res, 404, { error: "no such frame" });
   }
   if (req.method === "GET" && url.pathname === "/frame") {
     if (!latest) return json(res, 404, { error: "no frame" });
@@ -271,6 +320,17 @@ const server = http.createServer((req, res) => {
     let body = {};
     try { body = raw ? JSON.parse(raw) : {}; } catch { return json(res, 400, { error: "bad json" }); }
     try {
+      if (url.pathname === "/build") {
+        if (!body.url) return json(res, 400, { error: "url required" });
+        touch();
+        const session = Date.now().toString(36);
+        const steps = body.steps || [];
+        work = work.then(
+          () => buildSession(body.url, steps, session),
+          () => buildSession(body.url, steps, session),
+        ).catch(() => {});
+        return json(res, 200, { ok: true, session, count: steps.length });
+      }
       if (url.pathname === "/start") {
         if (!body.url) return json(res, 400, { error: "url required" });
         touch();

@@ -198,85 +198,95 @@
     if (blob) displayLiveFrame(blob);
   }
 
+  function buildStepActions() {
+    const steps = [];
+    const state = new Map();
+    const opened = new Set();
+    for (const step of S.data.steps) {
+      const actions = [];
+      for (const ev of step.events || []) {
+        if (ev.kind === "place") {
+          if (state.has(ev.cell)) {
+            const rest = [...state.get(ev.cell)].filter((d) => d !== ev.value);
+            if (rest.length) actions.push({ op: "clear", cell: ev.cell, digits: rest });
+            state.delete(ev.cell);
+          }
+          actions.push({ op: "place", cell: ev.cell, value: ev.value });
+        } else if (ev.kind === "elim") {
+          if (!state.has(ev.cell)) {
+            const mask = (step.pre_dom && step.pre_dom[ev.cell]) || 0;
+            const digits = digitsOf(mask, S.n).filter((d) => d !== ev.value);
+            opened.add(ev.cell);
+            if (digits.length > 1) {
+              actions.push({ op: "mark", cell: ev.cell, digits });
+              state.set(ev.cell, new Set(digits));
+            } else if (digits.length === 1) {
+              actions.push({ op: "place", cell: ev.cell, value: digits[0] });
+            }
+          } else {
+            const set = state.get(ev.cell);
+            set.delete(ev.value);
+            if (set.size > 1) {
+              actions.push({ op: "elim", cell: ev.cell, value: ev.value });
+            } else if (set.size === 1) {
+              const [value] = set;
+              actions.push({ op: "clear", cell: ev.cell, digits: [...set] });
+              actions.push({ op: "place", cell: ev.cell, value });
+              state.delete(ev.cell);
+            }
+          }
+        }
+      }
+      steps.push(actions);
+    }
+    return steps;
+  }
+
+  let frameRetry = null;
+
+  function showLiveFrame(idx) {
+    if (!S.live || !S.live.session) return;
+    const img = $("live-frame");
+    clearTimeout(frameRetry);
+    img.onload = () => $("live-loading").classList.add("hidden");
+    img.onerror = () => {
+      $("live-loading").classList.remove("hidden");
+      frameRetry = setTimeout(() => showLiveFrame(idx), 400);
+    };
+    img.src = `/api/live/frame?session=${S.live.session}&step=${idx}&t=${Date.now()}`;
+  }
+
   async function startLive(url) {
     const loading = $("live-loading");
     $("live-view").classList.remove("hidden");
     loading.classList.remove("hidden");
-    S.live = {
-      ready: false, step: -1, applied: 0, busy: false, queue: [],
-      cache: new Map(), corners: new Map(), url: url || "",
-    };
+    S.live = { session: null, url: url || "" };
     if (!url) {
       loading.classList.add("hidden");
       $("live-badge").textContent = "没有 SudokuPad 链接";
       return;
     }
     try {
-      const res = await fetch("/api/live/start", {
+      const res = await fetch("/api/live/build", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url, steps: buildStepActions() }),
       });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.error || "启动失败");
-      S.live.ready = true;
-      const blob = await liveFrameBlob();
-      S.live.cache.set(-1, blob);
-      displayLiveFrame(blob);
-      loading.classList.add("hidden");
-      prefetchLive(S.idx);
+      if (!res.ok) throw new Error(body.error || "构建失败");
+      S.live.session = body.session;
+      S.live.count = body.count;
+      showLiveFrame(S.idx);
     } catch (err) {
       loading.classList.add("hidden");
-      $("live-badge").textContent = `SudokuPad 镜像启动失败：${err.message || err}`;
+      $("live-badge").textContent = `SudokuPad 镜像构建失败：${err.message || err}`;
     }
   }
 
   function prefetchLive(idx) {
-    if (!S.live || !S.live.ready || !S.data) return;
-    const total = S.data.steps.length;
-    for (let i = Math.max(-1, idx); i <= idx + 2 && i < total; i++) {
-      if (i < 0) continue;
-      if (S.live.cache.has(i)) {
-        if (i === S.idx) displayCachedFrame(i);
-        continue;
-      }
-      if (!S.live.queue.includes(i)) S.live.queue.push(i);
-    }
-    pumpLive();
+    showLiveFrame(idx);
   }
 
-  async function pumpLive() {
-    const live = S.live;
-    if (!live || !live.ready || live.busy || !live.queue.length) return;
-    live.busy = true;
-    const idx = live.queue.shift();
-    try {
-      if (!live.cache.has(idx)) {
-        const state = stateUpTo(idx);
-        const reset = idx < live.step;
-        const res = await fetch("/api/live/place", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            digits: state.digits, corners: [], reset,
-            pen: penActionsFor(S.data.steps[idx]),
-          }),
-        });
-        if (res.status === 410) {
-          await startLive(live.url);
-          return;
-        }
-        const body = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(body.error || "操作失败");
-        live.step = idx;
-        live.cache.set(idx, await liveFrameBlob());
-      }
-      if (idx === S.idx) displayCachedFrame(idx);
-    } catch (err) {
-      $("live-badge").textContent = `SudokuPad 操作失败：${err.message || err}`;
-    } finally {
-      live.busy = false;
-      if (live.queue.length) pumpLive();
-    }
-  }
+  const LIVE_COLORS = ["#58a6ff", "#ffb454", "#38d39f", "#ff5c7a", "#7c5cff", "#2dd4bf"];
 
   function candidateStateUpTo(idx) {
     const state = new Map();
@@ -301,8 +311,6 @@
     return state;
   }
 
-  const LIVE_COLORS = ["#58a6ff", "#ffb454", "#38d39f", "#ff5c7a", "#7c5cff", "#2dd4bf"];
-
   function renderLiveOverlay(step) {
     const svg = $("live-overlay");
     if (!svg) return;
@@ -318,11 +326,6 @@
       return node;
     };
     const rcOf = (cell) => [Math.floor(cell / n), cell % n];
-    const cellRect = (cell, attrs) => {
-      const [r, c] = rcOf(cell);
-      return add("rect", { x: c + 0.03, y: r + 0.03, width: 0.94, height: 0.94, rx: 0.06, ...attrs });
-    };
-
     (step.visual.groups || []).forEach((group, i) => {
       if (!group.cells || !group.cells.length) return;
       const color = LIVE_COLORS[i % LIVE_COLORS.length];
@@ -336,39 +339,28 @@
         stroke: color, "stroke-opacity": 0.65, "stroke-width": 0.05,
       });
     });
-
     for (const cell of step.visual.focus || []) {
-      cellRect(cell, { fill: "rgba(255,210,138,.18)", stroke: "#ffb454",
-                       "stroke-opacity": .9, "stroke-width": .05 });
+      const [r, c] = rcOf(cell);
+      add("rect", { x: c + 0.03, y: r + 0.03, width: 0.94, height: 0.94, rx: 0.06,
+                    fill: "rgba(255,210,138,.18)", stroke: "#ffb454",
+                    "stroke-opacity": .9, "stroke-width": .05 });
     }
-    for (const cell of step.visual.premise || []) {
-      cellRect(cell, { fill: "none", stroke: "#7c5cff", "stroke-dasharray": ".12 .1",
-                       "stroke-width": .04 });
-    }
-
     for (const link of step.visual.links || []) {
       const points = (link.points || []).map(([y, x]) => `${x},${y}`).join(" ");
-      add("polyline", {
-        points, fill: "none", stroke: link.color || "#58a6ff",
-        "stroke-width": link.kind === "dot" ? .06 : .09,
-        "stroke-dasharray": link.dashed ? ".16 .12" : "",
-        "stroke-opacity": .95, "stroke-linecap": "round",
-      });
+      add("polyline", { points, fill: "none", stroke: link.color || "#58a6ff",
+                        "stroke-width": .08, "stroke-opacity": .95 });
     }
-
     for (const [cell, set] of candidateStateUpTo(step.index)) {
       const [r, c] = rcOf(cell);
       const digits = [...set].sort((a, b) => a - b);
-      if (digits.length > 0) {
-        digits.forEach((v) => {
-          add("text", {
-            x: c + 0.18 + ((v - 1) % 3) * 0.27,
-            y: r + 0.22 + Math.floor((v - 1) / 3) * 0.23,
-            "font-size": "0.17", fill: "#1f2937",
-            "font-family": "ui-monospace, monospace",
-          }, String(v));
-        });
-      }
+      digits.forEach((v) => {
+        add("text", {
+          x: c + 0.18 + ((v - 1) % 3) * 0.27,
+          y: r + 0.22 + Math.floor((v - 1) / 3) * 0.23,
+          "font-size": "0.17", fill: "#1f2937",
+          "font-family": "ui-monospace, monospace",
+        }, String(v));
+      });
     }
   }
 

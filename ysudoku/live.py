@@ -108,6 +108,13 @@ def place(digits: list[list[int]], reset: bool, corners: list | None = None,
     }, timeout=120))
 
 
-def frame() -> bytes:
+def build(url: str, steps: list[list[dict]]) -> dict:
     ensure()
+    return json.loads(_request("/build", {"url": url, "steps": steps}, timeout=900))
+
+
+def frame(session: str | None = None, step: int | str | None = None) -> bytes:
+    ensure()
+    if session is not None:
+        return _request(f"/frame?session={session}&step={step}", timeout=30)
     return _request("/frame", timeout=30)
