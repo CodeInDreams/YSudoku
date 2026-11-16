@@ -158,6 +158,27 @@
     return { digits: Array.from(digits.entries()), corners: Array.from(corners.entries()) };
   }
 
+  function penActionsFor(step) {
+    if (!step) return [];
+    const n = S.n;
+    const actions = [];
+    const toCell = (y, x) => Math.floor(y) * n + Math.floor(x);
+    for (const link of step.visual?.links || []) {
+      const pts = link.points || [];
+      for (let i = 0; i + 1 < pts.length; i++) {
+        const a = toCell(pts[i][0], pts[i][1]);
+        const b = toCell(pts[i + 1][0], pts[i + 1][1]);
+        if (a !== b && a >= 0 && b >= 0) actions.push({ op: "connect", cells: [a, b] });
+      }
+    }
+    const focus = step.visual?.focus || [];
+    for (const cell of focus.slice(0, 2)) actions.push({ op: "circle", cells: [cell] });
+    for (const ev of step.events || []) {
+      if (ev.kind === "place") actions.push({ op: "circle", cells: [ev.cell] });
+    }
+    return actions.slice(0, 24);
+  }
+
   async function liveFrameBlob() {
     const res = await fetch(`/api/live/frame?t=${Date.now()}`, { cache: "no-store" });
     if (!res.ok) throw new Error("截图读取失败");
@@ -234,7 +255,10 @@
         const reset = idx < live.step;
         const res = await fetch("/api/live/place", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ digits: state.digits, corners: [], reset }),
+          body: JSON.stringify({
+            digits: state.digits, corners: [], reset,
+            pen: penActionsFor(S.data.steps[idx]),
+          }),
         });
         if (res.status === 410) {
           await startLive(live.url);

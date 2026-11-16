@@ -99,7 +99,8 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     result = live.place(body.get("digits") or body.get("places") or [],
                                         bool(body.get("reset")),
-                                        body.get("corners") or [])
+                                        body.get("corners") or [],
+                                        body.get("pen") or [])
                 self._send(200, json.dumps(result).encode(), "application/json")
             except live.LiveGone as exc:
                 self._send(410, json.dumps({"error": str(exc), "restart": True},

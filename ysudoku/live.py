@@ -100,10 +100,11 @@ def start(url: str) -> dict:
     return json.loads(_request("/start", {"url": url}, timeout=120))
 
 
-def place(digits: list[list[int]], reset: bool, corners: list | None = None) -> dict:
+def place(digits: list[list[int]], reset: bool, corners: list | None = None,
+          pen: list | None = None) -> dict:
     ensure()
     return json.loads(_request("/place", {
-        "digits": digits, "reset": reset, "corners": corners or [],
+        "digits": digits, "reset": reset, "corners": corners or [], "pen": pen or [],
     }, timeout=120))
 
 

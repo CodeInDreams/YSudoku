@@ -54,6 +54,14 @@ async function open(url) {
   }
   page = await browser.newPage({ viewport: { width: 1200, height: 1000 }, colorScheme: "light" });
   await page.emulateMedia({ colorScheme: "light" });
+  await page.addInitScript(() => {
+    try {
+      const s = JSON.parse(localStorage.getItem("svencodes_settings") || "{}");
+      s.toolpen = true;
+      s.toolletter = true;
+      localStorage.setItem("svencodes_settings", JSON.stringify(s));
+    } catch (e) { /* ignore */ }
+  });
   ledger = new Map();
   await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
   await page.waitForTimeout(1200);
@@ -137,7 +145,7 @@ async function readBoard() {
   }, board.n);
 }
 
-async function apply(digits, corners, reset) {
+async function apply(digits, corners, reset, pen) {
   if (!page || !puzzleUrl) throw new Error("no puzzle");
   const digitList = digits || [];
   const cornerList = corners || [];
@@ -193,6 +201,35 @@ async function apply(digits, corners, reset) {
     state.corners[cell] = [];
   }
   await page.click("#control-normal").catch(() => {});
+  if (pen && pen.length) {
+    // Native pen layer for this step only: clear it, then draw with the pen
+    // tool (circle on a centre, drag between two centres for a line).
+    await page.evaluate(() => {
+      const layer = document.querySelector("#cell-pen");
+      if (layer) layer.innerHTML = "";
+    });
+    await page.click("#control-pen").catch(() => {});
+    for (const action of pen) {
+      const cells = action.cells || [];
+      if (action.op === "circle" && cells.length) {
+        const r = Math.floor(cells[0] / board.n);
+        const c = cells[0] % board.n;
+        const [x, y] = center(r, c);
+        await page.mouse.click(x, y);
+      } else if (action.op === "connect" && cells.length >= 2) {
+        const [r1, c1] = [Math.floor(cells[0] / board.n), cells[0] % board.n];
+        const [r2, c2] = [Math.floor(cells[1] / board.n), cells[1] % board.n];
+        const [x1, y1] = center(r1, c1);
+        const [x2, y2] = center(r2, c2);
+        await page.mouse.move(x1, y1);
+        await page.mouse.down();
+        await page.mouse.move(x2, y2, { steps: 6 });
+        await page.mouse.up();
+      }
+      await page.waitForTimeout(30);
+    }
+    await page.click("#control-normal").catch(() => {});
+  }
   await page.waitForTimeout(120);
   return shot();
 }
