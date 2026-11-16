@@ -505,7 +505,8 @@ export default function App() {
   async function removeLayer(entry, layer) {
     if (entry.key === analysis?.storage?.key) return;
     const label = t(`layers.${layer}`);
-    if (!window.confirm(t("history.confirmDelete", { title: entry.title, layer: label }))) return;
+    const cascade = layer === "rules" ? t("history.cascadeRules") : layer === "steps" ? t("history.cascadeSteps") : "";
+    if (!window.confirm(`${t("history.confirmDelete", { title: entry.title, layer: label })}\n\n${cascade}`.trim())) return;
     await postJson("/api/store/delete", { key: entry.key, layer });
     refreshStore();
   }
