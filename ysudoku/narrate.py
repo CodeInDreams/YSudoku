@@ -46,6 +46,7 @@ TITLES = {
     "anti_king": "反国王",
     "unit_peer": "同区排除",
     "chaos_pattern": "圈域模式",
+    "class_cover": "2×2 类排除",
     "innie": "45 法则（剩余格）",
     "outie": "45 法则（剩余两格）",
 }
@@ -59,7 +60,7 @@ TIERS = {
     "subset": 2, "hidden_subset": 2, "x_wing": 3, "xy_wing": 3, "w_wing": 3,
     "forcing_chain": 4, "custom": 2, "coloring": 3, "parity": 1, "odd": 1, "even": 1,
     "clone": 1, "sandwich": 2, "skyscraper": 2, "region_sum": 2,
-    "chaos_pattern": 2,
+    "chaos_pattern": 2, "class_cover": 2,
 }
 
 
@@ -309,6 +310,39 @@ def _explain_parity(events, data, n):
     visual = _basic_visual(events, n)
     visual["groups"].append({"cells": cells, "kind": "pair"})
     return detail, visual
+
+
+def _explain_class_cover(events, data, n):
+    cells = data.get("cells", [])
+    classes = data.get("classes", [])
+    forced = data.get("forced_cell")
+    forced_class = data.get("forced_class")
+    if forced is None:
+        groups = _group_elims(events)
+        if len(groups) == 1:
+            forced = next(iter(groups))
+    if forced is None:
+        return _explain_generic(events, events[0], n)
+    others = [c for c in cells if c != forced]
+    class_text = "；".join("{" + _values(cls) + "}" for cls in classes)
+    lines = [
+        f"2×2 区域：{'、'.join(cell_name(c, n) for c in cells)}。",
+        f"这个区域必须包含三类数字：{class_text}。",
+    ]
+    if forced_class:
+        lines.append(
+            f"除 {cell_name(forced, n)} 外的 "
+            f"{'、'.join(cell_name(c, n) for c in others)} 的候选都不在 "
+            f"{{{_values(forced_class)}}} 这一类中，"
+            f"所以必须由 {cell_name(forced, n)} 承担这一类：{{{_values(forced_class)}}}。"
+        )
+        lines.append("因此排除该格其余候选。")
+    else:
+        lines.append(f"因此 {cell_name(forced, n)} 只能取这一类候选。")
+    visual = _basic_visual(events, n)
+    visual["groups"].append({"cells": cells, "kind": "class_cover"})
+    visual["focus"] = [forced]
+    return "\n".join(lines), visual
 
 
 def _explain_clone(events, data, n):

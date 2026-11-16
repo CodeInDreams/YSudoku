@@ -893,8 +893,9 @@ class ClassCover(Constraint):
         return all(any(v in cls for v in vals) for cls in self.classes)
 
     def prune(self, st: State) -> bool:
-        reason = Reason("class_cover", {"cells": self._cells,
-                                        "classes": [sorted(c) for c in self.classes]})
+        base = {"cells": self._cells,
+                "classes": [sorted(c) for c in self.classes]}
+        reason = Reason("class_cover", base)
         changed = False
         for cls in self.classes:
             mask = 0
@@ -904,7 +905,9 @@ class ClassCover(Constraint):
             if not hosts:
                 raise Contradiction("2x2 class cover has no host")
             if len(hosts) == 1:
-                changed |= st.restrict(hosts[0], mask, reason)
+                detail = dict(base, forced_cell=hosts[0], forced_class=sorted(cls),
+                              hosts=[c for c in self._cells if c not in hosts])
+                changed |= st.restrict(hosts[0], mask, Reason("class_cover", detail))
         if changed:
             return True
         total = 1

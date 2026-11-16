@@ -192,10 +192,17 @@ function StepNarrative({ step, lang, n, t }) {
     }
   }
   const cellName = (cell) => `R${Math.floor(cell / n) + 1}C${(cell % n) + 1}`;
+  const reason = step.events?.[0]?.reason?.data || {};
+  let classLead = "";
+  if (lang === "en" && step.technique === "class_cover" && reason.forced_cell != null && reason.forced_class) {
+    const others = (reason.cells || []).filter((cell) => cell !== reason.forced_cell);
+    classLead = `Every 2×2 region must contain one digit from each of ${(reason.classes || []).map((c) => `{${c.join(",")}}`).join(", ")}. The other cells (${others.map(cellName).join(", ")}) cannot be ${reason.forced_class.join(",")}, so ${cellName(reason.forced_cell)} must be ${reason.forced_class.join(",")}; the other digits are eliminated.`;
+  }
   const candidates = step.candidates || [];
   return (
     <div className="space-y-3">
       {lang === "zh" && lead.length > 0 && <p className="whitespace-pre-wrap text-[13px] leading-7 text-foreground/90">{lead.join("\n")}</p>}
+      {classLead && <p className="text-[13px] leading-7 text-foreground/90">{classLead}</p>}
       {combos.length > 0 && (
         <div className="rounded-lg border bg-muted/30 p-3">
           <SectionLabel extra={<Badge variant="outline">{t("step.combinationCount", { n: comboCount || combos.length })}</Badge>}>{t("step.combinations")}</SectionLabel>
