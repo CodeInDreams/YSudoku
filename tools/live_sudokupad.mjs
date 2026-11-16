@@ -15,6 +15,7 @@ const MIN_IDLE = Math.max(0, Number(process.env.YSUDOKU_LIVE_MIN_IDLE || 0));
 const executablePath = process.env.YSUDOKU_CHROME || undefined;
 
 let browser = null;
+let context = null;
 let page = null;
 let puzzleUrl = "";
 let board = null;
@@ -26,7 +27,8 @@ let lastUsed = Date.now();
 function touch() { lastUsed = Date.now(); }
 
 async function closeBrowser() {
-  await page?.close().catch(() => {});
+  await context?.close().catch(() => {});
+  context = null;
   page = null;
   await browser?.close().catch(() => {});
   browser = null;
@@ -49,19 +51,15 @@ async function open(url) {
       args: ["--no-sandbox", "--disable-dev-shm-usage"],
     });
   }
-  if (page) {
-    await page.close().catch(() => {});
+  if (context) {
+    await context.close().catch(() => {});
   }
-  page = await browser.newPage({ viewport: { width: 1200, height: 1000 }, colorScheme: "light" });
-  await page.emulateMedia({ colorScheme: "light" });
-  await page.addInitScript(() => {
-    try {
-      const s = JSON.parse(localStorage.getItem("svencodes_settings") || "{}");
-      s.toolpen = true;
-      s.toolletter = true;
-      localStorage.setItem("svencodes_settings", JSON.stringify(s));
-    } catch (e) { /* ignore */ }
+  context = await browser.newContext({
+    viewport: { width: 1200, height: 1000 },
+    colorScheme: "light",
   });
+  page = await context.newPage();
+  await page.emulateMedia({ colorScheme: "light" });
   ledger = new Map();
   await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
   await page.waitForTimeout(1200);
@@ -134,15 +132,22 @@ async function readBoard() {
       const cell = toCell(x, y - 3.8);
       if (cell >= 0) values[cell] = Number(t.textContent);
     }
-    for (const t of document.querySelectorAll("#cell-pencilmarks text")) {
+    for (const t of document.querySelectorAll("#cell-candidates text")) {
       const x = parseFloat(t.getAttribute("x"));
       const y = parseFloat(t.getAttribute("y"));
       const cell = toCell(x, y);
-      const v = Number(t.getAttribute("data-val") || t.textContent);
-      if (cell >= 0 && v) corners[cell].push(v);
+      if (cell < 0) continue;
+      for (const span of t.querySelectorAll("tspan[data-val]")) {
+        const v = Number(span.getAttribute("data-val"));
+        if (v) corners[cell].push(v);
+      }
     }
     return { values, corners };
   }, board.n);
+}
+
+async function selectTool(id) {
+  await page.click(`#${id}`, { force: true }).catch(() => {});
 }
 
 async function apply(digits, corners, reset, pen) {
@@ -164,6 +169,8 @@ async function apply(digits, corners, reset, pen) {
     await page.mouse.click(x, y);
   };
 
+  // always type digits with the Digit tool, never whatever dial was left over
+  await page.click("#control-normal").catch(() => {});
   for (const [cell, value] of digitList) {
     if (state.values[cell] === Number(value)) continue;
     await clickCell(cell);
@@ -178,7 +185,7 @@ async function apply(digits, corners, reset, pen) {
     const set = new Set((list || []).map(Number));
     if (set.size) target.set(cell, set);
   }
-  await page.click("#control-corner").catch(() => {});
+  await page.click("#control-centre").catch(() => {});
   for (const [cell, wanted] of target) {
     if (state.values[cell]) continue;  // solved cells keep their digit
     const current = new Set(state.corners[cell] || []);
