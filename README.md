@@ -103,6 +103,15 @@ export SUDOKU_LLM_MODEL=qwen2.5:7b
 
 Without a key the web UI greys out **LLM rules** and shows "no key · local heuristics".
 
+### Rule sheet for vision models
+
+The rule compiler sends the model a **rendered rule sheet**: grid coordinates, a number on every
+drawn element, outside clues and a text legend mapping each number to its element id, cells and
+attributes.  `deepseek-flash` accepts it as a PNG data URI; this resolves spatial rules (arrow
+direction, which side a clue is on, which circle surrounds which cells) that text alone loses.
+If the model rejects images, the compiler falls back to the text worksheet.  The sheet is also
+shown in the web UI under **规则图（视觉）**.
+
 ### Global outside clues (optional)
 
 Some puzzles put *global* clues outside the grid: Full Rank (the rank of a line among all 36

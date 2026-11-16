@@ -269,3 +269,5 @@ input[type=range] { accent-color: var(--accent); }
 .history-row:hover { border-color: var(--accent); }
 .history-title { font-size: 12.5px; color: var(--text); }
 .history-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+.rulesheet { width: 100%; border-radius: 10px; background: #fff; margin-top: 8px; }

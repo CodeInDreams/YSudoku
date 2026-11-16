@@ -29,7 +29,14 @@ class _Handler(BaseHTTPRequestHandler):
         type(self).calls += 1
         length = int(self.headers.get("Content-Length") or 0)
         body = json.loads(self.rfile.read(length) or b"{}")
-        text = "\n".join(m.get("content", "") for m in body.get("messages", []))
+        parts = []
+        for message in body.get("messages", []):
+            content = message.get("content", "")
+            if isinstance(content, str):
+                parts.append(content)
+            elif isinstance(content, list):
+                parts.extend(p.get("text", "") for p in content if isinstance(p, dict))
+        text = "\n".join(parts)
         cage_ids = sorted(set(re.findall(r'"id":\s*"(cage:\d+)"', text)))
         if "DIAGNOSTICS" in text:
             spec = {"rules": [{"kind": "cage", "elements": cage_ids}], "globals": []}

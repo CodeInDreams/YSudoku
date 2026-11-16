@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from . import llm, rulecache
 from .model import Puzzle, parse_puzzle
@@ -62,6 +65,10 @@ class Analysis:
             "source_url": self.source_url,
             "constraints": [c.to_dict() for c in self.rules.constraints],
             "clue_types": self.clue_types,
+            "rule_sheet": (
+                f"/api/rulesheet/{Path(self.puzzle.rule_sheet).name}"
+                if self.puzzle.rule_sheet else ""
+            ),
             "steps": [step.to_dict(n) for step in self.result.steps],
             "status": self.status,
             "message": self.message,
@@ -364,16 +371,44 @@ def _llm_repair(puzzle, inventory, config, spec, diagnostics, warnings):
     return new_spec, new_rules
 
 
+def _rule_image(puzzle, inventory, warnings: list[str]):
+    try:
+        from .rulesheet import legend_text, render
+        payload = [[e.id, e.kind, e.cells, e.attrs or {}] for e in inventory]
+        digest = hashlib.sha1(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16]
+        path = Path(".cache") / "rulesheets" / f"{puzzle.puzzle_id or 'puzzle'}-{digest}.png"
+        legend = render(puzzle, inventory, path)
+        uri = "data:image/png;base64," + base64.b64encode(path.read_bytes()).decode()
+        return uri, legend_text(puzzle, inventory, legend), path
+    except Exception as exc:  # noqa: BLE001 - the sheet is an optional aid
+        warnings.append(f"规则图生成失败，改用纯文本：{exc}")
+        return None, None, None
+
+
 def _llm_spec(puzzle, inventory, config, warnings: list[str]):
     inventory_json = [element.to_json(puzzle.size) for element in inventory]
+    image_uri, legend, sheet_path = _rule_image(puzzle, inventory, warnings)
+    if sheet_path is not None:
+        puzzle.rule_sheet = str(sheet_path)
     feedback: list[dict] = []
     spec: dict = {"rules": [], "globals": []}
     rules = None
     validated = False
     for attempt in range(2):
-        spec = llm.compile_rules(
-            config, puzzle.rules_text, inventory_json, puzzle.size, previous=feedback
-        )
+        try:
+            spec = llm.compile_rules(
+                config, puzzle.rules_text, inventory_json, puzzle.size,
+                previous=feedback, image_uri=image_uri, legend=legend,
+            )
+        except llm.LLMError as exc:
+            if image_uri and "image" in str(exc).lower():
+                warnings.append("模型不支持视觉输入，退回文本规则表")
+                spec = llm.compile_rules(
+                    config, puzzle.rules_text, inventory_json, puzzle.size,
+                    previous=feedback,
+                )
+            else:
+                raise
         rules = compile_spec(puzzle, inventory, spec, source="llm")
         if not puzzle.solution:
             return spec, "llm", True

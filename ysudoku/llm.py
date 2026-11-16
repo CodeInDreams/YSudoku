@@ -58,6 +58,11 @@ Rules:
   eq, ne, lt, le, gt, ge, and, or, not.
   Scope is 2-6 cells.  Only use "custom" when nothing else fits; always set
   "hypothesis": true unless the rule is completely explicit.
+- You may also receive a rendered RULE SHEET image.  The numbers drawn on it
+  identify elements; the accompanying legend maps each number to its element id,
+  kind, cells and attributes.  Use the image to resolve spatial relations
+  (which side a clue is on, arrow direction, which circle surrounds which
+  cells), and the legend for exact ids and coordinates.
 - Output valid JSON only, no markdown fences, no commentary.
 """
 
@@ -193,19 +198,27 @@ def compile_rules(
     inventory: list[dict],
     size: int,
     previous: list[dict] | None = None,
+    image_uri: str | None = None,
+    legend: str | None = None,
 ) -> dict:
     """Ask the model for a rule spec.  ``previous`` replays repair feedback."""
+    text = (
+        f"Grid size: {size}x{size}\n\n"
+        f"=== OFFICIAL RULES ===\n{rules_text}\n\n"
+        "=== DRAWN ELEMENTS ===\n"
+        + json.dumps(inventory, ensure_ascii=False)
+    )
+    if legend:
+        text += "\n\n=== RULE SHEET LEGEND ===\n" + legend
+    content = text
+    if image_uri:
+        content = [
+            {"type": "text", "text": text},
+            {"type": "image_url", "image_url": {"url": image_uri}},
+        ]
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {
-            "role": "user",
-            "content": (
-                f"Grid size: {size}x{size}\n\n"
-                f"=== OFFICIAL RULES ===\n{rules_text}\n\n"
-                "=== DRAWN ELEMENTS ===\n"
-                + json.dumps(inventory, ensure_ascii=False)
-            ),
-        },
+        {"role": "user", "content": content},
     ]
     if previous:
         messages.extend(previous)

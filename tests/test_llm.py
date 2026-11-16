@@ -30,7 +30,18 @@ class _Handler(BaseHTTPRequestHandler):
         type(self).calls += 1
         length = int(self.headers.get("Content-Length") or 0)
         body = json.loads(self.rfile.read(length) or b"{}")
-        text = "\n".join(m.get("content", "") for m in body.get("messages", []))
+        parts = []
+        for message in body.get("messages", []):
+            content = message.get("content", "")
+            if isinstance(content, str):
+                parts.append(content)
+            elif isinstance(content, list):
+                parts.extend(p.get("text", "") for p in content if isinstance(p, dict))
+        text = "\n".join(parts)
+        if any(isinstance(p, dict) and p.get("type") == "image_url"
+               for m in body.get("messages", []) if isinstance(m.get("content"), list)
+               for p in m["content"]):
+            type(self).image = True
         cage_ids = sorted(set(re.findall(r'"id":\s*"(cage:\d+)"', text)))
         spec = {"rules": [{"kind": "cage", "elements": cage_ids}], "globals": [], "notes": "mock"}
         payload = json.dumps({"choices": [{"message": {"content": json.dumps(spec)}}]}).encode()

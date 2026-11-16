@@ -86,6 +86,7 @@ class Puzzle:
     clues: list[Clue]
     texts: list[TextMark]
     solution: list[int] | None
+    rule_sheet: str = ""
     source_url: str = ""
     raw: dict = field(repr=False, default_factory=dict)
 

@@ -38,6 +38,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = urlparse(self.path).path
+        if path.startswith("/api/rulesheet/"):
+            name = Path(path.split("/")[-1]).name
+            file = Path(".cache") / "rulesheets" / name
+            if file.exists() and file.suffix == ".png":
+                self._send(200, file.read_bytes(), "image/png")
+            else:
+                self._send(404, b"not found", "text/plain")
+            return
         if path == "/api/history":
             self._send(200, json.dumps(history.load(), ensure_ascii=False).encode("utf-8"),
                        "application/json")

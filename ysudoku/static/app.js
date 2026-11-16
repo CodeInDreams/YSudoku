@@ -90,6 +90,13 @@
       ? data.chaos_regions
       : (data.puzzle.regions || []);
     S.clues = data.puzzle.clues || [];
+    const sheetPanel = $("rulesheet-panel");
+    if (data.rule_sheet) {
+      $("rulesheet").src = data.rule_sheet;
+      sheetPanel.classList.remove("hidden");
+    } else {
+      sheetPanel.classList.add("hidden");
+    }
     S.dom = data.initial.slice();
     S.vals = data.puzzle.givens.slice();
     S.idx = -1;
