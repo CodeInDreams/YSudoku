@@ -191,9 +191,12 @@ async function apply(digits, corners, reset, pen) {
     const current = new Set(state.corners[cell] || []);
     if (current.size === wanted.size && [...wanted].every((d) => current.has(d))) continue;
     await clickCell(cell);
-    // Delete only if this cell really has pencil marks; otherwise SudokuPad
-    // falls back to clearing the cell (including its value).
-    if (current.size) await page.keyboard.press("Delete").catch(() => {});
+    // Toggle old centre marks off instead of Delete: Delete would clear the
+    // whole cell when the dial has no marks.
+    for (const digit of current) {
+      await page.keyboard.type(String(digit));
+      await page.waitForTimeout(12);
+    }
     for (const digit of wanted) {
       await page.keyboard.type(String(digit));
       await page.waitForTimeout(18);
@@ -204,7 +207,10 @@ async function apply(digits, corners, reset, pen) {
     if (target.has(cell) || state.values[cell]) continue;
     if (!(state.corners[cell] || []).length) continue;
     await clickCell(cell);
-    await page.keyboard.press("Delete").catch(() => {});
+    for (const digit of state.corners[cell] || []) {
+      await page.keyboard.type(String(digit));
+      await page.waitForTimeout(12);
+    }
     state.corners[cell] = [];
   }
   await page.click("#control-normal").catch(() => {});

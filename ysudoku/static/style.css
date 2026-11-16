@@ -292,20 +292,26 @@ input[type=range] { accent-color: var(--accent); }
 .view-tabs, #board-view, #embed-view, #embed-hint, #calib-panel { display: none !important; }
 .live-view {
   position: relative; width: min(100%, 84vh); margin: 0 auto;
+  aspect-ratio: 1 / 1; background: var(--panel-2);
+  border: 1px solid var(--line); border-radius: 12px;
 }
 .live-view img {
-  display: block; width: 100%; height: auto; border-radius: 12px;
-  border: 1px solid var(--line); background: #fff;
+  display: block; width: 100%; height: 100%; object-fit: contain;
+  border-radius: 12px; background: #fff;
 }
+.live-view img:not([src]) { visibility: hidden; }
 .live-badge {
   position: absolute; right: 10px; bottom: 10px; padding: 3px 8px;
   border-radius: 999px; background: rgba(20, 28, 46, .72); color: #fff;
   font-size: 11px; letter-spacing: .3px; pointer-events: none;
 }
 .live-view .loading {
-  border-radius: 12px; background: rgba(255, 255, 255, .62);
+  border-radius: 12px; background: rgba(255, 255, 255, .72);
   color: #33415c; backdrop-filter: blur(1px);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
 }
+.live-view img:not([src]) ~ .live-overlay,
+.live-view img:not([src]) ~ .live-badge { visibility: hidden; }
 .board-controls .switch { display: none; }
 
 .live-overlay {
