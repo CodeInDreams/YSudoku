@@ -14,6 +14,7 @@ from .rules import compile_spec, heuristic_spec, build_inventory
 from .chaos import check_chaos_solution, solve_chaos
 from .solve import Solver, SolveResult, audit_steps, check_solution, compare_with_solution
 from .state import cell_name
+from .narrate import Step
 
 
 @dataclass
@@ -76,6 +77,48 @@ class Analysis:
             "solution_check": self.solution_check,
             "audit": self.audit,
         }
+
+
+def _stirling2(n: int, k: int) -> int:
+    if k <= 0 or k > n:
+        return 0
+    if k == 1 or k == n:
+        return 1
+    return k * _stirling2(n - 1, k) + _stirling2(n - 1, k - 1)
+
+
+def _chaos_pattern_steps(puzzle, rules, state) -> list:
+    """Truthful observation steps: constrain patterns, not individual cells."""
+    quads = {
+        frozenset(con.cells()): con
+        for con in rules.constraints if con.kind == "quadruple"
+    }
+    steps = []
+    index = 0
+    for con in rules.constraints:
+        if con.kind != "region_count":
+            continue
+        cells = con.cells()
+        quad = quads.get(frozenset(cells))
+        digits = "、".join(str(d) for d in quad.digits) if quad else ""
+        patterns = sum(_stirling2(len(cells), k) for k in con.counts)
+        counts = " 或 ".join(str(c) for c in con.counts)
+        title = f"圈域模式：{len(cells)} 格跨 {counts} 个区域"
+        detail = (
+            f"这个圆周围的 {len(cells)} 格必须包含数字 {digits or '（未标注）'}；\n"
+            f"区域计数要求它们跨 {counts} 个区域，因此区域划分只剩 {patterns} 类模式。\n"
+            "这一步只缩小“区域划分模式”的范围，还不能确定任何一格属于哪个区域；\n"
+            "要删候选或定区域，需要对“同区/不同区”做假设并传播矛盾。"
+        )
+        steps.append(Step(
+            index=index, technique="chaos_pattern", tier=2,
+            title=title, detail=detail, events=[],
+            visual={"focus": cells, "groups": [{"cells": cells, "label": f"圈{index + 1}"}]},
+            pre_dom=list(state.dom), pre_vals=list(state.vals),
+            audit="unknown",
+        ))
+        index += 1
+    return steps
 
 
 def _try_global(puzzle, rules, solver, source, warnings, time_limit, target, demo):
@@ -253,12 +296,13 @@ def analyze(
                 status="unsupported",
                 message="检测到作者自定义的区域语义（区域计数/视野/边界），首个混沌版本暂不支持",
             )
+        pattern_steps = _chaos_pattern_steps(puzzle, rules, solver.state)
         chaos_result = solve_chaos(puzzle, rules.constraints, time_limit=chaos_time_limit)
         if chaos_result.status == "solved":
             errors = check_chaos_solution(puzzle, rules.constraints, chaos_result.values, chaos_result.regions)
             return Analysis(
                 puzzle=puzzle, spec=spec, rules=rules,
-                result=SolveResult("solved", [], chaos_result.values),
+                result=SolveResult("solved", pattern_steps, chaos_result.values),
                 initial=solver.initial, source=source,
                 warnings=warnings + [chaos_result.message, "混沌构造由搜索求解，不是逐步人类推理"],
                 status="solved-search",
@@ -268,7 +312,7 @@ def analyze(
             )
         return Analysis(
             puzzle=puzzle, spec=spec, rules=rules,
-            result=SolveResult("stuck", [], solver.state.vals),
+            result=SolveResult("stuck", pattern_steps, solver.state.vals),
             initial=solver.initial, source=source,
             warnings=warnings + [chaos_result.message],
             status="stuck",

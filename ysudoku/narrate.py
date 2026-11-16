@@ -45,6 +45,7 @@ TITLES = {
     "anti_knight": "反骑士",
     "anti_king": "反国王",
     "unit_peer": "同区排除",
+    "chaos_pattern": "圈域模式",
     "innie": "45 法则（剩余格）",
     "outie": "45 法则（剩余两格）",
 }
@@ -58,6 +59,7 @@ TIERS = {
     "subset": 2, "hidden_subset": 2, "x_wing": 3, "xy_wing": 3, "w_wing": 3,
     "forcing_chain": 4, "custom": 2, "coloring": 3, "parity": 1, "odd": 1, "even": 1,
     "clone": 1, "sandwich": 2, "skyscraper": 2, "region_sum": 2,
+    "chaos_pattern": 2,
 }
 
 

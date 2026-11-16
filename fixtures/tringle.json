@@ -1,0 +1,764 @@
+{
+ "id": "sxsm_Myxo_f1283be503aaf23dde673bb15a348d1e",
+ "metadata": {
+  "source": "https://sudokupad.app/eynwusqy5l",
+  "title": "Tringle and Cross",
+  "author": "Myxo",
+  "rules": "Normal Chaos Construction rules apply.\n\nQuadruples: Digits in a circle appear in the four cells surrounding that circle. Some digits have been replaced by questionmarks.\n\nTrisection circles: The four cells around a grey circle with a thick outline must belong to exactly three distinct regions.\n\nUnbalanced circles: The four cells around a white circle with a thin outline must either belong to the same region or four distinct regions.",
+  "solution": "236145978791324856829413567983256741378962415652781394415679283564837129147598632"
+ },
+ "cages": [
+  {}
+ ],
+ "cells": [
+  [
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {}
+  ],
+  [
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {}
+  ],
+  [
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {}
+  ],
+  [
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {}
+  ],
+  [
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {}
+  ],
+  [
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {}
+  ],
+  [
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {}
+  ],
+  [
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {}
+  ],
+  [
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {}
+  ]
+ ],
+ "regions": [
+  {}
+ ],
+ "lines": [
+  {
+   "wayPoints": [
+    [
+     0,
+     0
+    ],
+    [
+     9,
+     0
+    ],
+    [
+     9,
+     9
+    ],
+    [
+     0,
+     9
+    ],
+    [
+     0,
+     0
+    ]
+   ],
+   "color": "#000000",
+   "thickness": 5.12,
+   "target": "overlay"
+  }
+ ],
+ "overlays": [
+  {
+   "center": [
+    2,
+    2
+   ],
+   "width": 0.72,
+   "height": 0.72,
+   "thickness": 1.28,
+   "angle": 0,
+   "rounded": true,
+   "backgroundColor": "#FFFFFF",
+   "borderColor": "#000000"
+  },
+  {
+   "center": [
+    4,
+    1
+   ],
+   "width": 0.72,
+   "height": 0.72,
+   "thickness": 1.28,
+   "angle": 0,
+   "rounded": true,
+   "backgroundColor": "#FFFFFF",
+   "borderColor": "#000000"
+  },
+  {
+   "center": [
+    2,
+    6
+   ],
+   "width": 0.72,
+   "height": 0.72,
+   "thickness": 1.28,
+   "angle": 0,
+   "rounded": true,
+   "backgroundColor": "#FFFFFF",
+   "borderColor": "#000000"
+  },
+  {
+   "center": [
+    4,
+    6
+   ],
+   "width": 0.72,
+   "height": 0.72,
+   "thickness": 1.28,
+   "angle": 0,
+   "rounded": true,
+   "backgroundColor": "#FFFFFF",
+   "borderColor": "#000000"
+  },
+  {
+   "center": [
+    1,
+    4
+   ],
+   "width": 0.75,
+   "height": 0.75,
+   "thickness": 3.2,
+   "angle": 0,
+   "rounded": true,
+   "backgroundColor": "#dddf",
+   "borderColor": "#000000"
+  },
+  {
+   "center": [
+    1,
+    8
+   ],
+   "width": 0.75,
+   "height": 0.75,
+   "thickness": 3.2,
+   "angle": 0,
+   "rounded": true,
+   "backgroundColor": "#dddf",
+   "borderColor": "#000000"
+  },
+  {
+   "center": [
+    3,
+    4
+   ],
+   "width": 0.75,
+   "height": 0.75,
+   "thickness": 3.2,
+   "angle": 0,
+   "rounded": true,
+   "backgroundColor": "#dddf",
+   "borderColor": "#000000"
+  },
+  {
+   "center": [
+    7,
+    2
+   ],
+   "width": 0.75,
+   "height": 0.75,
+   "thickness": 3.2,
+   "angle": 0,
+   "rounded": true,
+   "backgroundColor": "#dddf",
+   "borderColor": "#000000"
+  },
+  {
+   "center": [
+    0.857,
+    3.857
+   ],
+   "width": 0,
+   "height": 0.426,
+   "stroke": "#ffffff",
+   "stroke-width": 1.28,
+   "stroke-linejoin": "round",
+   "text": "1",
+   "fontSize": 12,
+   "color": "#000000",
+   "angle": 0,
+   "rounded": true
+  },
+  {
+   "center": [
+    0.857,
+    4.143
+   ],
+   "width": 0,
+   "height": 0.426,
+   "stroke": "#ffffff",
+   "stroke-width": 1.28,
+   "stroke-linejoin": "round",
+   "text": "2",
+   "fontSize": 12,
+   "color": "#000000",
+   "angle": 0,
+   "rounded": true
+  },
+  {
+   "center": [
+    1.143,
+    3.857
+   ],
+   "width": 0,
+   "height": 0.426,
+   "stroke": "#ffffff",
+   "stroke-width": 1.28,
+   "stroke-linejoin": "round",
+   "text": "3",
+   "fontSize": 12,
+   "color": "#000000",
+   "angle": 0,
+   "rounded": true
+  },
+  {
+   "center": [
+    1.143,
+    4.143
+   ],
+   "width": 0,
+   "height": 0.426,
+   "stroke": "#ffffff",
+   "stroke-width": 1.28,
+   "stroke-linejoin": "round",
+   "text": "4",
+   "fontSize": 12,
+   "color": "#000000",
+   "angle": 0,
+   "rounded": true
+  },
+  {
+   "center": [
+    0.857,
+    7.857
+   ],
+   "width": 0,
+   "height": 0.426,
+   "stroke": "#ffffff",
+   "stroke-width": 1.28,
+   "stroke-linejoin": "round",
+   "text": "5",
+   "fontSize": 12,
+   "color": "#000000",
+   "angle": 0,
+   "rounded": true
+  },
+  {
+   "center": [
+    0.857,
+    8.143
+   ],
+   "width": 0,
+   "height": 0.426,
+   "stroke": "#ffffff",
+   "stroke-width": 1.28,
+   "stroke-linejoin": "round",
+   "text": "6",
+   "fontSize": 12,
+   "color": "#000000",
+   "angle": 0,
+   "rounded": true
+  },
+  {
+   "center": [
+    1.143,
+    7.857
+   ],
+   "width": 0,
+   "height": 0.426,
+   "stroke": "#ffffff",
+   "stroke-width": 1.28,
+   "stroke-linejoin": "round",
+   "text": "7",
+   "fontSize": 12,
+   "color": "#000000",
+   "angle": 0,
+   "rounded": true
+  },
+  {
+   "center": [
+    1.143,
+    8.143
+   ],
+   "width": 0,
+   "height": 0.426,
+   "stroke": "#ffffff",
+   "stroke-width": 1.28,
+   "stroke-linejoin": "round",
+   "text": "8",
+   "fontSize": 12,
+   "color": "#000000",
+   "angle": 0,
+   "rounded": true
+  },
+  {
+   "center": [
+    1.857,
+    1.857
+   ],
+   "width": 0,
+   "height": 0.426,
+   "stroke": "#ffffff",
+   "stroke-width": 1.28,
+   "stroke-linejoin": "round",
+   "text": "1",
+   "fontSize": 12,
+   "color": "#000000",
+   "angle": 0,
+   "rounded": true
+  },
+  {
+   "center": [
+    1.857,
+    2.143
+   ],
+   "width": 0,
+   "height": 0.426,
+   "stroke": "#ffffff",
+   "stroke-width": 1.28,
+   "stroke-linejoin": "round",
+   "text": "2",
+   "fontSize": 12,
+   "color": "#000000",
+   "angle": 0,
+   "rounded": true
+  },
+  {
+   "center": [
+    2.143,
+    1.857
+   ],
+   "width": 0,
+   "height": 0.426,
+   "stroke": "#ffffff",
+   "stroke-width": 1.28,
+   "stroke-linejoin": "round",
+   "text": "9",
+   "fontSize": 12,
+   "color": "#000000",
+   "angle": 0,
+   "rounded": true
+  },
+  {
+   "center": [
+    2.143,
+    2.143
+   ],
+   "width": 0,
+   "height": 0.426,
+   "stroke": "#ffffff",
+   "stroke-width": 1.28,
+   "stroke-linejoin": "round",
+   "text": "9",
+   "fontSize": 12,
+   "color": "#000000",
+   "angle": 0,
+   "rounded": true
+  },
+  {
+   "center": [
+    1.857,
+    5.857
+   ],
+   "width": 0,
+   "height": 0.426,
+   "stroke": "#ffffff",
+   "stroke-width": 1.28,
+   "stroke-linejoin": "round",
+   "text": "3",
+   "fontSize": 12,
+   "color": "#000000",
+   "angle": 0,
+   "rounded": true
+  },
+  {
+   "center": [
+    1.857,
+    6.143
+   ],
+   "width": 0,
+   "height": 0.426,
+   "stroke": "#ffffff",
+   "stroke-width": 1.28,
+   "stroke-linejoin": "round",
+   "text": "5",
+   "fontSize": 12,
+   "color": "#000000",
+   "angle": 0,
+   "rounded": true
+  },
+  {
+   "center": [
+    2.143,
+    5.857
+   ],
+   "width": 0,
+   "height": 0.426,
+   "stroke": "#ffffff",
+   "stroke-width": 1.28,
+   "stroke-linejoin": "round",
+   "text": "?",
+   "fontSize": 12,
+   "color": "#000000",
+   "angle": 0,
+   "rounded": true
+  },
+  {
+   "center": [
+    2.143,
+    6.143
+   ],
+   "width": 0,
+   "height": 0.426,
+   "stroke": "#ffffff",
+   "stroke-width": 1.28,
+   "stroke-linejoin": "round",
+   "text": "?",
+   "fontSize": 12,
+   "color": "#000000",
+   "angle": 0,
+   "rounded": true
+  },
+  {
+   "center": [
+    2.857,
+    3.857
+   ],
+   "width": 0,
+   "height": 0.426,
+   "stroke": "#ffffff",
+   "stroke-width": 1.28,
+   "stroke-linejoin": "round",
+   "text": "2",
+   "fontSize": 12,
+   "color": "#000000",
+   "angle": 0,
+   "rounded": true
+  },
+  {
+   "center": [
+    2.857,
+    4.143
+   ],
+   "width": 0,
+   "height": 0.426,
+   "stroke": "#ffffff",
+   "stroke-width": 1.28,
+   "stroke-linejoin": "round",
+   "text": "4",
+   "fontSize": 12,
+   "color": "#000000",
+   "angle": 0,
+   "rounded": true
+  },
+  {
+   "center": [
+    3.143,
+    3.857
+   ],
+   "width": 0,
+   "height": 0.426,
+   "stroke": "#ffffff",
+   "stroke-width": 1.28,
+   "stroke-linejoin": "round",
+   "text": "?",
+   "fontSize": 12,
+   "color": "#000000",
+   "angle": 0,
+   "rounded": true
+  },
+  {
+   "center": [
+    3.143,
+    4.143
+   ],
+   "width": 0,
+   "height": 0.426,
+   "stroke": "#ffffff",
+   "stroke-width": 1.28,
+   "stroke-linejoin": "round",
+   "text": "?",
+   "fontSize": 12,
+   "color": "#000000",
+   "angle": 0,
+   "rounded": true
+  },
+  {
+   "center": [
+    3.857,
+    5.857
+   ],
+   "width": 0,
+   "height": 0.426,
+   "stroke": "#ffffff",
+   "stroke-width": 1.28,
+   "stroke-linejoin": "round",
+   "text": "2",
+   "fontSize": 12,
+   "color": "#000000",
+   "angle": 0,
+   "rounded": true
+  },
+  {
+   "center": [
+    3.857,
+    6.143
+   ],
+   "width": 0,
+   "height": 0.426,
+   "stroke": "#ffffff",
+   "stroke-width": 1.28,
+   "stroke-linejoin": "round",
+   "text": "4",
+   "fontSize": 12,
+   "color": "#000000",
+   "angle": 0,
+   "rounded": true
+  },
+  {
+   "center": [
+    4.143,
+    5.857
+   ],
+   "width": 0,
+   "height": 0.426,
+   "stroke": "#ffffff",
+   "stroke-width": 1.28,
+   "stroke-linejoin": "round",
+   "text": "6",
+   "fontSize": 12,
+   "color": "#000000",
+   "angle": 0,
+   "rounded": true
+  },
+  {
+   "center": [
+    4.143,
+    6.143
+   ],
+   "width": 0,
+   "height": 0.426,
+   "stroke": "#ffffff",
+   "stroke-width": 1.28,
+   "stroke-linejoin": "round",
+   "text": "7",
+   "fontSize": 12,
+   "color": "#000000",
+   "angle": 0,
+   "rounded": true
+  },
+  {
+   "center": [
+    3.857,
+    0.857
+   ],
+   "width": 0,
+   "height": 0.426,
+   "stroke": "#ffffff",
+   "stroke-width": 1.28,
+   "stroke-linejoin": "round",
+   "text": "3",
+   "fontSize": 12,
+   "color": "#000000",
+   "angle": 0,
+   "rounded": true
+  },
+  {
+   "center": [
+    3.857,
+    1.143
+   ],
+   "width": 0,
+   "height": 0.426,
+   "stroke": "#ffffff",
+   "stroke-width": 1.28,
+   "stroke-linejoin": "round",
+   "text": "9",
+   "fontSize": 12,
+   "color": "#000000",
+   "angle": 0,
+   "rounded": true
+  },
+  {
+   "center": [
+    4.143,
+    0.857
+   ],
+   "width": 0,
+   "height": 0.426,
+   "stroke": "#ffffff",
+   "stroke-width": 1.28,
+   "stroke-linejoin": "round",
+   "text": "?",
+   "fontSize": 12,
+   "color": "#000000",
+   "angle": 0,
+   "rounded": true
+  },
+  {
+   "center": [
+    4.143,
+    1.143
+   ],
+   "width": 0,
+   "height": 0.426,
+   "stroke": "#ffffff",
+   "stroke-width": 1.28,
+   "stroke-linejoin": "round",
+   "text": "?",
+   "fontSize": 12,
+   "color": "#000000",
+   "angle": 0,
+   "rounded": true
+  },
+  {
+   "center": [
+    6.857,
+    1.857
+   ],
+   "width": 0,
+   "height": 0.426,
+   "stroke": "#ffffff",
+   "stroke-width": 1.28,
+   "stroke-linejoin": "round",
+   "text": "1",
+   "fontSize": 12,
+   "color": "#000000",
+   "angle": 0,
+   "rounded": true
+  },
+  {
+   "center": [
+    6.857,
+    2.143
+   ],
+   "width": 0,
+   "height": 0.426,
+   "stroke": "#ffffff",
+   "stroke-width": 1.28,
+   "stroke-linejoin": "round",
+   "text": "4",
+   "fontSize": 12,
+   "color": "#000000",
+   "angle": 0,
+   "rounded": true
+  },
+  {
+   "center": [
+    7.143,
+    1.857
+   ],
+   "width": 0,
+   "height": 0.426,
+   "stroke": "#ffffff",
+   "stroke-width": 1.28,
+   "stroke-linejoin": "round",
+   "text": "5",
+   "fontSize": 12,
+   "color": "#000000",
+   "angle": 0,
+   "rounded": true
+  },
+  {
+   "center": [
+    7.143,
+    2.143
+   ],
+   "width": 0,
+   "height": 0.426,
+   "stroke": "#ffffff",
+   "stroke-width": 1.28,
+   "stroke-linejoin": "round",
+   "text": "6",
+   "fontSize": 12,
+   "color": "#000000",
+   "angle": 0,
+   "rounded": true
+  }
+ ]
+}
