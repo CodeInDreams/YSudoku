@@ -96,6 +96,17 @@ export SUDOKU_LLM_MODEL=qwen2.5:7b
 
 没有 key 时网页会把「LLM 规则」置灰，并显示“未配置 key · 本地启发式”。
 
+### Web 前端（shadcn/ui）
+
+`web/` 是 Vite + React + Tailwind + shadcn 风格的前端。Python 服务端优先托管
+`web/dist`，没有构建产物时回退到旧静态界面。
+
+```bash
+cd web
+npm install
+npm run build
+```
+
 ### SudokuPad 只读镜像
 
 主视图现在是 **SudokuPad 的只读截图**，不再用自绘棋盘：服务端 Playwright 打开题目，把截图

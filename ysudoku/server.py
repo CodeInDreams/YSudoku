@@ -14,6 +14,7 @@ from . import history, live, store
 from .pipeline import analyze
 
 STATIC_DIR = Path(__file__).parent / "static"
+DIST_DIR = Path(__file__).parent.parent / "web" / "dist"
 def _stored_analysis(target: str, body: dict, demo: bool = False,
                      force_rules: bool = False, force_steps: bool = False):
     key = store.key_for(target)
@@ -72,6 +73,10 @@ _CONTENT_TYPES = {
     ".js": "application/javascript; charset=utf-8",
     ".svg": "image/svg+xml",
     ".png": "image/png",
+    ".woff2": "font/woff2",
+    ".woff": "font/woff",
+    ".map": "application/json",
+    ".ico": "image/x-icon",
 }
 
 
@@ -140,7 +145,11 @@ class Handler(BaseHTTPRequestHandler):
             }
             self._send(200, json.dumps(payload, ensure_ascii=False).encode("utf-8"), "application/json")
             return
-        if path in ("/", "/index.html"):
+        if path in ("/", "/index.html") and (DIST_DIR / "index.html").exists():
+            file = DIST_DIR / "index.html"
+        elif path.startswith("/assets/") and DIST_DIR.exists():
+            file = DIST_DIR / path.lstrip("/")
+        elif path in ("/", "/index.html"):
             file = STATIC_DIR / "index.html"
         elif path.startswith("/static/"):
             file = STATIC_DIR / path[len("/static/"):]

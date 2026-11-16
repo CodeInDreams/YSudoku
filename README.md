@@ -103,6 +103,18 @@ export SUDOKU_LLM_MODEL=qwen2.5:7b
 
 Without a key the web UI greys out **LLM rules** and shows "no key · local heuristics".
 
+### Web client (shadcn/ui)
+
+The UI in `web/` is a Vite + React + Tailwind + shadcn-style client. The Python
+server serves `web/dist` when it exists and falls back to the legacy static UI
+otherwise.
+
+```bash
+cd web
+npm install
+npm run build
+```
+
 ### Live SudokuPad view (read-only)
 
 The main board is now a **read-only mirror of SudokuPad**, not a separate SVG board: a local
