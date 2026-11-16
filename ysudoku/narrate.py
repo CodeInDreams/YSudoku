@@ -176,7 +176,10 @@ def _explain(events: list[Event], primary: Event, n: int) -> tuple[str, dict]:
     data = primary.reason.data
     handler = globals().get(f"_explain_{kind}")
     if handler:
-        return handler(events, data, n)
+        try:
+            return handler(events, data, n)
+        except Exception:  # noqa: BLE001 - a narration bug must not kill a solve
+            return _explain_generic(events, primary, n)
     return _explain_generic(events, primary, n)
 
 
@@ -716,7 +719,7 @@ def _explain_renban(events, data, n):
 
 
 def _explain_whisper(events, data, n, kind="german_whisper"):
-    cells = data["cells"]
+    cells = data.get("cells") or ([data["a"], data["b"]] if "a" in data else [])
     diff = data.get("diff", 5)
     detail = (
         f"{'德式' if diff >= 5 else '荷式'} Whisper：{_names(cells, n)} 相邻两格的数字差至少为 {diff}。\n"
@@ -751,7 +754,7 @@ def _explain_between(events, data, n):
 
 
 def _explain_consecutive(events, data, n):
-    cells = data["cells"]
+    cells = data.get("cells") or ([data["a"], data["b"]] if "a" in data else [])
     detail = (
         f"连续线：{_names(cells, n)} 上相邻两格相差 1。\n"
         f"逐对检查相邻格，排除不可能的候选：\n"

@@ -1,0 +1,679 @@
+{
+ "id": "sxsm_Vitray_2f75e8ee0a364c8837b399a7eb1af909",
+ "metadata": {
+  "source": "https://logic-masters.de/Raetselportal/Raetsel/zeigen.php?id=000W2A",
+  "title": "Double-slit Experiment",
+  "author": "Vitray",
+  "rules": "Normal sudoku rules apply: place the digits 1 to 9 in every row, column, and 3x3 box.\n\nAnti-knight: Cells separated by a knight's move (in chess) may not contain the same digit.\n\nAnti-king: Cells separated by a king's move (in chess) may not contain the same digit.\n\nArrows: Digits along an arrow sum to the digit in that arrow's circle. Digits may repeat on an arrow if permitted by the other rules.\n\nGerman whispers: Adjacent digits along a green line differ by at least 5.\n\nXV: Digits separated by a V sum to 5. Digits separated by an X sum to 10. Not all Xs and Vs are given.",
+  "antiking": true,
+  "antiknight": true,
+  "solution": "976328514328514769514769283769283145283145697145697832697832451832451976451976328",
+  "lm_url": "https://logic-masters.de/Raetselportal/Raetsel/zeigen.php?id=000W2A",
+  "source_url": "https://sudokupad.app/pyivck2m15"
+ },
+ "cages": [
+  {
+   "value": "solution: 976328514328514769514769283769283145283145697145697832697832451832451976451976328"
+  }
+ ],
+ "cells": [
+  [
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {}
+  ],
+  [
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {}
+  ],
+  [
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {}
+  ],
+  [
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {}
+  ],
+  [
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {}
+  ],
+  [
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {}
+  ],
+  [
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {}
+  ],
+  [
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {}
+  ],
+  [
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {},
+   {}
+  ]
+ ],
+ "regions": [
+  [
+   [
+    0,
+    0
+   ],
+   [
+    0,
+    1
+   ],
+   [
+    0,
+    2
+   ],
+   [
+    1,
+    0
+   ],
+   [
+    1,
+    1
+   ],
+   [
+    1,
+    2
+   ],
+   [
+    2,
+    0
+   ],
+   [
+    2,
+    1
+   ],
+   [
+    2,
+    2
+   ]
+  ],
+  [
+   [
+    0,
+    3
+   ],
+   [
+    0,
+    4
+   ],
+   [
+    0,
+    5
+   ],
+   [
+    1,
+    3
+   ],
+   [
+    1,
+    4
+   ],
+   [
+    1,
+    5
+   ],
+   [
+    2,
+    3
+   ],
+   [
+    2,
+    4
+   ],
+   [
+    2,
+    5
+   ]
+  ],
+  [
+   [
+    0,
+    6
+   ],
+   [
+    0,
+    7
+   ],
+   [
+    0,
+    8
+   ],
+   [
+    1,
+    6
+   ],
+   [
+    1,
+    7
+   ],
+   [
+    1,
+    8
+   ],
+   [
+    2,
+    6
+   ],
+   [
+    2,
+    7
+   ],
+   [
+    2,
+    8
+   ]
+  ],
+  [
+   [
+    3,
+    0
+   ],
+   [
+    3,
+    1
+   ],
+   [
+    3,
+    2
+   ],
+   [
+    4,
+    0
+   ],
+   [
+    4,
+    1
+   ],
+   [
+    4,
+    2
+   ],
+   [
+    5,
+    0
+   ],
+   [
+    5,
+    1
+   ],
+   [
+    5,
+    2
+   ]
+  ],
+  [
+   [
+    3,
+    3
+   ],
+   [
+    3,
+    4
+   ],
+   [
+    3,
+    5
+   ],
+   [
+    4,
+    3
+   ],
+   [
+    4,
+    4
+   ],
+   [
+    4,
+    5
+   ],
+   [
+    5,
+    3
+   ],
+   [
+    5,
+    4
+   ],
+   [
+    5,
+    5
+   ]
+  ],
+  [
+   [
+    3,
+    6
+   ],
+   [
+    3,
+    7
+   ],
+   [
+    3,
+    8
+   ],
+   [
+    4,
+    6
+   ],
+   [
+    4,
+    7
+   ],
+   [
+    4,
+    8
+   ],
+   [
+    5,
+    6
+   ],
+   [
+    5,
+    7
+   ],
+   [
+    5,
+    8
+   ]
+  ],
+  [
+   [
+    6,
+    0
+   ],
+   [
+    6,
+    1
+   ],
+   [
+    6,
+    2
+   ],
+   [
+    7,
+    0
+   ],
+   [
+    7,
+    1
+   ],
+   [
+    7,
+    2
+   ],
+   [
+    8,
+    0
+   ],
+   [
+    8,
+    1
+   ],
+   [
+    8,
+    2
+   ]
+  ],
+  [
+   [
+    6,
+    3
+   ],
+   [
+    6,
+    4
+   ],
+   [
+    6,
+    5
+   ],
+   [
+    7,
+    3
+   ],
+   [
+    7,
+    4
+   ],
+   [
+    7,
+    5
+   ],
+   [
+    8,
+    3
+   ],
+   [
+    8,
+    4
+   ],
+   [
+    8,
+    5
+   ]
+  ],
+  [
+   [
+    6,
+    6
+   ],
+   [
+    6,
+    7
+   ],
+   [
+    6,
+    8
+   ],
+   [
+    7,
+    6
+   ],
+   [
+    7,
+    7
+   ],
+   [
+    7,
+    8
+   ],
+   [
+    8,
+    6
+   ],
+   [
+    8,
+    7
+   ],
+   [
+    8,
+    8
+   ]
+  ]
+ ],
+ "lines": [
+  {
+   "wayPoints": [
+    [
+     3.5,
+     7.5
+    ],
+    [
+     5.5,
+     7.5
+    ]
+   ],
+   "color": "#67f067ff",
+   "thickness": 9.6
+  },
+  {
+   "wayPoints": [
+    [
+     0.5,
+     7.5
+    ],
+    [
+     1.5,
+     7.5
+    ]
+   ],
+   "color": "#67f067ff",
+   "thickness": 9.6
+  },
+  {
+   "wayPoints": [
+    [
+     7.5,
+     7.5
+    ],
+    [
+     8.5,
+     7.5
+    ],
+    [
+     8.5,
+     8.5
+    ]
+   ],
+   "color": "#67f067ff",
+   "thickness": 9.6
+  }
+ ],
+ "overlays": [
+  {
+   "center": [
+    4.5,
+    1.5
+   ],
+   "width": 0.82,
+   "height": 0.82,
+   "thickness": 1.28,
+   "angle": 0,
+   "rounded": true,
+   "backgroundColor": "#FFFFFF",
+   "borderColor": "#aaaf"
+  },
+  {
+   "center": [
+    4.5,
+    1
+   ],
+   "width": 0.35,
+   "height": 0.35,
+   "stroke": "#000000",
+   "stroke-width": 1,
+   "stroke-linejoin": "round",
+   "text": "X",
+   "fontSize": 14,
+   "rounded": true,
+   "backgroundColor": "#FFFFFF"
+  },
+  {
+   "center": [
+    0.5,
+    8
+   ],
+   "width": 0.35,
+   "height": 0.35,
+   "stroke": "#000000",
+   "stroke-width": 1,
+   "stroke-linejoin": "round",
+   "text": "V",
+   "fontSize": 14,
+   "rounded": true,
+   "backgroundColor": "#FFFFFF"
+  },
+  {
+   "center": [
+    4.5,
+    4
+   ],
+   "width": 0.35,
+   "height": 0.35,
+   "stroke": "#000000",
+   "stroke-width": 1,
+   "stroke-linejoin": "round",
+   "text": "V",
+   "fontSize": 14,
+   "rounded": true,
+   "backgroundColor": "#FFFFFF"
+  },
+  {
+   "center": [
+    7.5,
+    2
+   ],
+   "width": 0.35,
+   "height": 0.35,
+   "stroke": "#000000",
+   "stroke-width": 1,
+   "stroke-linejoin": "round",
+   "text": "V",
+   "fontSize": 14,
+   "rounded": true,
+   "backgroundColor": "#FFFFFF"
+  },
+  {
+   "center": [
+    2.5,
+    2
+   ],
+   "width": 0.35,
+   "height": 0.35,
+   "stroke": "#000000",
+   "stroke-width": 1,
+   "stroke-linejoin": "round",
+   "text": "V",
+   "fontSize": 14,
+   "rounded": true,
+   "backgroundColor": "#FFFFFF"
+  },
+  {
+   "center": [
+    0.5,
+    5
+   ],
+   "width": 0.35,
+   "height": 0.35,
+   "stroke": "#000000",
+   "stroke-width": 1,
+   "stroke-linejoin": "round",
+   "text": "X",
+   "fontSize": 14,
+   "rounded": true,
+   "backgroundColor": "#FFFFFF"
+  },
+  {
+   "center": [
+    0.5,
+    4
+   ],
+   "width": 0.35,
+   "height": 0.35,
+   "stroke": "#000000",
+   "stroke-width": 1,
+   "stroke-linejoin": "round",
+   "text": "V",
+   "fontSize": 14,
+   "rounded": true,
+   "backgroundColor": "#FFFFFF"
+  },
+  {
+   "center": [
+    8.5,
+    3
+   ],
+   "width": 0.35,
+   "height": 0.35,
+   "stroke": "#000000",
+   "stroke-width": 1,
+   "stroke-linejoin": "round",
+   "text": "X",
+   "fontSize": 14,
+   "rounded": true,
+   "backgroundColor": "#FFFFFF"
+  },
+  {
+   "center": [
+    1.5,
+    2
+   ],
+   "width": 0.35,
+   "height": 0.35,
+   "stroke": "#000000",
+   "stroke-width": 1,
+   "stroke-linejoin": "round",
+   "text": "X",
+   "fontSize": 14,
+   "rounded": true,
+   "backgroundColor": "#FFFFFF"
+  }
+ ],
+ "arrows": [
+  {
+   "wayPoints": [
+    [
+     4.5,
+     1.899
+    ],
+    [
+     4.5,
+     4.5
+    ]
+   ],
+   "headLength": 0.35,
+   "color": "#aaaf",
+   "thickness": 3.2
+  }
+ ]
+}
