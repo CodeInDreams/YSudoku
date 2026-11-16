@@ -169,7 +169,9 @@ Every step carries a structured reason and an animation script; T4 steps are alw
 
 - Left: candidates, region borders, constraint outlines (cages, arrows, fish links)
 - Right: conclusion, premises, effects; expandable rule interpretation and step list
-- Light/dark theme toggle (follows the system by default, remembered per browser)
+- Light theme by default (SudokuPad is light), dark toggle available and remembered
+- **Local history**: every analysis is recorded in `.cache/history.json` (title, time, status,
+  steps); the History panel reopens a puzzle or clears the list. Nothing leaves the machine.
 - Responsive phone layout: stacked header, full-width board, touch-sized controls
 - Controls: previous / next / play-pause / speed / scrubber / arrow keys
 - **SudokuPad original + annotations**: embeds the official page and projects highlights/links on

@@ -138,6 +138,7 @@
     updateControls();
     showStep(-1, false);
     setLoading(false);
+    refreshHistory();
     if (data.steps.length) {
       setTimeout(() => showStep(0, true), 350);
     }
@@ -242,6 +243,51 @@
     document.documentElement.dataset.theme = theme;
     const button = $("theme-toggle");
     if (button) button.textContent = theme === "light" ? "🌙" : "☀️";
+  }
+
+  const STATUS_LABEL = {
+    solved: "已解出", "solved-global": "全局求解", "solved-search": "搜索求解",
+    stuck: "卡住", unsupported: "不支持", invalid: "规则冲突",
+  };
+
+  async function refreshHistory() {
+    try {
+      const res = await fetch("/api/history");
+      if (!res.ok) return;
+      renderHistory(await res.json());
+    } catch (err) { /* history is best-effort */ }
+  }
+
+  function renderHistory(entries) {
+    const box = $("history");
+    if (!box) return;
+    box.innerHTML = "";
+    if (!entries || !entries.length) {
+      const empty = document.createElement("div");
+      empty.className = "muted";
+      empty.textContent = "还没有记录。";
+      box.appendChild(empty);
+      return;
+    }
+    for (const entry of entries.slice(0, 40)) {
+      const row = document.createElement("div");
+      row.className = "history-row";
+      const title = document.createElement("div");
+      title.className = "history-title";
+      title.textContent = entry.title || entry.id || entry.target || "未命名";
+      const meta = document.createElement("div");
+      meta.className = "history-meta";
+      const at = (entry.at || "").replace("T", " ").slice(0, 16);
+      const status = STATUS_LABEL[entry.status] || entry.status;
+      meta.textContent = `${at} · ${status} · ${entry.steps || 0} 步`;
+      row.appendChild(title);
+      row.appendChild(meta);
+      row.addEventListener("click", () => {
+        stopPlay();
+        loadPuzzle(entry.demo ? "" : entry.target, entry.demo ? "/api/demo" : "/api/solve");
+      });
+      box.appendChild(row);
+    }
   }
 
   function countGiven() {
@@ -817,6 +863,11 @@
     e.preventDefault();
     stopPlay();
     loadPuzzle($("url").value.trim());
+  });
+  $("history-clear").addEventListener("click", async (event) => {
+    event.preventDefault();
+    try { await fetch("/api/history/clear", { method: "POST" }); } catch (err) { /* ignore */ }
+    refreshHistory();
   });
   $("calib-toggle").addEventListener("click", () => {
     $("calib-panel").classList.toggle("hidden");

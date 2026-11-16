@@ -8,6 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
+from . import history
 from .pipeline import analyze
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -37,6 +38,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = urlparse(self.path).path
+        if path == "/api/history":
+            self._send(200, json.dumps(history.load(), ensure_ascii=False).encode("utf-8"),
+                       "application/json")
+            return
         if path == "/api/health":
             from . import llm, rulecache
             config = llm.LLMConfig.from_env()
@@ -65,6 +70,10 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, b'{"error":"not found"}', "application/json")
             return
         length = int(self.headers.get("Content-Length") or 0)
+        if urlparse(self.path).path == "/api/history/clear":
+            history.clear()
+            self._send(200, b'{"ok":true}', "application/json")
+            return
         try:
             body = json.loads(self.rfile.read(length) or b"{}")
         except json.JSONDecodeError:
@@ -86,6 +95,11 @@ class Handler(BaseHTTPRequestHandler):
                 use_global=bool(body.get("global", True)),
                 global_time_limit=float(body.get("global_timeout", 60)),
             )
+            try:
+                history.record(target, analysis,
+                               demo=(urlparse(self.path).path == "/api/demo"))
+            except Exception:  # noqa: BLE001 - history must never break a solve
+                pass
             payload = analysis.to_json()
         except Exception as exc:  # noqa: BLE001 - surfaced to the UI
             payload = {"error": str(exc)}
