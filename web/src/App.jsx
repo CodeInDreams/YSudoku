@@ -12,8 +12,7 @@ import { Switch } from "./components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "./components/ui/popover";
 import {
-  DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent,
-  DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "./components/ui/dropdown-menu";
 import { detectLang, translate } from "./i18n";
 
@@ -629,17 +628,15 @@ export default function App() {
             <DropdownMenu>
               <DropdownMenuTrigger asChild><Button variant="ghost" size="sm" className="gap-1.5 whitespace-nowrap text-xs text-muted-foreground"><Languages className="h-4 w-4" /><span className="hidden sm:inline">{lang === "zh" ? "中文" : "EN"}</span></Button></DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-36">
-                <DropdownMenuLabel>{t("header.language")}</DropdownMenuLabel>
-                <DropdownMenuItem onClick={() => setLang("zh")}><span className="flex-1">中文</span>{lang === "zh" && <Check className="h-4 w-4" />}</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setLang("en")}><span className="flex-1">English</span>{lang === "en" && <Check className="h-4 w-4" />}</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setLang("zh")} className={lang === "zh" ? "bg-accent font-medium" : ""}><span className="flex-1">中文</span>{lang === "zh" && <Check className="h-4 w-4" />}</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setLang("en")} className={lang === "en" ? "bg-accent font-medium" : ""}><span className="flex-1">English</span>{lang === "en" && <Check className="h-4 w-4" />}</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
             <DropdownMenu>
               <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" title={t("header.theme")}>{dark ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}</Button></DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-36">
-                <DropdownMenuLabel>{t("header.theme")}</DropdownMenuLabel>
-                <DropdownMenuItem onClick={() => setDark(false)}><Sun className="h-4 w-4" /><span className="flex-1">{t("header.light")}</span>{!dark && <Check className="h-4 w-4" />}</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setDark(true)}><Moon className="h-4 w-4" /><span className="flex-1">{t("header.dark")}</span>{dark && <Check className="h-4 w-4" />}</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setDark(false)} className={!dark ? "bg-accent font-medium" : ""}><Sun className="h-4 w-4" /><span className="flex-1">{t("header.light")}</span>{!dark && <Check className="h-4 w-4" />}</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setDark(true)} className={dark ? "bg-accent font-medium" : ""}><Moon className="h-4 w-4" /><span className="flex-1">{t("header.dark")}</span>{dark && <Check className="h-4 w-4" />}</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
             <div className="hidden h-7 w-7 place-items-center rounded-full bg-muted text-[10px] font-semibold sm:grid">YS</div>
@@ -733,7 +730,10 @@ export default function App() {
               <CardHeader className="py-3.5"><div className="flex flex-wrap items-center gap-2">
                 <div className="relative min-w-[180px] flex-1"><Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" /><Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("history.search")} className="h-8 pl-8 text-xs" /></div>
                 <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs"><ArrowUpDown className="h-3.5 w-3.5" />{sort === "recent" ? t("history.recent") : t("history.byTitle")}<ChevronDown className="h-3 w-3 opacity-60" /></Button></DropdownMenuTrigger>
-                  <DropdownMenuContent align="end"><DropdownMenuLabel>{t("history.sort")}</DropdownMenuLabel><DropdownMenuCheckboxItem checked={sort === "recent"} onCheckedChange={() => setSort("recent")}>{t("history.recent")}</DropdownMenuCheckboxItem><DropdownMenuCheckboxItem checked={sort === "title"} onCheckedChange={() => setSort("title")}>{t("history.byTitle")}</DropdownMenuCheckboxItem></DropdownMenuContent>
+                  <DropdownMenuContent align="end" className="w-36">
+                    <DropdownMenuItem onClick={() => setSort("recent")} className={sort === "recent" ? "bg-accent font-medium" : ""}><span className="flex-1">{t("history.recent")}</span>{sort === "recent" && <Check className="h-4 w-4" />}</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setSort("title")} className={sort === "title" ? "bg-accent font-medium" : ""}><span className="flex-1">{t("history.byTitle")}</span>{sort === "title" && <Check className="h-4 w-4" />}</DropdownMenuItem>
+                  </DropdownMenuContent>
                 </DropdownMenu>
                 <label className="flex items-center gap-1.5 text-xs text-muted-foreground"><input type="checkbox" checked={favOnly} onChange={(e) => setFavOnly(e.target.checked)} />{t("history.favOnly")}</label>
               </div></CardHeader>
