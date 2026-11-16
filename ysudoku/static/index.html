@@ -21,15 +21,18 @@
     <label class="switch" title="用 LLM 编译规则；题面若带官方答案，只用于自检，不参与求解">
       <input id="use-llm" type="checkbox" checked> LLM 规则
     </label>
+    <button type="button" class="help" data-help="llm" aria-label="LLM 规则说明">?</button>
     <span id="llm-note" class="llm-note"></span>
     <label class="switch" title="对每一步结论做独立穷举验证，不读取官方答案（较慢）">
       <input id="audit" type="checkbox"> 反证审计
     </label>
+    <button type="button" class="help" data-help="audit" aria-label="反证审计说明">?</button>
     <button type="submit" id="go">解析并求解</button>
     <button type="button" id="demo" title="加载内置示例">示例</button>
   </form>
   <button type="button" id="theme-toggle" class="icon-btn" title="切换浅色/深色">☀️</button>
 </header>
+<div id="help-pop" class="help-pop hidden"></div>
 
 <main class="layout">
   <section class="board-panel">

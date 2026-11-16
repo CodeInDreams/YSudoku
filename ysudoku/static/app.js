@@ -1237,6 +1237,29 @@
   });
 
   refreshHistory();
+  const HELP_TEXT = {
+    llm: "用大模型把 SudokuPad 的规则文字和图形清单编译成结构化约束。题面若带官方答案，只用于自检，不参与求解；关闭后使用本地启发式规则识别。",
+    audit: "求解完成后，对每一步结论做独立穷举验证：假设该结论不成立，如果仍能解出，就把这一步标为异常。较慢，默认关闭。",
+  };
+  document.querySelectorAll(".help").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const pop = $("help-pop");
+      const key = button.dataset.help;
+      if (!pop.classList.contains("hidden") && pop.dataset.help === key) {
+        pop.classList.add("hidden");
+        return;
+      }
+      pop.textContent = HELP_TEXT[key] || "";
+      pop.dataset.help = key;
+      const rect = button.getBoundingClientRect();
+      pop.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - 330))}px`;
+      pop.style.top = `${rect.bottom + 8}px`;
+      pop.classList.remove("hidden");
+    });
+  });
+  document.addEventListener("click", () => $("help-pop").classList.add("hidden"));
+
   checkHealth();
   $("url").focus();
 })();
