@@ -34,7 +34,7 @@ python3 -m ysudoku --web
 
 ```bash
 python3 -m ysudoku 7v57yvn5vf
-python3 -m ysudoku --allow-chains 7v57yvn5vf        # 卡住时允许反证（步骤标注 T4）
+python3 -m ysudoku --no-chains 7v57yvn5vf          # 关闭反证（默认开启，步骤标注 T4）
 python3 -m ysudoku --audit --json https://sudokupad.app/eynwusqy5l > out.json
 ```
 
@@ -136,7 +136,7 @@ python3 -m ysudoku --no-cache <sudokupad-url>     # 跳过缓存
 回传给 LLM，让它重读规则文本并输出一份修正后的完整 spec；新 spec 仍须通过与官方答案的校验才会被采用。
 这一步只做“重新理解规则”，不会把答案喂给模型，也不会凭空增加约束。
 
-网页里勾选「允许反证」可以让求解器在卡住时尝试“假设—矛盾”式试探；这类步骤标注为 T4，
+反证默认开启，也可以取消勾选「反证求解」；这类步骤标注为 T4，
 并明确提示不是纯直接推理。
 
 关于“让 LLM 自创规则”的边界、类型化 DSL 与可信性护栏，见
@@ -159,7 +159,7 @@ python3 -m ysudoku --no-cache <sudokupad-url>     # 跳过缓存
 T3 X-Wing / XY-Wing / W-Wing / **染色法**（单数字强链、A/B 双色、同色互见与双色夹击）
 / **3D Medusa**（格+数字候选、强弱链、同色冲突/双色夹击/同格双色）
 / **X-Chain**（单数字强弱链交替，两端夹击）/ **ALS-XZ**（两个几乎锁定集、受限共同候选）
-→ T4 反证（默认关闭，`--allow-chains` 或网页勾选「允许反证」）。
+→ T4 反证（默认开启，`--no-chains` 或取消勾选「反证求解」）。
 每一步都带结构化理由与动画脚本；T4 步骤会明确标注“这是反证，不是直接推理”。
 
 ## 动画与交互

@@ -35,7 +35,7 @@ Text-only reasoning from the CLI:
 
 ```bash
 python3 -m ysudoku 7v57yvn5vf
-python3 -m ysudoku --allow-chains 7v57yvn5vf        # allow refutation (T4) when stuck
+python3 -m ysudoku --no-chains 7v57yvn5vf          # disable refutation (T4); it is on by default
 python3 -m ysudoku --audit --json https://sudokupad.app/eynwusqy5l > out.json
 ```
 
@@ -171,7 +171,7 @@ For the boundaries of LLM-authored rules, the typed DSL and its trust guardrails
 Technique tiers: T1 constraint-local → T2 naked/hidden singles, locked candidates, subsets, 45 rule →
 T3 X-Wing, XY-Wing, W-Wing, **colouring** (single-digit strong links, A/B colours, colour wrap/trap),
 **3D Medusa** (cell+digit candidates, strong/weak links), **X-Chain**, **ALS-XZ** →
-T4 refutation (off by default; `--allow-chains` or the UI checkbox).
+T4 refutation (on by default; `--no-chains` or the UI checkbox disables it).
 Every step carries a structured reason and an animation script; T4 steps are always marked.
 
 ## Animation and UI

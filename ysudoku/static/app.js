@@ -49,7 +49,7 @@
       } else {
         note.textContent = h.llm_model || "LLM 就绪";
         note.classList.add("ok");
-        note.title = "规则由 LLM 编译，并用题面答案自动校验";
+        note.title = "规则由 LLM 编译；题面若带官方答案，只用于自检，不参与求解";
       }
     } catch (err) { /* health is best-effort */ }
   }

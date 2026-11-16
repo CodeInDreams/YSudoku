@@ -99,7 +99,7 @@ class Handler(BaseHTTPRequestHandler):
                 demo=(urlparse(self.path).path == "/api/demo"),
                 use_llm=False if urlparse(self.path).path == "/api/demo" else bool(body.get("llm", True)),
                 do_audit=bool(body.get("audit", False)),
-                allow_chains=True if urlparse(self.path).path == "/api/demo" else bool(body.get("chains", False)),
+                allow_chains=True if urlparse(self.path).path == "/api/demo" else bool(body.get("chains", True)),
                 use_global=bool(body.get("global", True)),
                 global_time_limit=float(body.get("global_timeout", 60)),
             )

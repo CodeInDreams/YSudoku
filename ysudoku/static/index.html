@@ -18,15 +18,15 @@
   <form id="load-form" class="loader">
     <input id="url" type="text" spellcheck="false"
            placeholder="粘贴 SudokuPad 链接，例如 https://sudokupad.app/eynwusqy5l">
-    <label class="switch" title="用 LLM 把规则文本编译成约束">
+    <label class="switch" title="用 LLM 编译规则；题面若带官方答案，只用于自检，不参与求解">
       <input id="use-llm" type="checkbox" checked> LLM 规则
     </label>
     <span id="llm-note" class="llm-note"></span>
-    <label class="switch" title="逐步用穷举反证校验每步结论（较慢）">
+    <label class="switch" title="对每一步结论做独立穷举验证，不读取官方答案（较慢）">
       <input id="audit" type="checkbox"> 反证审计
     </label>
-    <label class="switch" title="卡住时允许“假设—矛盾”式试探，步骤会标注 T4">
-      <input id="chains" type="checkbox"> 允许反证
+    <label class="switch" title="卡住时启用“假设—矛盾”式反证；默认开启，复杂题更有效">
+      <input id="chains" type="checkbox" checked> 反证求解
     </label>
     <button type="submit" id="go">解析并求解</button>
     <button type="button" id="demo" title="加载内置示例">示例</button>
