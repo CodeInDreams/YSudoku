@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle, ArrowUpDown, Check, ChevronDown, ChevronLeft, ChevronRight,
-  Database, FolderOpen, HelpCircle, Languages, Loader2, Moon, Play, RotateCw,
+  Database, FolderOpen, HelpCircle, Languages, Loader2, Moon, Pause, Play, RotateCw,
   Search, Star, Sun, X,
 } from "lucide-react";
 import { Button } from "./components/ui/button";
@@ -164,6 +164,8 @@ export default function App() {
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1100);
   const [session, setSession] = useState(null);
+  const [frameSrc, setFrameSrc] = useState("");
+  const [frameStep, setFrameStep] = useState(-2);
   const [ready, setReady] = useState(false);
   const [retry, setRetry] = useState(0);
   const [view, setView] = useState("solve");
@@ -266,6 +268,29 @@ export default function App() {
     } catch { /* ignore */ }
   }
 
+  useEffect(() => {
+    if (!session || deleted) return undefined;
+    let cancelled = false;
+    const src = `/api/live/frame?session=${session}&step=${idx}&t=${retry}`;
+    const probe = new Image();
+    probe.onload = () => {
+      if (cancelled) return;
+      setFrameSrc(src);
+      setFrameStep(idx);
+      setReady(true);
+      setFrameErrors(0);
+    };
+    probe.onerror = () => {
+      if (cancelled) return;
+      const next = frameErrors + 1;
+      setFrameErrors(next);
+      if (next >= 24) verifyCurrentCache(analysis?.storage?.key);
+      setTimeout(() => setRetry((value) => value + 1), 450);
+    };
+    probe.src = src;
+    return () => { cancelled = true; };
+  }, [session, idx, retry, deleted]);
+
   function applyAnalysis(data) {
     setAnalysis(data);
     setIdx(-1);
@@ -281,6 +306,8 @@ export default function App() {
   async function startLive(nextAnalysis) {
     setReady(false);
     setSession(null);
+    setFrameSrc("");
+    setFrameStep(-2);
     setDeleted(false);
     setFrameErrors(0);
     try {
@@ -389,15 +416,6 @@ export default function App() {
     setIdx((v) => Math.max(-1, v - 1));
   }
 
-  function onFrameError() {
-    if (deleted) return;
-    setReady(false);
-    const next = frameErrors + 1;
-    setFrameErrors(next);
-    if (next >= 24) verifyCurrentCache(analysis?.storage?.key);
-    setTimeout(() => setRetry((v) => v + 1), 450);
-  }
-
   const filteredEntries = useMemo(() => {
     const list = (store?.entries || []).filter((entry) => {
       if (favOnly && !entry.favorite) return false;
@@ -448,12 +466,12 @@ export default function App() {
               </div>
             </div>
           )}
-          {session && !deleted && (
-            <img key={`${session}-${idx}-${retry}`} src={`/api/live/frame?session=${session}&step=${idx}&t=${retry}`}
-              alt="SudokuPad" className={`h-full w-full object-contain transition-opacity ${ready ? "opacity-100" : "opacity-0"}`}
-              onLoad={() => { setReady(true); setFrameErrors(0); }} onError={onFrameError} />
+          {frameSrc && !deleted && (
+            <img src={frameSrc} alt="SudokuPad"
+              className={`h-full w-full object-contain ${ready ? "opacity-100" : "opacity-0"}`}
+              onLoad={() => setReady(true)} />
           )}
-          {overlay && ready && !deleted && (
+          {overlay && ready && frameStep === idx && !deleted && (
             <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox={`0 0 ${n} ${n}`} preserveAspectRatio="none">
               {(overlay.visual.groups || []).map((group, i) => {
                 if (!group.cells?.length) return null;
@@ -481,7 +499,10 @@ export default function App() {
       </CardContent>
       <div className="flex items-center gap-2 border-t px-4 py-3">
         <Button variant="outline" size="icon" className="h-8 w-8" onClick={prevStep} disabled={idx <= -1 || deleted}><ChevronLeft className="h-4 w-4" /></Button>
-        <Button size="sm" onClick={() => setPlaying((v) => !v)} disabled={!steps.length || deleted}><Play className="mr-1 h-3.5 w-3.5" />{playing ? t("player.pause") : t("player.play")}</Button>
+        <Button size="sm" onClick={() => setPlaying((v) => !v)} disabled={!steps.length || deleted}>
+          {playing ? <Pause className="mr-1 h-3.5 w-3.5" /> : <Play className="mr-1 h-3.5 w-3.5" />}
+          {playing ? t("player.pause") : t("player.play")}
+        </Button>
         <Button variant="outline" size="icon" className="h-8 w-8" onClick={nextStep} disabled={idx >= steps.length - 1 || deleted}><ChevronRight className="h-4 w-4" /></Button>
         <span className="ml-2 hidden text-xs text-muted-foreground sm:inline">{t("player.speed")}</span>
         <input type="range" min="200" max="2400" step="100" value={speed} onChange={(e) => setSpeed(Number(e.target.value))} className="w-28 accent-primary" />
@@ -663,7 +684,7 @@ export default function App() {
               title={analysis?.puzzle?.title || t("page.waiting")}
               description={analysis ? `${analysis.puzzle.author || ""} · ${t("page.givens", { n: analysis.puzzle.givens.filter(Boolean).length })}${isSolved ? ` · ${statusLabel(analysis.status)}` : ""}` : t("empty.solve")}
               badges={analysis ? <><Badge variant="outline">{n}×{n}</Badge><Badge variant={isSolved ? "success" : "outline"}>{statusLabel(analysis.status)}</Badge></> : null}
-              actions={analysis ? <><Button variant="outline" size="sm" onClick={refreshRules} disabled={busy}><RotateCw className="mr-1 h-3.5 w-3.5" />{t("rules.refresh")}</Button><Button size="sm" onClick={() => setPlaying((v) => !v)} disabled={deleted}><Play className="mr-1 h-3.5 w-3.5" />{t("player.play")}</Button></> : null}
+              actions={analysis ? <Button variant="outline" size="sm" onClick={refreshRules} disabled={busy}><RotateCw className="mr-1 h-3.5 w-3.5" />{t("rules.refresh")}</Button> : null}
             />
             {!analysis ? emptySolve : (
               <>
