@@ -48,7 +48,7 @@
       <img id="live-frame" alt="SudokuPad 题目">
       <svg id="live-overlay" class="live-overlay" aria-hidden="true"></svg>
       <div id="live-badge" class="live-badge">SudokuPad · 只读</div>
-      <div id="live-loading" class="loading hidden"><div class="spinner"></div><span>启动 SudokuPad…</span></div>
+      <div id="live-loading" class="loading hidden"><div class="spinner"></div><span>加载棋盘画面…</span></div>
     </div>
     <div class="board-wrap" id="board-view">
       <svg id="board" viewBox="0 0 9 9" aria-label="数独棋盘"></svg>
@@ -88,8 +88,6 @@
   </section>
 
   <aside class="side">
-    <div id="status" class="status hidden"></div>
-
     <div class="step-card">
       <div class="step-head">
         <span id="step-index" class="step-index">—</span>
@@ -110,15 +108,15 @@
       <img id="rulesheet" class="rulesheet" alt="rule sheet">
     </details>
 
-    <details class="panel" id="history-panel">
-      <summary>历史记录</summary>
-      <div class="history-head"><button type="button" id="history-clear" class="mini">清空</button></div>
-      <div id="history" class="history"></div>
-    </details>
-
     <details class="panel">
       <summary>推理步骤列表</summary>
       <ol id="step-list" class="step-list"></ol>
+    </details>
+
+    <details class="panel" id="history-panel" open>
+      <summary>历史记录</summary>
+      <div class="history-head"><button type="button" id="history-clear" class="mini">清空</button></div>
+      <div id="history" class="history"></div>
     </details>
 
     <details class="panel">
@@ -126,6 +124,8 @@
       <p class="muted">规则来源：SudokuPad 的 “rules” 文本 + 图形元素清单，由 LLM 编译为结构化约束；
       无 LLM 时退回本地启发式。每步结论可用穷举反证审计。</p>
     </details>
+
+    <div id="status" class="status hidden"></div>
   </aside>
 </main>
 

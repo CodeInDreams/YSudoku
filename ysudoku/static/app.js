@@ -1220,6 +1220,7 @@
     applyTheme(next);
   });
 
+  refreshHistory();
   checkHealth();
   $("url").focus();
 })();

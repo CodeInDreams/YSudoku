@@ -195,6 +195,9 @@ button.mini { padding: 3px 9px; font-size: 11px; border-radius: 7px; }
 .status.ok { background: rgba(56,211,159,.1); border-color: rgba(56,211,159,.4); color: #b9f5df; }
 .status.warn { background: rgba(255,180,84,.1); border-color: rgba(255,180,84,.4); color: #ffe0b0; }
 .status.bad { background: rgba(255,92,122,.1); border-color: rgba(255,92,122,.4); color: #ffc4cf; }
+:root[data-theme="light"] .status.ok { background: #e6f6ef; border-color: #a7dcc6; color: #0f5132; }
+:root[data-theme="light"] .status.warn { background: #fff4e0; border-color: #f0c987; color: #7a4a00; }
+:root[data-theme="light"] .status.bad { background: #fdecef; border-color: #f2b8c6; color: #7f1d1d; }
 
 .step-card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; min-height: 220px; display: flex; flex-direction: column; }
 .step-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
