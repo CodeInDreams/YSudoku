@@ -22,7 +22,7 @@ import { detectLang, translate } from "./i18n";
 
 const TECH_EN = {
   cage: "Killer cage", hidden_single: "Hidden single", naked_single: "Naked single",
-  class_cover: "Class cover", whisper: "Whisper", renban: "Renban", arrow: "Arrow",
+  class_cover: "2×2 class cover", whisper: "Whisper", renban: "Renban", arrow: "Arrow",
   thermo: "Thermometer", sandwich: "Sandwich", xsum: "X-Sums", skyscraper: "Skyscraper",
   consecutive: "Consecutive", parity: "Parity", region: "Region",
 };
@@ -65,55 +65,103 @@ function buildStepActions(analysis) {
   const state = new Map();
   const marked = new Set();
   const MAX_POSITIVE = 6;
+  const digits = (mask) => digitsOf(mask || 0, n);
+
   for (const step of analysis.steps) {
     const actions = [];
     const pre = step.pre_dom || [];
+    const elimsByCell = new Map();
+    const placeByCell = new Map();
+    for (const ev of step.events || []) {
+      if (ev.kind === "elim") {
+        if (!elimsByCell.has(ev.cell)) elimsByCell.set(ev.cell, new Set());
+        elimsByCell.get(ev.cell).add(ev.value);
+      } else if (ev.kind === "place") {
+        placeByCell.set(ev.cell, ev.value);
+      }
+    }
+    const affected = new Set([...elimsByCell.keys(), ...placeByCell.keys()]);
+    const clearMarks = (cell, current) => {
+      if (marked.has(cell) && current.size) actions.push({ op: "clear", cell, digits: [...current] });
+    };
+
+    // Sync cells changed only by peers, then apply this step's eliminations once
+    // so the frame never shows an intermediate candidate that is removed later.
     for (const [cell, set] of Array.from(state.entries())) {
-      const desired = new Set(digitsOf(pre[cell] || 0, n));
+      if (affected.has(cell)) continue;
+      const desired = new Set(digits(pre[cell]));
       const removed = [...set].filter((d) => !desired.has(d));
       const added = [...desired].filter((d) => !set.has(d));
       if (marked.has(cell)) {
-        for (const d of removed) actions.push({ op: "elim", cell, value: d });
-        if (added.length) actions.push({ op: "mark", cell, digits: added });
+        if (desired.size > MAX_POSITIVE) {
+          clearMarks(cell, set);
+          marked.delete(cell);
+        } else {
+          for (const d of removed) actions.push({ op: "elim", cell, value: d });
+          if (added.length) actions.push({ op: "mark", cell, digits: added });
+        }
+      } else if (desired.size <= MAX_POSITIVE && desired.size > 1) {
+        actions.push({ op: "mark", cell, digits: [...desired] });
+        marked.add(cell);
       }
       state.set(cell, desired);
     }
-    for (const ev of step.events || []) {
-      if (ev.kind === "place") {
-        if (state.has(ev.cell)) {
-          const set = state.get(ev.cell);
-          if (!set.has(ev.value)) throw new Error(`candidate invariant broken at step ${step.index + 1}`);
-          if (marked.has(ev.cell)) actions.push({ op: "clear", cell: ev.cell, digits: [...set] });
-          state.delete(ev.cell);
-          marked.delete(ev.cell);
+
+    for (const cell of affected) {
+      const before = new Set(digits(pre[cell]));
+      const desired = new Set(before);
+      for (const value of elimsByCell.get(cell) || []) desired.delete(value);
+      const placeValue = placeByCell.get(cell);
+
+      if (placeValue !== undefined) {
+        if (!before.has(placeValue)) {
+          throw new Error(`candidate invariant broken at step ${step.index + 1}`);
         }
-        actions.push({ op: "place", cell: ev.cell, value: ev.value });
-      } else if (ev.kind === "elim") {
-        if (!state.has(ev.cell)) {
-          const digits = digitsOf(step.pre_dom?.[ev.cell] || 0, n).filter((d) => d !== ev.value);
-          state.set(ev.cell, new Set(digits));
-          if (digits.length === 1) {
-            actions.push({ op: "place", cell: ev.cell, value: digits[0] });
-            state.delete(ev.cell);
-          } else if (digits.length <= MAX_POSITIVE) {
-            actions.push({ op: "mark", cell: ev.cell, digits });
-            marked.add(ev.cell);
-          }
-        } else {
-          const set = state.get(ev.cell);
-          set.delete(ev.value);
-          if (set.size === 1) {
-            const [value] = set;
-            if (marked.has(ev.cell)) actions.push({ op: "clear", cell: ev.cell, digits: [...set] });
-            actions.push({ op: "place", cell: ev.cell, value });
-            state.delete(ev.cell);
-            marked.delete(ev.cell);
-          } else if (marked.has(ev.cell)) actions.push({ op: "elim", cell: ev.cell, value: ev.value });
-          else if (set.size <= MAX_POSITIVE) {
-            actions.push({ op: "mark", cell: ev.cell, digits: [...set] });
-            marked.add(ev.cell);
-          }
+        if (state.has(cell)) clearMarks(cell, state.get(cell));
+        state.delete(cell);
+        marked.delete(cell);
+        actions.push({ op: "place", cell, value: placeValue });
+        continue;
+      }
+
+      if (!state.has(cell)) {
+        state.set(cell, desired);
+        if (desired.size === 1) {
+          actions.push({ op: "place", cell, value: [...desired][0] });
+          state.delete(cell);
+        } else if (desired.size <= MAX_POSITIVE) {
+          actions.push({ op: "mark", cell, digits: [...desired] });
+          marked.add(cell);
         }
+        continue;
+      }
+
+      const current = state.get(cell);
+      if (desired.size === 0) {
+        clearMarks(cell, current);
+        state.delete(cell);
+        marked.delete(cell);
+      } else if (desired.size === 1) {
+        clearMarks(cell, current);
+        actions.push({ op: "place", cell, value: [...desired][0] });
+        state.delete(cell);
+        marked.delete(cell);
+      } else {
+        if (marked.has(cell)) {
+          if (desired.size > MAX_POSITIVE) {
+            clearMarks(cell, current);
+            marked.delete(cell);
+          } else {
+            const removed = [...current].filter((d) => !desired.has(d));
+            const added = [...desired].filter((d) => !current.has(d));
+            for (const d of removed) actions.push({ op: "elim", cell, value: d });
+            if (added.length) actions.push({ op: "mark", cell, digits: added });
+          }
+        } else if (desired.size <= MAX_POSITIVE) {
+          actions.push({ op: "mark", cell, digits: [...desired] });
+          marked.add(cell);
+        }
+        state.set(cell, desired);
       }
     }
     steps.push(actions);
@@ -460,7 +508,7 @@ export default function App() {
     try {
       const actions = buildStepActions(nextAnalysis);
       let hash = 2166136261;
-      const text = "frame-v6:" + JSON.stringify(actions);
+      const text = "frame-v7:" + JSON.stringify(actions);
       for (let i = 0; i < text.length; i++) { hash ^= text.charCodeAt(i); hash = Math.imul(hash, 16777619); }
       const data = await postJson("/api/live/build", {
         url: nextAnalysis.source_url || "",
