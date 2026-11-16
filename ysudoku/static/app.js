@@ -871,10 +871,7 @@
 
   let theme = null;
   try { theme = localStorage.getItem(THEME_KEY); } catch (err) { /* ignore */ }
-  if (!theme) {
-    theme = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
-  }
-  applyTheme(theme);
+  applyTheme(theme || "light");
   $("theme-toggle").addEventListener("click", () => {
     const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
     try { localStorage.setItem(THEME_KEY, next); } catch (err) { /* ignore */ }
