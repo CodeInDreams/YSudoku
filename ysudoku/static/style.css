@@ -192,6 +192,7 @@ button.mini { padding: 3px 9px; font-size: 11px; border-radius: 7px; }
 
 /* side */
 .side { display: flex; flex-direction: column; gap: 14px; }
+.side > * { flex-shrink: 0; }
 .status { padding: 10px 14px; border-radius: 10px; font-size: 13px; border: 1px solid var(--line); }
 .status.ok { background: rgba(56,211,159,.1); border-color: rgba(56,211,159,.4); color: #b9f5df; }
 .status.warn { background: rgba(255,180,84,.1); border-color: rgba(255,180,84,.4); color: #ffe0b0; }
@@ -205,7 +206,7 @@ button.mini { padding: 3px 9px; font-size: 11px; border-radius: 7px; }
 .step-index { font-family: ui-monospace, monospace; color: var(--accent); font-size: 13px; }
 .step-title { font-size: 15px; font-weight: 650; flex: 1; }
 .tier { font-size: 11px; color: var(--muted); border: 1px solid var(--line); padding: 2px 7px; border-radius: 99px; }
-.step-detail { white-space: pre-wrap; font-size: 14px; line-height: 1.8; color: #cfd9f5; overflow: auto; }
+.step-detail { white-space: pre-wrap; font-size: 14px; line-height: 1.8; color: #cfd9f5; overflow: visible; }
 :root[data-theme="light"] .step-detail { color: #1f2937; }
 :root[data-theme="light"] .panel summary,
 :root[data-theme="light"] .rule-row,
@@ -304,8 +305,8 @@ input[type=range] { accent-color: var(--accent); }
 .live-view:not(.live-ready) .live-overlay,
 .live-view:not(.live-ready) .live-badge { visibility: hidden; }
 .live-badge {
-  position: absolute; right: 10px; bottom: 10px; padding: 3px 8px;
-  border-radius: 999px; background: rgba(20, 28, 46, .72); color: #fff;
+  position: absolute; right: 0; top: -26px; padding: 0;
+  background: transparent; color: var(--muted);
   font-size: 11px; letter-spacing: .3px; pointer-events: none;
 }
 .live-view .loading {

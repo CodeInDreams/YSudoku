@@ -375,7 +375,7 @@
           y: r + 0.88,
           "text-anchor": "middle",
           "font-family": "system-ui, -apple-system, 'Segoe UI', sans-serif",
-          "font-size": "0.16", "font-weight": "600",
+          "font-size": "0.26", "font-weight": "600",
           fill: "#b91c1c", "text-decoration": "line-through",
           style: "text-decoration: line-through",
         }, String(v));

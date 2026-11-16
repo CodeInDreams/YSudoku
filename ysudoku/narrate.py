@@ -603,9 +603,11 @@ def _explain_cage(events, data, n):
     combos = data.get("combos") or []
     detail = f"笼 {total}（{len(cells)} 格，数字互不重复）：{_names(cells, n)}。\n"
     if combos:
-        shown = ["{" + _values(list(c)) + "}" for c in combos[:8]]
-        more = "…" if len(combos) > 8 else ""
-        detail += f"当前可行的数字组合共 {len(combos)} 组：{'、'.join(shown)}{more}。\n"
+        detail += f"当前可行的数字组合共 {len(combos)} 组：\n"
+        for combo in combos[:8]:
+            detail += f"  {{{_values(list(combo))}}}\n"
+        if len(combos) > 8:
+            detail += "  …\n"
     detail += "按这些组合逐格检查，以下候选不可能出现，故排除：\n"
     detail += "；".join(_effect_lines(events, n)) or "（无）"
     visual = _basic_visual(events, n)
