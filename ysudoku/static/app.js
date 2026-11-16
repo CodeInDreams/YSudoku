@@ -201,33 +201,40 @@
   function buildStepActions() {
     const steps = [];
     const state = new Map();
-    const opened = new Set();
+    const marked = new Set();
+    const MAX_POSITIVE = 6;
     for (const step of S.data.steps) {
       const actions = [];
       for (const ev of step.events || []) {
         if (ev.kind === "place") {
           state.delete(ev.cell);
+          marked.delete(ev.cell);
           actions.push({ op: "place", cell: ev.cell, value: ev.value });
         } else if (ev.kind === "elim") {
           if (!state.has(ev.cell)) {
             const mask = (step.pre_dom && step.pre_dom[ev.cell]) || 0;
             const digits = digitsOf(mask, S.n).filter((d) => d !== ev.value);
-            opened.add(ev.cell);
-            if (digits.length > 1) {
-              actions.push({ op: "mark", cell: ev.cell, digits });
-              state.set(ev.cell, new Set(digits));
-            } else if (digits.length === 1) {
+            state.set(ev.cell, new Set(digits));
+            if (digits.length === 1) {
               actions.push({ op: "place", cell: ev.cell, value: digits[0] });
+              state.delete(ev.cell);
+            } else if (digits.length <= MAX_POSITIVE) {
+              actions.push({ op: "mark", cell: ev.cell, digits });
+              marked.add(ev.cell);
             }
           } else {
             const set = state.get(ev.cell);
             set.delete(ev.value);
-            if (set.size > 1) {
-              actions.push({ op: "elim", cell: ev.cell, value: ev.value });
-            } else if (set.size === 1) {
+            if (set.size === 1) {
               const [value] = set;
               actions.push({ op: "place", cell: ev.cell, value });
               state.delete(ev.cell);
+              marked.delete(ev.cell);
+            } else if (marked.has(ev.cell)) {
+              actions.push({ op: "elim", cell: ev.cell, value: ev.value });
+            } else if (set.size <= MAX_POSITIVE) {
+              actions.push({ op: "mark", cell: ev.cell, digits: [...set] });
+              marked.add(ev.cell);
             }
           }
         }
@@ -346,15 +353,24 @@
                         "stroke-width": .08, "stroke-opacity": .95 });
     }
     for (const [cell, set] of candidateStateUpTo(step.index)) {
+      if (set.size <= 6) continue;
       const [r, c] = rcOf(cell);
-      const digits = [...set].sort((a, b) => a - b);
-      digits.forEach((v) => {
+      const excluded = [];
+      for (let v = 1; v <= n; v++) if (!set.has(v)) excluded.push(v);
+      if (!excluded.length || excluded.length > 5) continue;
+      excluded.forEach((v, idx) => {
+        const x = c + 0.18 + (idx % 3) * 0.27;
+        const y = r + 0.22 + Math.floor(idx / 3) * 0.23;
         add("text", {
-          x: c + 0.18 + ((v - 1) % 3) * 0.27,
-          y: r + 0.22 + Math.floor((v - 1) / 3) * 0.23,
-          "font-size": "0.17", fill: "#1f2937",
+          x, y, "font-size": "0.15", fill: "#b91c1c",
           "font-family": "ui-monospace, monospace",
+          "text-decoration": "line-through",
+          style: "text-decoration: line-through",
         }, String(v));
+        add("line", {
+          x1: x, y1: y + 0.01, x2: x + 0.14, y2: y + 0.01,
+          stroke: "#b91c1c", "stroke-width": 0.012,
+        });
       });
     }
   }
