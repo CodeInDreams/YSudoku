@@ -739,7 +739,9 @@
       li.classList.toggle("active", idx === step.index);
     });
     const active = document.querySelector("#step-list li.active");
-    if (active) active.scrollIntoView({ block: "nearest" });
+    // On phones this used to scroll the whole page to the step list, hiding the
+    // board and the pause button.  Only auto-scroll the list on wider screens.
+    if (active && window.innerWidth > 720) active.scrollIntoView({ block: "nearest" });
     $("scrub").value = step.index;
     $("progress-label").textContent = `${step.index + 1} / ${S.data.steps.length}`;
   }

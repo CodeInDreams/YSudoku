@@ -252,8 +252,16 @@ input[type=range] { accent-color: var(--accent); }
   .layout { padding: 12px 12px 28px; gap: 14px; }
   .board-wrap { width: 100%; }
   .view-tabs { justify-content: center; }
-  .board-controls { gap: 6px; }
-  .board-controls button { min-width: 44px; padding: 9px 12px; }
+  body { padding-bottom: 72px; }
+  .board-controls {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+    justify-content: center; gap: 8px; padding: 10px 12px;
+    background: var(--panel); border-top: 1px solid var(--line);
+    box-shadow: 0 -6px 18px rgba(0, 0, 0, .12);
+  }
+  .board-controls button { min-width: 52px; padding: 10px 14px; }
+  .board-controls .speed, .board-controls .switch { display: none; }
+  .timeline { display: none; }
   .speed { width: 100%; justify-content: center; }
   .timeline { flex-direction: column; gap: 6px; }
   .step-card { min-height: 0; padding: 14px; }
