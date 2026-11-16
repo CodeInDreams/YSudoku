@@ -456,6 +456,7 @@ export default function App() {
   }, [analysis, lang]);
 
   const currentEntry = (store?.entries || []).find((entry) => entry.key === analysis?.storage?.key);
+  const candidateCount = current?.candidates?.length || 0;
   const isSolved = ["solved", "solved-global", "solved-search"].includes(analysis?.status);
 
   const navItems = [["solve", "nav.solve"], ["rules", "nav.rules"], ["history", "nav.history"]];
@@ -468,10 +469,10 @@ export default function App() {
   const boardCard = analysis && (
     <Card className="overflow-hidden">
       <CardHeader className="flex-row items-center gap-3 space-y-0 border-b py-3.5">
-        <div><CardTitle className="text-sm">{t("board.title")}</CardTitle><p className="mt-0.5 text-xs text-muted-foreground">{t("board.desc", { i: idx + 1, n: steps.length })}</p></div>
+        <div><CardTitle className="text-sm">{t("board.title")}</CardTitle><p className="mt-0.5 text-xs text-muted-foreground">{t("board.descCandidates", { i: idx + 1, c: candidateCount })}</p></div>
         <div className="ml-auto flex items-center gap-1.5"><Badge variant="outline">{t("board.readonly")}</Badge><Badge variant="outline">{t("board.readonly.badge")}</Badge></div>
       </CardHeader>
-      <CardContent className="p-4">
+      <CardContent className="p-5">
         <div className="relative mx-auto flex aspect-square w-full max-w-[540px] items-center justify-center overflow-hidden rounded-[2px] border bg-white">
           {!ready && !deleted && <div className="absolute inset-0 z-10 grid place-items-center gap-2 bg-white/80 text-xs text-slate-500"><Loader2 className="h-5 w-5 animate-spin text-primary" />{t("board.loading")}</div>}
           {deleted && (
@@ -511,7 +512,7 @@ export default function App() {
               })}
             </svg>
           )}
-          <span className="pointer-events-none absolute right-1.5 top-1.5 rounded bg-white/70 px-1.5 py-0.5 text-[10px] text-slate-500">SudokuPad · {t("board.readonly.badge")}</span>
+          <span className="pointer-events-none absolute right-2 top-2 rounded-md border border-slate-200 bg-white/90 px-2 py-0.5 text-[10.5px] text-slate-500 shadow-sm">{t("board.liveFrame", { i: idx + 1, n: steps.length })}</span>
         </div>
       </CardContent>
       <div className="flex items-center gap-2 border-t px-4 py-3">
@@ -544,9 +545,9 @@ export default function App() {
       <Tabs value={inspectorTab} onValueChange={setInspectorTab}>
         <div className="border-b px-4">
           <TabsList className="h-auto w-full justify-start gap-5 rounded-none bg-transparent p-0">
-            <TabsTrigger value="explain" className="rounded-none border-b-2 border-transparent px-0 pb-2.5 pt-3 text-xs text-muted-foreground shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:font-semibold data-[state=active]:text-foreground data-[state=active]:shadow-none">{t("inspector.explain")}</TabsTrigger>
-            <TabsTrigger value="candidates" className="rounded-none border-b-2 border-transparent px-0 pb-2.5 pt-3 text-xs text-muted-foreground shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:font-semibold data-[state=active]:text-foreground data-[state=active]:shadow-none">{t("inspector.candidates")}</TabsTrigger>
-            <TabsTrigger value="rules" className="rounded-none border-b-2 border-transparent px-0 pb-2.5 pt-3 text-xs text-muted-foreground shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:font-semibold data-[state=active]:text-foreground data-[state=active]:shadow-none">{t("inspector.rules")}</TabsTrigger>
+            <TabsTrigger value="explain" className="rounded-none border-b-2 border-transparent px-0 pb-2.5 pt-3 text-[13px] text-muted-foreground shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:font-semibold data-[state=active]:text-foreground data-[state=active]:shadow-none">{t("inspector.explain")}</TabsTrigger>
+            <TabsTrigger value="candidates" className="rounded-none border-b-2 border-transparent px-0 pb-2.5 pt-3 text-[13px] text-muted-foreground shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:font-semibold data-[state=active]:text-foreground data-[state=active]:shadow-none">{t("inspector.candidates")}</TabsTrigger>
+            <TabsTrigger value="rules" className="rounded-none border-b-2 border-transparent px-0 pb-2.5 pt-3 text-[13px] text-muted-foreground shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:font-semibold data-[state=active]:text-foreground data-[state=active]:shadow-none">{t("inspector.rules")}</TabsTrigger>
           </TabsList>
         </div>
         <CardContent className="p-4">
@@ -554,7 +555,8 @@ export default function App() {
           <TabsContent value="explain" className="mt-0">
             {current ? (
               <div className="space-y-3">
-                <div className="flex items-center gap-2"><h2 className="text-sm font-semibold">{stepTitle(current)}</h2><Badge variant="outline">{t("step.tier", { tier: current.tier })}</Badge><span className="ml-auto text-[11px] text-muted-foreground">{t("step.label", { i: idx + 1 })}</span></div>
+                <div className="flex items-center gap-2"><h2 className="text-sm font-semibold">{stepTitle(current)}</h2><Badge variant="outline">{t("step.tier", { tier: current.tier })}</Badge></div>
+                <p className="text-[11px] text-muted-foreground">{t("step.of", { i: idx + 1, n: steps.length })}</p>
                 <p className="whitespace-pre-wrap text-[13px] leading-7 text-foreground/90">{lang === "en" ? englishSummary(current) : current.detail}</p>
                 {current.candidates?.length ? (
                   <div className="rounded-md bg-muted px-3 py-2 font-mono text-[11px] leading-6">
