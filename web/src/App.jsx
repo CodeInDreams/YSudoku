@@ -301,7 +301,7 @@ export default function App() {
   }, [analysis, idx, n, steps]);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-muted/30">
       <header className="border-b bg-background/95 backdrop-blur">
         <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-3 px-4 py-3 lg:flex-nowrap">
           <div className="flex items-center gap-2">
@@ -401,10 +401,10 @@ export default function App() {
 
         <aside className="min-w-0 lg:max-h-[calc(100vh-100px)] lg:overflow-y-auto">
           <Tabs value={tab} onValueChange={setTab}>
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="steps">推理</TabsTrigger>
-              <TabsTrigger value="rules">规则</TabsTrigger>
-              <TabsTrigger value="history">历史</TabsTrigger>
+            <TabsList className="h-auto w-full justify-start gap-6 rounded-none border-b bg-transparent p-0">
+              <TabsTrigger value="steps" className="rounded-none border-b-2 border-transparent px-0 pb-2 text-sm text-muted-foreground shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:font-semibold data-[state=active]:shadow-none">推理</TabsTrigger>
+              <TabsTrigger value="rules" className="rounded-none border-b-2 border-transparent px-0 pb-2 text-sm text-muted-foreground shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:font-semibold data-[state=active]:shadow-none">规则</TabsTrigger>
+              <TabsTrigger value="history" className="rounded-none border-b-2 border-transparent px-0 pb-2 text-sm text-muted-foreground shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:font-semibold data-[state=active]:shadow-none">历史</TabsTrigger>
             </TabsList>
 
             <TabsContent value="steps" className="space-y-3">
