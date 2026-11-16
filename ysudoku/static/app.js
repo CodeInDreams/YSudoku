@@ -278,6 +278,29 @@
     }
   }
 
+  function candidateStateUpTo(idx) {
+    const state = new Map();
+    for (let i = 0; i <= idx && i < S.data.steps.length; i++) {
+      const step = S.data.steps[i];
+      for (const ev of step.events || []) {
+        if (ev.kind === "place") {
+          state.delete(ev.cell);
+        } else if (ev.kind === "elim") {
+          if (!state.has(ev.cell)) {
+            const mask = (step.pre_dom && step.pre_dom[ev.cell]) || 0;
+            const digits = digitsOf(mask, S.n);
+            if (!digits.length) continue;
+            state.set(ev.cell, new Set(digits));
+          }
+          const set = state.get(ev.cell);
+          set.delete(ev.value);
+          if (!set.size) state.delete(ev.cell);
+        }
+      }
+    }
+    return state;
+  }
+
   const LIVE_COLORS = ["#58a6ff", "#ffb454", "#38d39f", "#ff5c7a", "#7c5cff", "#2dd4bf"];
 
   function renderLiveOverlay(step) {
@@ -333,19 +356,10 @@
       });
     }
 
-    const touched = new Map();
-    for (const ev of step.events || []) {
-      if (ev.kind !== "elim" && ev.kind !== "place") continue;
-      if (!touched.has(ev.cell)) touched.set(ev.cell, (step.pre_dom && step.pre_dom[ev.cell]) || 0);
-      let mask = touched.get(ev.cell);
-      if (ev.kind === "elim") mask &= ~(1 << (ev.value - 1));
-      else mask = 1 << (ev.value - 1);
-      touched.set(ev.cell, mask);
-    }
-    for (const [cell, mask] of touched) {
+    for (const [cell, set] of candidateStateUpTo(step.index)) {
       const [r, c] = rcOf(cell);
-      const digits = digitsOf(mask, n);
-      if (digits.length > 1) {
+      const digits = [...set].sort((a, b) => a - b);
+      if (digits.length > 0) {
         digits.forEach((v) => {
           add("text", {
             x: c + 0.18 + ((v - 1) % 3) * 0.27,
