@@ -171,7 +171,7 @@ For the boundaries of LLM-authored rules, the typed DSL and its trust guardrails
 Technique tiers: T1 constraint-local → T2 naked/hidden singles, locked candidates, subsets, 45 rule →
 T3 X-Wing, XY-Wing, W-Wing, **colouring** (single-digit strong links, A/B colours, colour wrap/trap),
 **3D Medusa** (cell+digit candidates, strong/weak links), **X-Chain**, **ALS-XZ** →
-T4 refutation (on by default; `--no-chains` or the UI checkbox disables it).
+T4 refutation (always on in the UI; `--no-chains` disables it in the CLI).
 Every step carries a structured reason and an animation script; T4 steps are always marked.
 
 ## Animation and UI

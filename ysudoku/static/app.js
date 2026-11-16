@@ -66,7 +66,7 @@
           url,
           llm: $("use-llm").checked,
           audit: $("audit").checked,
-          chains: $("chains").checked,
+          chains: true,
         }),
       });
       const data = await res.json();
