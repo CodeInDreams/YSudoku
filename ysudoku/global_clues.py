@@ -8,14 +8,26 @@ this class are reported as unsupported rather than silently stalled.
 
 from __future__ import annotations
 
+import sys
 from collections import defaultdict
+from pathlib import Path
 
 
 class GlobalSolverUnavailable(RuntimeError):
     pass
 
 
+def _ensure_vendor() -> None:
+    """Optional local wheels unpacked under .vendor/ (gitignored)."""
+    base = Path(__file__).resolve().parents[1] / ".vendor"
+    for sub in ("ortools", "numpy"):
+        path = base / sub
+        if path.exists() and str(path) not in sys.path:
+            sys.path.insert(0, str(path))
+
+
 def available() -> bool:
+    _ensure_vendor()
     try:
         from ortools.sat.python import cp_model  # noqa: F401
         return True
@@ -37,6 +49,7 @@ def _line_cells(clue, n: int):
 
 def solve(puzzle, time_limit: float = 60.0):
     """Return {'grid': [[...]], 'types': ['R'|'X'], 'status': ...} or None."""
+    _ensure_vendor()
     try:
         from ortools.sat.python import cp_model
     except Exception as exc:  # noqa: BLE001
