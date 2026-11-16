@@ -1,21 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle, ArrowUpDown, Check, ChevronDown, ChevronLeft, ChevronRight,
-  Database, FolderOpen, HelpCircle, Languages, Loader2, Moon, Pause, Play, RotateCw,
-  Search, Star, Sun, X,
+  Database, FolderOpen, Github, Loader2, Moon, Pause, Play, RotateCw,
+  Search, Settings2, Star, Sun, X,
 } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { Badge } from "./components/ui/badge";
-import { Switch } from "./components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { Textarea } from "./components/ui/textarea";
 import { Progress } from "./components/ui/progress";
 import { Slider } from "./components/ui/slider";
-import { Popover, PopoverContent, PopoverTrigger } from "./components/ui/popover";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "./components/ui/dropdown-menu";
 import { detectLang, translate } from "./i18n";
 
@@ -241,6 +240,11 @@ function StepNarrative({ step, lang, n, t }) {
   );
 }
 
+function looksLikePuzzle(value) {
+  const text = String(value || "").trim();
+  return /^https?:\/\//i.test(text) || /sudokupad\.app/i.test(text) || (/^[a-z0-9_-]{6,}$/i.test(text) && /\d/.test(text));
+}
+
 function PageHead({ title, description, badges, actions }) {
   return (
     <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
@@ -295,6 +299,8 @@ export default function App() {
     try { return localStorage.getItem("ysudoku.theme") === "dark"; } catch { return false; }
   });
   const [settings, setSettings] = useState({ max_rules: 100, max_steps: 100, max_frames: 10, max_mb: 500 });
+  const [stars, setStars] = useState(null);
+  const [searchOpen, setSearchOpen] = useState(false);
 
   const t = (key, vars) => translate(lang, key, vars);
   const puzzleUnit = (count) => (lang === "zh" ? "个谜题" : count === 1 ? "puzzle" : "puzzles");
@@ -365,6 +371,13 @@ export default function App() {
   }
 
   useEffect(() => { refreshStore(); }, []);
+
+  useEffect(() => {
+    fetch("https://api.github.com/repos/CodeInDreams/ysudoku")
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => { if (data && typeof data.stargazers_count === "number") setStars(data.stargazers_count); })
+      .catch(() => {});
+  }, []);
 
   async function verifyCurrentCache(key) {
     if (!key) return;
@@ -538,6 +551,14 @@ export default function App() {
     });
     return list.sort((a, b) => sort === "title" ? String(a.title).localeCompare(String(b.title)) : (b.at || 0) - (a.at || 0));
   }, [store, query, sort, favOnly]);
+
+  const searchResults = useMemo(() => {
+    const text = url.trim().toLowerCase();
+    if (!text) return [];
+    return (store?.entries || []).filter((entry) =>
+      `${entry.title} ${entry.author} ${entry.target}`.toLowerCase().includes(text)
+    ).slice(0, 6);
+  }, [store, url]);
 
   const overlay = useMemo(() => {
     if (!analysis || idx < 0 || deleted) return null;
@@ -761,12 +782,12 @@ export default function App() {
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-[1280px] items-center gap-3 px-4 sm:gap-5 lg:gap-6 lg:px-6">
+        <div className="mx-auto flex min-h-14 max-w-[1440px] flex-wrap items-center gap-2 px-4 py-2 lg:flex-nowrap lg:gap-3 lg:px-6 lg:py-0">
           <div className="flex items-center gap-2.5">
             <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-sm text-primary-foreground">◈</div>
             <div><div className="text-sm font-semibold leading-tight tracking-tight">YSudoku</div><div className="hidden text-[10.5px] text-muted-foreground sm:block">{t("brand.sub")}</div></div>
           </div>
-          <nav className="flex h-14 items-stretch gap-3 sm:gap-5">
+          <nav className="flex h-14 items-stretch gap-3 sm:gap-4">
             {navItems.map(([value, key]) => (
               <button key={value} onClick={() => { setView(value); setPlaying(false); }}
                 className={`whitespace-nowrap border-b-2 px-0.5 text-[13px] transition-colors sm:text-sm ${view === value ? "border-primary font-semibold text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
@@ -774,37 +795,53 @@ export default function App() {
               </button>
             ))}
           </nav>
-          <div className="ml-auto flex items-center gap-1.5">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild><Button variant="ghost" size="sm" className="gap-1.5 whitespace-nowrap text-xs text-muted-foreground"><Languages className="h-4 w-4" /><span className="hidden sm:inline">{lang === "zh" ? "中文" : "EN"}</span></Button></DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-36">
-                <DropdownMenuItem onClick={() => setLang("zh")} className={lang === "zh" ? "bg-accent font-medium" : ""}><span className="flex-1">中文</span>{lang === "zh" && <Check className="h-4 w-4" />}</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setLang("en")} className={lang === "en" ? "bg-accent font-medium" : ""}><span className="flex-1">English</span>{lang === "en" && <Check className="h-4 w-4" />}</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <Button variant="ghost" size="icon" onClick={() => setDark((value) => !value)} title={dark ? t("header.light") : t("header.dark")}>
-              {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-            </Button>
-            <div className="hidden h-7 w-7 place-items-center rounded-full bg-muted text-[10px] font-semibold sm:grid">YS</div>
-          </div>
-        </div>
-      </header>
-
-      <div className="border-b bg-card">
-        <div className="mx-auto flex max-w-[1280px] flex-wrap items-center gap-2 px-4 py-2.5 lg:px-6">
-          <form className="flex min-w-[260px] flex-1 items-center gap-2" onSubmit={(e) => { e.preventDefault(); submit({ url }); }}>
-            <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder={t("header.url")} className="h-8 text-xs" />
+          <form className="order-last flex w-full min-w-0 items-center gap-1.5 lg:order-none lg:w-auto lg:flex-1" onSubmit={(e) => {
+            e.preventDefault();
+            if (looksLikePuzzle(url)) { setSearchOpen(false); submit({ url }); }
+            else { setQuery(url); setView("history"); setSearchOpen(false); }
+          }}>
+            <div className="relative min-w-0 flex-1">
+              <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input value={url} onChange={(e) => { setUrl(e.target.value); setSearchOpen(true); }}
+                onFocus={() => setSearchOpen(true)} onBlur={() => setTimeout(() => setSearchOpen(false), 140)}
+                placeholder={t("header.url")} className="h-8 pl-8 text-xs" />
+              {searchOpen && url.trim() && !looksLikePuzzle(url) && (
+                <div className="absolute left-0 top-full z-50 mt-1 w-full overflow-hidden rounded-lg border bg-background shadow-md" onMouseDown={(e) => e.preventDefault()}>
+                  {searchResults.length ? searchResults.map((entry) => (
+                    <button key={entry.key} type="button" onClick={() => { setSearchOpen(false); loadEntry(entry); }}
+                      className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs hover:bg-accent">
+                      <span className="min-w-0"><span className="block truncate font-medium">{entry.title}</span><span className="text-[10.5px] text-muted-foreground">{entry.author || entry.key}</span></span>
+                      <Badge variant={["solved", "solved-global", "solved-search"].includes(entry.status) ? "success" : "outline"}>{statusLabel(entry.status)}</Badge>
+                    </button>
+                  )) : <div className="px-3 py-3 text-xs text-muted-foreground">{t("search.noResults")}</div>}
+                </div>
+              )}
+            </div>
             <Button type="submit" size="sm" className="whitespace-nowrap" disabled={busy}>{busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : t("header.solve")}</Button>
             <Button type="button" size="sm" variant="outline" className="whitespace-nowrap" onClick={demo} disabled={busy}>{t("header.demo")}</Button>
           </form>
-          <div className="flex items-center gap-2">
-            <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground"><Switch checked={llm} onCheckedChange={setLlm} className="scale-90" />{t("header.llm")}</label>
-            <Popover><PopoverTrigger asChild><Button variant="ghost" size="icon" className="h-6 w-6"><HelpCircle className="h-3.5 w-3.5" /></Button></PopoverTrigger><PopoverContent className="text-xs leading-relaxed">{t("help.llm")}</PopoverContent></Popover>
-            <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground"><Switch checked={audit} onCheckedChange={setAudit} className="scale-90" />{t("header.audit")}</label>
-            <Popover><PopoverTrigger asChild><Button variant="ghost" size="icon" className="h-6 w-6"><HelpCircle className="h-3.5 w-3.5" /></Button></PopoverTrigger><PopoverContent className="text-xs leading-relaxed">{t("help.audit")}</PopoverContent></Popover>
+          <div className="ml-auto flex items-center gap-1">
+            <Button variant="ghost" size="sm" asChild className="gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
+              <a href="https://github.com/CodeInDreams/ysudoku" target="_blank" rel="noreferrer" title="GitHub"><Github className="h-4 w-4" /><span className="hidden sm:inline">{stars ? stars : "Star"}</span></a>
+            </Button>
+            <Button variant="ghost" size="icon" onClick={() => setDark((value) => !value)} title={dark ? t("header.light") : t("header.dark")}>
+              {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" title={t("settings.title")}><Settings2 className="h-4 w-4" /></Button></DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>{t("settings.title")}</DropdownMenuLabel>
+                <DropdownMenuLabel className="pb-1 pt-0 text-[10px] uppercase tracking-wider">{t("header.language")}</DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => setLang("zh")} className={lang === "zh" ? "bg-accent font-medium" : ""}><span className="flex-1">中文</span>{lang === "zh" && <Check className="h-4 w-4" />}</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setLang("en")} className={lang === "en" ? "bg-accent font-medium" : ""}><span className="flex-1">English</span>{lang === "en" && <Check className="h-4 w-4" />}</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuCheckboxItem checked={llm} onCheckedChange={setLlm} title={t("help.llm")}>{t("header.llm")}</DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem checked={audit} onCheckedChange={setAudit} title={t("help.audit")}>{t("header.audit")}</DropdownMenuCheckboxItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
-      </div>
+      </header>
 
       <main className="mx-auto max-w-[1280px] px-4 py-6 lg:px-6 lg:py-8">
         {view === "solve" && (
