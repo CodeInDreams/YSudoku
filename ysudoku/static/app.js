@@ -206,11 +206,7 @@
       const actions = [];
       for (const ev of step.events || []) {
         if (ev.kind === "place") {
-          if (state.has(ev.cell)) {
-            const rest = [...state.get(ev.cell)].filter((d) => d !== ev.value);
-            if (rest.length) actions.push({ op: "clear", cell: ev.cell, digits: rest });
-            state.delete(ev.cell);
-          }
+          state.delete(ev.cell);
           actions.push({ op: "place", cell: ev.cell, value: ev.value });
         } else if (ev.kind === "elim") {
           if (!state.has(ev.cell)) {
@@ -230,7 +226,6 @@
               actions.push({ op: "elim", cell: ev.cell, value: ev.value });
             } else if (set.size === 1) {
               const [value] = set;
-              actions.push({ op: "clear", cell: ev.cell, digits: [...set] });
               actions.push({ op: "place", cell: ev.cell, value });
               state.delete(ev.cell);
             }

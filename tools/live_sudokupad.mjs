@@ -250,7 +250,23 @@ async function apply(digits, corners, reset, pen) {
 }
 
 async function act(action) {
-  if (action.op === "place") {
+  if (action.op === "batch") {
+    await page.click("#control-select").catch(() => {});
+    for (const cell of action.cells || []) {
+      const r = Math.floor(cell / board.n);
+      const c = cell % board.n;
+      const [x, y] = center(r, c);
+      await page.mouse.click(x, y);
+      await page.waitForTimeout(20);
+    }
+    await page.click("#control-select").catch(() => {});
+    if (action.tool === "centre") await page.click("#control-centre").catch(() => {});
+    else await page.click("#control-normal").catch(() => {});
+    for (const digit of action.digits || []) {
+      await page.keyboard.type(String(digit));
+      await page.waitForTimeout(20);
+    }
+  } else if (action.op === "place") {
     await page.click("#control-normal").catch(() => {});
     const r = Math.floor(action.cell / board.n);
     const c = action.cell % board.n;
