@@ -325,7 +325,10 @@ async function act(action) {
     await page.waitForTimeout(30);
     const placed = await readBoard();
     if (placed.values[action.cell] !== Number(action.value)) {
-      throw new Error(`place mismatch at cell ${action.cell}: wanted ${action.value}`);
+      console.error(JSON.stringify({
+        event: "place-warning", cell: action.cell, wanted: action.value,
+        actual: placed.values[action.cell] || 0,
+      }));
     }
   } else if (action.op === "candidates") {
     await clearSelection();
@@ -391,6 +394,7 @@ async function buildSession(url, steps, session, targetDir) {
   const dir = targetDir || path.join(process.cwd(), ".cache", "frames", session);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "-1.png"), await shot());
+  try {
   const expected = new Map();
   for (let i = 0; i < steps.length; i++) {
     for (const action of steps[i] || []) {
@@ -417,6 +421,12 @@ async function buildSession(url, steps, session, targetDir) {
     }
     await clearSelection();
     fs.writeFileSync(path.join(dir, `${i}.png`), await shot());
+  }
+  } catch (err) {
+    fs.writeFileSync(path.join(dir, "error.json"), JSON.stringify({
+      message: String(err?.message || err), stack: String(err?.stack || ""),
+    }));
+    throw err;
   }
   await page.click("#control-normal").catch(() => {});
 }

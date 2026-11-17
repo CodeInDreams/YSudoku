@@ -63,7 +63,9 @@ class Solver:
         step = build_step(len(self.steps), events, self.state.n)
         step.pre_dom, step.pre_vals = pre_dom, pre_vals
         step.candidates = self._candidates(events, pre_dom)
-        self.focus = {e.cell for e in events}
+        placed = {e.cell for e in events if e.kind == "place"}
+        primary = {e.cell for e in events if e.reason.kind != "unit_peer"}
+        self.focus = placed or primary or {events[0].cell}
         return step
 
     def _technique_step(self, name, technique):
