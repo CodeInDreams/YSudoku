@@ -87,9 +87,9 @@ async function open(url) {
       repeatundointerval: 100,
       toolletter_mode: "altletter",
       marksolveddigits: "off",
-      uitheme: "purple",
+      uitheme: "monolight",
       cellpaste: false,
-      puzzleevents: "none",
+      puzzleevents: "off",
     };
     try {
       const current = JSON.parse(localStorage.getItem("svencodes_settings") || "{}");
