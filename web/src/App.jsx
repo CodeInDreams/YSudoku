@@ -71,6 +71,7 @@ function buildStepActions(analysis) {
   let inBranch = false;
   let branchBase = null;
   let branchCell = null;
+  const baseActions = [];
   const MAX_POSITIVE = 6;
   const digits = (mask) => digitsOf(mask || 0, n);
   const same = (a, b) => a.size === b.size && [...a].every((d) => b.has(d));
