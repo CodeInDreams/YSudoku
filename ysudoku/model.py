@@ -53,6 +53,14 @@ class Dot:
 
 
 @dataclass
+class XVClue:
+    id: int
+    center: tuple[float, float]
+    cells: list[int]
+    mark: str
+
+
+@dataclass
 class Clue:
     id: int
     pos: tuple[float, float]
@@ -81,6 +89,7 @@ class Puzzle:
     lines: list[Line]
     circles: list[Circle]
     dots: list[Dot]
+    xv_clues: list[XVClue]
     markers: list[Circle]
     arrows: list[Arrow]
     clues: list[Clue]
@@ -310,6 +319,7 @@ def parse_puzzle(data: dict, puzzle_id: str = "") -> Puzzle:
     circles: list[Circle] = []
     markers: list[Circle] = []
     dots: list[Dot] = []
+    xv_clues: list[XVClue] = []
     for i, over in enumerate(data.get("overlays") or []):
         center = over.get("center") or [0, 0]
         x, y = float(center[0]), float(center[1])
@@ -322,7 +332,10 @@ def parse_puzzle(data: dict, puzzle_id: str = "") -> Puzzle:
         thick = float(over.get("thickness") or 0)
         if w < 0.6 and h < 0.6:
             pair = _dot_cells(x, y, n)
-            if pair:
+            mark = str(over.get("text") or "").strip().upper()
+            if pair and mark in ("X", "V"):
+                xv_clues.append(XVClue(i, (x, y), pair, mark))
+            elif pair:
                 dots.append(Dot(i, (x, y), pair, fill))
             continue
         if float(x).is_integer() and float(y).is_integer():
@@ -407,6 +420,7 @@ def parse_puzzle(data: dict, puzzle_id: str = "") -> Puzzle:
         lines=lines,
         circles=circles,
         dots=dots,
+        xv_clues=xv_clues,
         markers=markers,
         arrows=arrows,
         clues=clues,

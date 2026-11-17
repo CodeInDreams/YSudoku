@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 from .narrate import Step, build_step
 from .search import count_solutions, satisfiable
-from .state import Contradiction, Reason, State, bits, build_units, cell_name
+from .state import Contradiction, Event, Reason, State, bits, build_units, cell_name
 from .techniques import TECHNIQUES, TRIGGERS
 
 
@@ -228,6 +228,26 @@ class Solver:
         for index, step in enumerate(steps):
             step.index = index
         return steps
+
+    def complete_by_search(self, values: list[int]) -> SolveResult:
+        pre_dom, pre_vals = list(self.state.dom), list(self.state.vals)
+        events = [
+            Event("place", cell, value, Reason("search", {"cell": cell, "value": value}))
+            for cell, value in enumerate(values)
+            if not self.state.vals[cell]
+        ]
+        step = build_step(len(self.steps), events, self.state.n)
+        step.pre_dom, step.pre_vals = pre_dom, pre_vals
+        step.candidates = self._candidates(events, pre_dom)
+        step.detail = (
+            "当前规则技巧不足以继续，使用约束搜索补全剩余格子："
+            + "、".join(f"{cell_name(e.cell, self.state.n)}={e.value}" for e in events)
+        )
+        self.steps.append(step)
+        self.state.vals = list(values)
+        self.state.dom = [1 << (v - 1) for v in values]
+        return SolveResult("solved-search", self.steps, list(values),
+                           "人类技巧卡住后，由约束搜索补全；搜索步骤不等同于人类推理")
 
     def run(self, max_steps: int = 4000) -> SolveResult:
         if self.invalid:

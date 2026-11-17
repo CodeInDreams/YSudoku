@@ -101,3 +101,36 @@ def satisfiable(st: State, constraints, cell: int, value: int, node_limit: int =
     if solutions:
         return True
     return False if complete else None
+
+
+def search_complete(st: State, constraints, time_limit: float = 8.0) -> list[int] | None:
+    """Find one completion from the current state, with a wall-clock budget."""
+    import time
+    started = time.time()
+
+    def dfs(state: State) -> list[int] | None:
+        if time.time() - started > time_limit:
+            raise BudgetExceeded
+        if not propagate(state, constraints):
+            return None
+        if state.solved:
+            return state.vals.copy()
+        cell = min(
+            (c for c in range(state.n2) if state.vals[c] == 0),
+            key=lambda c: state.dom[c].bit_count(),
+        )
+        for value in bits(state.dom[cell]):
+            child = state.copy()
+            try:
+                child.place(cell, value)
+            except Contradiction:
+                continue
+            found = dfs(child)
+            if found is not None:
+                return found
+        return None
+
+    try:
+        return dfs(st.copy())
+    except BudgetExceeded:
+        return None

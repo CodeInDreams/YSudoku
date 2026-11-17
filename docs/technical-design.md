@@ -109,6 +109,7 @@ Rules 页允许填写补充规则。补充文本会以“权威规则文本”�
 当前实现包括：
 
 - `Cage`：杀手笼；数值和、不重复；笼内只剩一个宿主时直接落子。
+- `XV`：SudokuPad 的 X/V overlay 会解析成 `xv_clues`，再提升为 `xv` 约束；自动补齐 LLM 漏掉的 X/V。
 - `Thermo`、`Arrow`、`Between`、`SumLine`、`RegionSum`、`XSums`
 - `PairRule`（Kropki / XV 等）、`Quadruple`、`Palindrome`、`Renban`
 - `Parity`、`Clone`、`Sandwich`、`Skyscraper`
@@ -224,6 +225,7 @@ Centre 只允许一个候选，这是正常状态。单候选在渲染上会被 
 - `forcing_chain` 在开启 `allow_chains` 时尝试。
 - 全局约束（Full Rank / X-Sums）通过可选 CP-SAT 求解，失败时回退。
 - 反证审计只用于标注，不改变求解路径。
+- 如果规则技巧仍卡住，最后一步使用约束搜索补全，状态标记为 `solved-search`，并明确提示“搜索步骤不等同于人类推理”。
 
 ## 6. 分层存储（P1/P2/P3）
 

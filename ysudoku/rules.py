@@ -86,6 +86,10 @@ def build_inventory(puzzle: Puzzle) -> list[Element]:
         elements.append(Element(f"marker:{i}", "marker", marker.cells,
                                 {"fill": marker.fill, "thickness": round(marker.thickness, 2)}))
 
+    for i, clue in enumerate(puzzle.xv_clues):
+        elements.append(Element(f"xv:{i}", "xv", clue.cells,
+                                {"sum": 5 if clue.mark == "V" else 10, "mark": clue.mark}))
+
     for i, dot in enumerate(puzzle.dots):
         elements.append(Element(f"dot:{i}", "dot", dot.cells, {"fill": dot.fill}))
 
@@ -196,6 +200,22 @@ def compile_spec(puzzle: Puzzle, elements: list[Element], spec: dict,
     by_id = {e.id: e for e in elements}
     result = CompiledRules([], source=source)
     used: set[str] = set()
+
+    # X/V overlays are easy for the LLM to miss; always keep every drawn clue.
+    spec = dict(spec)
+    raw_rules = list(spec.get("rules") or [])
+    claimed = {
+        str(eid)
+        for raw in raw_rules
+        for eid in (raw.get("elements") or [])
+    }
+    for element in elements:
+        if element.kind == "xv" and element.id not in claimed:
+            raw_rules.append({
+                "kind": "xv", "elements": [element.id],
+                "sum": element.attrs.get("sum", 10),
+            })
+    spec["rules"] = raw_rules
 
     for raw in spec.get("rules", []):
         kind = str(raw.get("kind", "")).strip()
@@ -620,6 +640,11 @@ def heuristic_spec(puzzle: Puzzle, elements: list[Element]) -> dict:
     circle_ids = [e.id for e in elements if e.kind == "circle" and e.attrs.get("texts")]
     if circle_ids and _has(text, "quadruple", "quadruples", "四"):
         rules.append({"kind": "quadruple", "elements": circle_ids})
+
+    for element in elements:
+        if element.kind == "xv":
+            rules.append({"kind": "xv", "elements": [element.id],
+                          "sum": element.attrs["sum"]})
 
     dot_ids = [e.id for e in elements if e.kind == "dot"]
     if dot_ids and _has(text, "kropki", "dot", "consecutive", "ratio", "consecutiv"):

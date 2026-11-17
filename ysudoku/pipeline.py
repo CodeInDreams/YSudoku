@@ -373,11 +373,18 @@ def analyze(
                     except OSError:
                         pass
 
+    if result.status == "stuck":
+        from .search import search_complete
+        values = search_complete(solver.state, rules.constraints, time_limit=8.0)
+        if values is not None:
+            result = solver.complete_by_search(values)
+            warnings.append("规则技巧不足，最后一步由约束搜索补全")
+
     status = result.status
     message = result.message
     solution_check = ""
 
-    if status == "solved":
+    if status in ("solved", "solved-search"):
         errors = check_solution(puzzle, rules, result.values)
         if errors:
             status = "invalid-rules"
