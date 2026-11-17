@@ -392,6 +392,17 @@ async function setCellValue(cell, value) {
   if (after.values[cell] !== Number(value)) throw new Error(`could not restore value at cell ${cell}`);
 }
 
+async function ensureCellValue(cell, value) {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const now = await readBoard();
+    if (now.values[cell] === Number(value)) return true;
+    try { await clearCellValue(cell); } catch { /* ignore */ }
+    try { await setCellValue(cell, value); } catch { /* retry */ }
+  }
+  const final = await readBoard();
+  return final.values[cell] === Number(value);
+}
+
 async function buildSession(url, steps, session, targetDir) {
   await open(url);
   const dir = targetDir || path.join(process.cwd(), ".cache", "frames", session);
@@ -408,8 +419,8 @@ async function buildSession(url, steps, session, targetDir) {
     let actual = await readBoard();
     for (const [cell, value] of expected.entries()) {
       if (actual.values[cell] !== value) {
-        try { await setCellValue(cell, value); }
-        catch (err) { console.error(JSON.stringify({event:"restore-warning", cell, value, message:String(err?.message||err)})); }
+        const ok = await ensureCellValue(cell, value);
+        if (!ok) console.error(JSON.stringify({event:"restore-warning", cell, value}));
       }
     }
     actual = await readBoard();
@@ -428,6 +439,13 @@ async function buildSession(url, steps, session, targetDir) {
         .map((value, cell) => (value && !expected.has(cell) ? cell : -1))
         .filter((cell) => cell >= 0);
       if (left.length) throw new Error(`stray values remain: ${left.join(",")}`);
+    }
+    const beforeShot = await readBoard();
+    for (const [cell, value] of expected.entries()) {
+      if (beforeShot.values[cell] !== value) {
+        const ok = await ensureCellValue(cell, value);
+        if (!ok) console.error(JSON.stringify({event:"final-restore-warning", cell, value}));
+      }
     }
     await clearSelection();
     fs.writeFileSync(path.join(dir, `${i}.png`), await shot());

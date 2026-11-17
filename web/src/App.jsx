@@ -335,6 +335,7 @@ export default function App() {
   const [settings, setSettings] = useState({ max_rules: 100, max_steps: 100, max_frames: 10, max_mb: 500 });
   const [stars, setStars] = useState(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [headerHidden, setHeaderHidden] = useState(false);
 
   const t = (key, vars) => translate(lang, key, vars);
   const puzzleUnit = (count) => (lang === "zh" ? "个谜题" : count === 1 ? "puzzle" : "puzzles");
@@ -374,6 +375,23 @@ export default function App() {
     document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
     try { localStorage.setItem("ysudoku.lang", lang); } catch { /* ignore */ }
   }, [lang]);
+
+  useEffect(() => {
+    let lastY = window.scrollY;
+    const onScroll = () => {
+      const y = window.scrollY;
+      if (window.innerWidth >= 1024) {
+        setHeaderHidden(false);
+        lastY = y;
+        return;
+      }
+      if (y > lastY + 8 && y > 70) setHeaderHidden(true);
+      else if (y < lastY - 8) setHeaderHidden(false);
+      lastY = y;
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   useEffect(() => {
     if (!playing || deleted) return;
@@ -474,7 +492,7 @@ export default function App() {
     try {
       const actions = buildStepActions(nextAnalysis);
       let hash = 2166136261;
-      const text = "frame-v25:" + JSON.stringify(actions);
+      const text = "frame-v26:" + JSON.stringify(actions);
       for (let i = 0; i < text.length; i++) { hash ^= text.charCodeAt(i); hash = Math.imul(hash, 16777619); }
       const data = await postJson("/api/live/build", {
         url: nextAnalysis.source_url || "",
@@ -676,7 +694,7 @@ export default function App() {
               })}
             </svg>
           )}
-          <span className="pointer-events-none absolute right-2 top-1.5 rounded-sm bg-white/45 px-1.5 py-0.5 text-[9px] font-normal text-slate-400/80 dark:bg-black/25 dark:text-neutral-500">{t("board.liveFrame", { i: idx + 1, n: steps.length })}</span>
+          <span className="pointer-events-none absolute right-0.5 top-0.5 rounded-sm bg-white/35 px-1 py-px text-[8px] font-normal text-slate-400/75 dark:bg-black/20 dark:text-neutral-600">{t("board.liveFrame", { i: idx + 1, n: steps.length })}</span>
         </div>
       </CardContent>
       <div className="flex items-center gap-2 border-t px-4 py-3">
@@ -816,7 +834,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur">
+      <header className={`sticky top-0 z-30 border-b bg-background/95 backdrop-blur transition-transform duration-200 lg:translate-y-0 ${headerHidden ? "-translate-y-full" : "translate-y-0"}`}>
         <div className="mx-auto flex min-h-14 max-w-[1440px] flex-wrap items-center gap-2 px-4 py-2 lg:flex-nowrap lg:gap-3 lg:px-6 lg:py-0">
           <div className="flex items-center gap-2.5">
             <img src={dark ? logoDark : logoLight} alt="YSudoku" className="h-8 w-8 rounded-lg" />
