@@ -285,7 +285,15 @@ P1 rules
 ### 7.1 浏览器
 
 - 长生命周期 Chromium；每次打开题目新建 context。
-- 通过 `#control-normal`、`#control-centre`、`#control-colour`、`#control-pen` 操作原生工具。
+- 通过 `#control-normal`、`#control-centre`、`#control-corner`、`#control-colour` 操作原生工具。
+- 每个新 context 写入统一设置：
+  - `marksolveddigits: off`（关闭 3-in-the-corner 计数）
+  - `toolpen/toolletter: false`（不启用未使用的 Pen/Letter）
+  - `largedigits/flipkeypad/outlineson.../dashedgrid: false`
+  - `hidetimer: true`、`hidesvenpeek: true`、`hidesupportlinks: true`
+  - `showplayinsudokupad: false`、`pauseonstart: false`、`checkonfinish: false`
+  - `checkpencilmarks: false`（避免 SudokuPad 自动清候选）
+  - `selection: cage` 仅是选择高亮样式，不是多选。
 - SVG `viewBox="-16 -16 608 608"`，截取时裁掉 16 单位 padding，只保留 576×576 棋盘。
 
 ### 7.2 单元格定位

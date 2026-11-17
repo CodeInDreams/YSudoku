@@ -60,6 +60,44 @@ async function open(url) {
     viewport: { width: 1200, height: 1000 },
     colorScheme: "light",
   });
+  await context.addInitScript(() => {
+    const settings = {
+      hidesvenpeek: true,
+      hidesupportlinks: true,
+      showplayinsudokupad: false,
+      largedigits: false,
+      toolpen: false,
+      toolletter: false,
+      flipkeypad: false,
+      hidetimer: true,
+      dashedgrid: false,
+      hidecolours: false,
+      showseen: false,
+      checkonfinish: false,
+      pauseonstart: false,
+      selection: "cage",
+      multicolour: false,
+      outlinesondigits: false,
+      outlinesonlines: false,
+      hidesolved: true,
+      autocheck: true,
+      conflictchecker: "on",
+      checkpencilmarks: false,
+      repeatundodelay: 700,
+      repeatundointerval: 100,
+      toolletter_mode: "altletter",
+      marksolveddigits: "off",
+      uitheme: "purple",
+      cellpaste: false,
+      puzzleevents: "none",
+    };
+    try {
+      const current = JSON.parse(localStorage.getItem("svencodes_settings") || "{}");
+      localStorage.setItem("svencodes_settings", JSON.stringify({ ...current, ...settings }));
+    } catch {
+      localStorage.setItem("svencodes_settings", JSON.stringify(settings));
+    }
+  });
   page = await context.newPage();
   await page.emulateMedia({ colorScheme: "light" });
   ledger = new Map();
