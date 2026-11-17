@@ -674,7 +674,7 @@ export default function App() {
               })}
             </svg>
           )}
-          <span className="pointer-events-none absolute right-2 top-2 rounded-md border border-slate-200 bg-white/90 px-2 py-0.5 text-[10.5px] text-slate-500 shadow-sm dark:border-neutral-700 dark:bg-neutral-900/80 dark:text-neutral-300">{t("board.liveFrame", { i: idx + 1, n: steps.length })}</span>
+          <span className="pointer-events-none absolute right-2 top-1.5 rounded-sm bg-white/45 px-1.5 py-0.5 text-[9px] font-normal text-slate-400/80 dark:bg-black/25 dark:text-neutral-500">{t("board.liveFrame", { i: idx + 1, n: steps.length })}</span>
         </div>
       </CardContent>
       <div className="flex items-center gap-2 border-t px-4 py-3">
