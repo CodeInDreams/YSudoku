@@ -367,6 +367,8 @@ export default function App() {
   const [phase, setPhase] = useState("idle");
   const [streamRules, setStreamRules] = useState([]);
   const [streamSteps, setStreamSteps] = useState([]);
+  const [streamTarget, setStreamTarget] = useState([]);
+  const finalPayload = useRef(null);
   const [frameProgress, setFrameProgress] = useState({ frames: 0, total: 0, complete: false });
   const frameTimer = useRef(null);
   const streamToken = useRef(0);
@@ -409,6 +411,21 @@ export default function App() {
     document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
     try { localStorage.setItem("ysudoku.lang", lang); } catch { /* ignore */ }
   }, [lang]);
+
+  useEffect(() => {
+    if (streamSteps.length >= streamTarget.length) {
+      if (finalPayload.current !== null) {
+        const payload = finalPayload.current;
+        finalPayload.current = null;
+        applyAnalysis(payload);
+      }
+      return;
+    }
+    const timer = setTimeout(() => {
+      setStreamSteps(streamTarget.slice(0, streamSteps.length + 1));
+    }, 20);
+    return () => clearTimeout(timer);
+  }, [streamSteps, streamTarget]);
 
   useEffect(() => {
     let lastY = window.scrollY;
@@ -467,15 +484,22 @@ export default function App() {
 
   async function verifyCurrentCache(key) {
     if (!key) return;
+    if (phase === "rendering") return;
     try {
       const res = await fetch("/api/store");
       if (!res.ok) return;
       const data = await res.json();
       const entry = (data.entries || []).find((item) => item.key === key);
-      if (!entry || !entry.layers?.frames) {
+      if (!entry || !entry.layers?.rules || !entry.layers?.steps) {
         setDeleted(true);
         setPlaying(false);
         setReady(false);
+        return;
+      }
+      if (!entry.layers?.frames) {
+        setPhase("rendering");
+        setReady(false);
+        if (analysis) startLive(analysis);
       }
     } catch { /* ignore */ }
   }
@@ -483,6 +507,7 @@ export default function App() {
   useEffect(() => {
     if (!session || deleted) return undefined;
     let cancelled = false;
+    setReady(false);
     const src = `/api/live/frame?session=${session}&step=${idx}&t=${retry}`;
     const probe = new Image();
     probe.onload = () => {
@@ -496,12 +521,12 @@ export default function App() {
       if (cancelled) return;
       const next = frameErrors + 1;
       setFrameErrors(next);
-      if (next >= 24) verifyCurrentCache(analysis?.storage?.key);
+      if (next >= 24 && phase !== "rendering") verifyCurrentCache(analysis?.storage?.key);
       setTimeout(() => setRetry((value) => value + 1), 450);
     };
     probe.src = src;
     return () => { cancelled = true; };
-  }, [session, idx, retry, deleted]);
+  }, [session, idx, retry, deleted, phase, analysis]);
 
   function applyAnalysis(data, keepView = false) {
     setAnalysis(data);
@@ -576,7 +601,7 @@ export default function App() {
     const token = ++streamToken.current;
     if (frameTimer.current) clearInterval(frameTimer.current);
     setBusy(true); setError(""); setPlaying(false);
-    setAnalysis(null); setStreamRules([]); setStreamSteps([]);
+    setAnalysis(null); setStreamRules([]); setStreamSteps([]); setStreamTarget([]); finalPayload.current = null;
     setPhase("rules");
     try {
       const { id } = await postJson("/api/solve/start", body);
@@ -587,13 +612,13 @@ export default function App() {
         if (token !== streamToken.current) return;
         if (!res.ok) throw new Error(job.error || "job failed");
         setStreamRules(job.rules || []);
-        setStreamSteps(job.steps || []);
-        if (job.phase) setPhase(job.phase);
+        setStreamTarget(job.steps || []);
+        if (job.phase === "solving") setPhase("solving");
         if (job.status === "done") {
           setTarget(targetUrl);
           setUrl(targetUrl);
-          setPhase("rendering");
-          applyAnalysis(job.payload);
+          finalPayload.current = job.payload;
+          setPhase("solving");
           break;
         }
         if (job.status === "failed") throw new Error(job.error || "solve failed");
@@ -690,16 +715,23 @@ export default function App() {
 
   async function cacheAlive() {
     if (!analysis?.storage?.key || !ready) return true;
+    if (phase === "rendering") return true;
     try {
       const res = await fetch("/api/store");
       const data = await res.json().catch(() => ({}));
       const entry = (data.entries || []).find((item) => item.key === analysis.storage.key);
-      if (!entry || !entry.layers?.steps || !entry.layers?.frames) {
+      if (!entry || !entry.layers?.steps) {
         setDeleted(true);
         setPlaying(false);
         setReady(false);
         setError(t("step.deleted"));
         return false;
+      }
+      if (!entry.layers?.frames) {
+        setPhase("rendering");
+        setReady(false);
+        startLive(analysis);
+        return true;
       }
     } catch { /* network errors should not block playback */ }
     return true;
@@ -790,7 +822,7 @@ export default function App() {
       </CardHeader>
       <CardContent className="p-5">
         <div className="relative mx-auto flex aspect-square w-full max-w-[540px] items-center justify-center overflow-hidden rounded-[2px] border bg-white dark:border-border dark:bg-neutral-800">
-          {!ready && !deleted && <div className="absolute inset-0 z-10 grid place-items-center gap-2 bg-white/80 text-xs text-slate-500 dark:bg-neutral-800/90 dark:text-neutral-300"><Loader2 className="h-5 w-5 animate-spin text-primary" />{t("board.loading")}</div>}
+          {!ready && !deleted && <div className="absolute inset-0 z-10 grid place-items-center gap-2 bg-white/80 text-xs text-slate-500 dark:bg-neutral-800/90 dark:text-neutral-300"><Loader2 className="h-5 w-5 animate-spin text-primary" />{phase === "rendering" ? t("phase.rendering") : t("board.loading")}</div>}
           {deleted && (
             <div className="absolute inset-0 z-20 grid place-items-center bg-background/90 p-6 text-center">
               <div className="max-w-xs space-y-2">
