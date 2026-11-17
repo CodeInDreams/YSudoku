@@ -361,9 +361,6 @@ export default function App() {
   const [stars, setStars] = useState(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [headerHidden, setHeaderHidden] = useState(false);
-  const [liveView, setLiveView] = useState("");
-  const [liveMessage, setLiveMessage] = useState("");
-  const [liveBusy, setLiveBusy] = useState(false);
   const [phase, setPhase] = useState("idle");
   const [streamRules, setStreamRules] = useState([]);
   const [streamSteps, setStreamSteps] = useState([]);
@@ -677,32 +674,6 @@ export default function App() {
     refreshStore();
   }
 
-  async function refreshLiveView() {
-    try {
-      const res = await fetch("/api/live/screenshot", { cache: "no-store" });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
-      const blob = await res.blob();
-      setLiveView((old) => { if (old) URL.revokeObjectURL(old); return URL.createObjectURL(blob); });
-    } catch (err) {
-      setLiveMessage(err.message);
-    }
-  }
-
-  async function liveDebug(action) {
-    setLiveBusy(true);
-    try {
-      const res = await postJson("/api/live/debug", { action });
-      const values = (res.state?.values || []).filter(Boolean).length;
-      const marks = (res.state?.state || []).reduce((sum, cell) => sum + (cell.centre?.length || 0) + (cell.corners?.length || 0), 0);
-      setLiveMessage(`${action}: values ${values}, marks ${marks}`);
-      await refreshLiveView();
-    } catch (err) {
-      setLiveMessage(`${action}: ${err.message}`);
-    } finally {
-      setLiveBusy(false);
-    }
-  }
-
   async function saveSettings() {
     await postJson("/api/store/settings", settings);
     refreshStore();
@@ -920,17 +891,6 @@ export default function App() {
           onValueChange={([value]) => { setPlaying(false); setIdx(value); }}
           disabled={!steps.length || deleted}
         />
-      </div>
-      <div className="space-y-2 border-t px-4 py-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Live view</span>
-          <Button size="sm" variant="outline" className="h-7 px-2 text-[11px]" disabled={liveBusy} onClick={() => liveDebug("undo")}>{t("debug.undo")}</Button>
-          <Button size="sm" variant="outline" className="h-7 px-2 text-[11px]" disabled={liveBusy} onClick={() => liveDebug("redo")}>{t("debug.redo")}</Button>
-          <Button size="sm" variant="outline" className="h-7 px-2 text-[11px]" disabled={liveBusy} onClick={() => liveDebug("check")}>{t("debug.check")}</Button>
-          <Button size="sm" variant="outline" className="h-7 px-2 text-[11px]" disabled={liveBusy} onClick={refreshLiveView}>{t("debug.refresh")}</Button>
-          <span className="truncate text-[11px] text-muted-foreground">{liveMessage}</span>
-        </div>
-        {liveView ? <img src={liveView} alt="live SudokuPad" className="max-h-[260px] w-full rounded-md border object-contain" /> : null}
       </div>
     </Card>
   );

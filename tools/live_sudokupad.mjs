@@ -605,37 +605,6 @@ const server = http.createServer((req, res) => {
   if (req.method === "GET" && url.pathname === "/state") {
     return readBoard().then((state) => json(res, 200, state)).catch((err) => json(res, 500, { error: String(err?.message || err) }));
   }
-  if (req.method === "GET" && url.pathname === "/screenshot") {
-    if (!page) return json(res, 409, { error: "live page not open" });
-    page.screenshot({ type: "png" }).then((data) => {
-      res.writeHead(200, { "Content-Type": "image/png", "Content-Length": data.length,
-                           "Cache-Control": "no-store" });
-      res.end(data);
-    }).catch((err) => json(res, 500, { error: String(err?.message || err) }));
-    return;
-  }
-  if (req.method === "POST" && url.pathname === "/debug") {
-    let body = "";
-    req.on("data", (chunk) => { body += chunk; });
-    req.on("end", async () => {
-      try {
-        const action = JSON.parse(body || "{}").action;
-        if (!page) return json(res, 409, { error: "live page not open" });
-        if (action === "undo") {
-          await page.click("#control-undo", { force: true });
-          await page.waitForTimeout(300);
-        } else if (action === "redo") {
-          await page.click("#control-redo", { force: true });
-          await page.waitForTimeout(300);
-        }
-        const state = await readBoard();
-        return json(res, 200, { ok: true, action, state });
-      } catch (err) {
-        return json(res, 500, { error: String(err?.message || err) });
-      }
-    });
-    return;
-  }
   if (req.method === "GET" && url.pathname === "/frame" && url.searchParams.get("session")) {
     const session = path.basename(url.searchParams.get("session") || "");
     const step = path.basename(url.searchParams.get("step") || "0");

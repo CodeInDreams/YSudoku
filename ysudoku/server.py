@@ -231,13 +231,6 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/live/health":
             self._send(200, json.dumps({"ok": live._healthy()}).encode(), "application/json")
             return
-        if path == "/api/live/screenshot":
-            try:
-                data = live.screenshot()
-                self._send(200, data, "image/png")
-            except Exception as exc:  # noqa: BLE001
-                self._send(500, json.dumps({"error": str(exc)}).encode(), "application/json")
-            return
         if path == "/api/live/frame":
             try:
                 query = parse_qs(urlparse(self.path).query)
@@ -303,7 +296,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if urlparse(self.path).path not in (
             "/api/solve", "/api/solve/start", "/api/demo", "/api/live/start", "/api/live/place",
-            "/api/live/build", "/api/live/debug", "/api/history/clear",
+            "/api/live/build", "/api/history/clear",
             "/api/store/settings", "/api/store/delete", "/api/store/favorite",
             "/api/store/refresh_rules",
         ):
@@ -337,14 +330,6 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:  # noqa: BLE001
                 self._send(500, json.dumps({"error": str(exc)}, ensure_ascii=False).encode(),
                            "application/json")
-            return
-        if urlparse(self.path).path == "/api/live/debug":
-            try:
-                body = json.loads(self.rfile.read(length) or b"{}")
-                result = live.debug(str(body.get("action") or "check"))
-                self._send(200, json.dumps(result, ensure_ascii=False).encode(), "application/json")
-            except Exception as exc:  # noqa: BLE001
-                self._send(500, json.dumps({"error": str(exc)}, ensure_ascii=False).encode(), "application/json")
             return
         if urlparse(self.path).path in ("/api/live/start", "/api/live/place", "/api/live/build"):
             try:
