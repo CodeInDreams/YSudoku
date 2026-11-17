@@ -361,6 +361,8 @@ export default function App() {
   const [stars, setStars] = useState(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [headerHidden, setHeaderHidden] = useState(false);
+  const stepListRef = useRef(null);
+  const stepScrollRef = useRef(0);
   const [phase, setPhase] = useState("idle");
   const [streamRules, setStreamRules] = useState([]);
   const [streamSteps, setStreamSteps] = useState([]);
@@ -428,7 +430,7 @@ export default function App() {
     const el = stepListRef.current;
     if (!el) return;
     el.scrollTop = stepScrollRef.current;
-  }, [streamSteps.length, displaySteps.length, phase]);
+  }, [streamSteps.length, phase]);
 
   useEffect(() => {
     let lastY = window.scrollY;
