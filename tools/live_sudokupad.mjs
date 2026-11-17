@@ -338,7 +338,10 @@ async function act(action) {
     await page.mouse.click(x, y);
     if (!(await useTool("control-centre"))) throw new Error("centre tool unavailable");
     const current = await readBoard();
-    if (current.values[action.cell]) throw new Error(`candidate action on solved cell ${action.cell}`);
+    if (current.values[action.cell]) {
+      console.error(JSON.stringify({ event: "candidate-skip-solved", cell: action.cell }));
+      return;
+    }
     const before = new Set(current.corners[action.cell] || []);
     const wanted = new Set((action.digits || []).map(Number));
     for (const digit of before) if (!wanted.has(digit)) await page.keyboard.type(String(digit));

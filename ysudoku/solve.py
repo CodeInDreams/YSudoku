@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 from .narrate import Step, build_step
 from .search import count_solutions, satisfiable
-from .state import Contradiction, State, bits, build_units, cell_name
+from .state import Contradiction, Reason, State, bits, build_units, cell_name
 from .techniques import TECHNIQUES, TRIGGERS
 
 
@@ -60,6 +60,21 @@ class Solver:
         return out[:8]
 
     def _commit(self, events, pre_dom, pre_vals):
+        events = [e for e in events if not pre_vals[e.cell]]
+        if not events:
+            return None
+        placed = {e.cell for e in events if e.kind == "place"}
+        for cell in {e.cell for e in events}:
+            if cell in placed or self.state.vals[cell]:
+                continue
+            if self.state.dom[cell].bit_count() == 1:
+                value = (self.state.dom[cell] & -self.state.dom[cell]).bit_length()
+                reason = Reason("naked_single", {"cell": cell, "value": value})
+                self.state.record = True
+                self.state.place(cell, value, reason)
+                self.state.record = False
+                placed.add(cell)
+        events = self.state.events
         step = build_step(len(self.steps), events, self.state.n)
         step.pre_dom, step.pre_vals = pre_dom, pre_vals
         step.candidates = self._candidates(events, pre_dom)
