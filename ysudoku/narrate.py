@@ -600,8 +600,9 @@ def _explain_w_wing(events, data, n):
 def _explain_contradiction(events, data, n):
     cell, value = data["cell"], data["value"]
     forced = data.get("forced")
+    prefix = "反证推翻" if data.get("phase") == "end" else "反证"
     detail = (
-        f"反证：假设 {cell_name(cell, n)} = {value}。\n"
+        f"{prefix}：假设 {cell_name(cell, n)} = {value}。\n"
         f"在这个假设下，把当前约束继续传播并穷举，最终无解。\n"
     )
     if forced is not None:
@@ -614,7 +615,7 @@ def _explain_contradiction(events, data, n):
     visual["groups"].append({"cells": [cell], "kind": "assumption"})
     visual["assumption"] = {
         "cells": [cell],
-        "label": f"假设 {cell_name(cell, n)}={value}",
+        "label": f"{prefix}：假设 {cell_name(cell, n)}={value}",
     }
     return detail, visual
 

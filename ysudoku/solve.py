@@ -229,6 +229,37 @@ class Solver:
             step.index = index
         return steps
 
+    def _contradiction_intro(self, cell: int, value: int, phase: str,
+                             pre_dom: list[int], pre_vals: list[int]) -> Step:
+        name = cell_name(cell, self.state.n)
+        prefix = {"start": "反证开始", "check": "反证检查"}[phase]
+        label = f"{prefix}：假设 {name}={value}"
+        if phase == "start":
+            detail = (
+                f"反证开始：假设 {name} = {value}。\n"
+                "这是一个临时假设，不写入正式棋盘；接下来检查它是否导出矛盾。"
+            )
+        else:
+            detail = (
+                f"反证检查：在假设 {name} = {value} 下继续传播约束并穷举分支。\n"
+                "如果所有分支都无解，这个假设就被推翻。"
+            )
+        visual = {
+            "focus": [],
+            "premise": [],
+            "groups": [{"cells": [cell], "kind": "assumption"}],
+            "links": [],
+            "chips": [],
+            "assumption": {"cells": [cell], "label": label},
+        }
+        step = Step(
+            index=len(self.steps), technique="contradiction", tier=4,
+            title=prefix, detail=detail, events=[], visual=visual,
+        )
+        step.pre_dom, step.pre_vals = pre_dom, pre_vals
+        step.candidates = []
+        return step
+
     def contradiction_step(self, deadline: float, per_candidate: float = 1.2):
         """Assume a candidate; prove it impossible; eliminate it or place the other."""
         import time
@@ -257,9 +288,17 @@ class Solver:
                 forced = None
                 if len(values) == 2:
                     forced = values[0] if values[1] == value else values[1]
+                for phase in ("start", "check"):
+                    intro = self._contradiction_intro(cell, value, phase, pre_dom, pre_vals)
+                    self.steps.append(intro)
+                    if self.on_step is not None:
+                        try:
+                            self.on_step(intro)
+                        except Exception:
+                            pass
                 reason = Reason("contradiction", {
                     "cell": cell, "value": value, "forced": forced,
-                    "proof": "假设后约束传播/穷举无解",
+                    "phase": "end", "proof": "假设后约束传播/穷举无解",
                 })
                 self.state.begin()
                 if forced is not None:
@@ -270,6 +309,7 @@ class Solver:
                 step = self._commit(events, pre_dom, pre_vals)
                 if step is None:
                     return None
+                step.title = "反证推翻"
                 self.steps.append(step)
                 if self.on_step is not None:
                     try:
