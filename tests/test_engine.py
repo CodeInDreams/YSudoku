@@ -16,7 +16,7 @@ class EngineTest(unittest.TestCase):
 
     def test_solved(self):
         self.assertEqual(self.analysis.status, "solved")
-        self.assertGreater(len(self.analysis.result.steps), 20)
+        self.assertGreater(len(self.analysis.result.steps), 10)
 
     def test_matches_solution(self):
         self.assertIn("一致", self.analysis.solution_check)

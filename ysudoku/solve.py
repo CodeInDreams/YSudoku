@@ -170,48 +170,51 @@ class Solver:
         return None, None
 
     def _merge_sibling_singles(self, steps: list[Step]) -> list[Step]:
-        """Merge independent singles that share the same immediate origin."""
-        changed = True
-        while changed:
-            changed = False
-            i = 1
-            while i + 1 < len(steps):
-                origin, left, right = steps[i - 1], steps[i], steps[i + 1]
-                if left.technique != right.technique or left.technique not in (
-                    "naked_single", "hidden_single",
-                ):
-                    i += 1
-                    continue
-                origin_cells = {e.cell for e in origin.events}
-                left_places = [e for e in left.events if e.kind == "place"]
-                right_places = [e for e in right.events if e.kind == "place"]
-                if not left_places or not right_places:
-                    i += 1
-                    continue
-                if not all(p.cell in origin_cells for p in left_places + right_places):
-                    i += 1
-                    continue
-                left_cells = {e.cell for e in left.events}
-                right_cells = {e.cell for e in right.events}
-                if left_cells & right_cells:
-                    i += 1
-                    continue
-                left.events.extend(right.events)
-                left.candidates = left.candidates + [
-                    c for c in right.candidates
-                    if c["cell"] not in {x["cell"] for x in left.candidates}
-                ]
-                left.visual["focus"] = sorted(
-                    set(left.visual.get("focus", [])) | set(right.visual.get("focus", []))
-                )
-                extra = "；".join(
-                    f"{cell_name(p.cell, self.state.n)} = {p.value}"
-                    for p in right_places
-                )
-                left.detail = left.detail + "\n" + extra
-                steps.pop(i + 1)
-                changed = True
-            i = 1
+        """Merge all independent singles directly caused by the same origin.
+
+        Dependent steps may sit between siblings; they stay in place, while the
+        direct children are folded into the first child step.
+        """
+        i = 0
+        while i < len(steps):
+            origin = steps[i]
+            origin_cells = {e.cell for e in origin.events}
+            direct: list[int] = []
+            j = i + 1
+            while j < len(steps) and steps[j].technique in (
+                "naked_single", "hidden_single",
+            ):
+                places = [e for e in steps[j].events if e.kind == "place"]
+                if places and all(p.cell in origin_cells for p in places):
+                    direct.append(j)
+                j += 1
+            if len(direct) >= 2:
+                target = steps[direct[0]]
+                remove: list[int] = []
+                for k in direct[1:]:
+                    right = steps[k]
+                    right_places = [e for e in right.events if e.kind == "place"]
+                    target_places = {e.cell for e in target.events if e.kind == "place"}
+                    if any(p.cell in target_places for p in right_places):
+                        continue
+                    target.events.extend(right.events)
+                    target.candidates = target.candidates + [
+                        c for c in right.candidates
+                        if c["cell"] not in {x["cell"] for x in target.candidates}
+                    ]
+                    target.visual["focus"] = sorted(
+                        set(target.visual.get("focus", []))
+                        | set(right.visual.get("focus", []))
+                    )
+                    extra = "；".join(
+                        f"{cell_name(p.cell, self.state.n)} = {p.value}"
+                        for p in right_places
+                    )
+                    target.detail = target.detail + "\n" + extra
+                    remove.append(k)
+                for k in reversed(remove):
+                    steps.pop(k)
+            i += 1
         for index, step in enumerate(steps):
             step.index = index
         return steps

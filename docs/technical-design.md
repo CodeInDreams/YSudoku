@@ -192,6 +192,7 @@ Constraint 排序键：
 - 一次 Constraint / Technique 调用，对它的作用域产生的全部事件 → 一步。
 - 如果 A 落子/删数改变了候选，才推出 B，则 B 是依赖步骤 → 必须另起一步。
 - 两个步骤都由同一个上一步直接推出，彼此没有依赖，且规则相同（naked/hidden single）→ 可以作为 sibling 合并为一步。
+- sibling 之间可以夹着依赖步骤；合并时把所有直接 sibling 合并到第一个 sibling 步骤，依赖步骤保留在合并步骤之后。
 - 不能把 sibling 合并回它们的 origin；origin 与 sibling 之间存在依赖。
 - 规则/约束在**自己的作用域内**把某格压成单候选时，直接在该步落子，不再单开 naked-single 步。
 - 由本步落子的 peer 删除、作用域外产生的单候选属于依赖步骤，必须另起一步。
