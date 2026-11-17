@@ -261,102 +261,52 @@ class Solver:
         return step
 
     def contradiction_step(self, deadline: float, per_candidate: float = 1.2):
-        """Assume a candidate; prove it impossible; eliminate it or place the other."""
         import time
         from .search import refute_candidate
-
         pre_dom, pre_vals = self._pre()
-        cells = sorted(
-            (c for c in range(self.state.n2) if self.state.vals[c] == 0),
-            key=lambda c: self.state.dom[c].bit_count(),
-        )
+        cells = sorted((c for c in range(self.state.n2) if not self.state.vals[c]),
+                       key=lambda c: self.state.dom[c].bit_count())
         for cell in cells:
-            if time.time() > deadline:
-                return None
+            if time.time() > deadline: return None
             values = list(bits(self.state.dom[cell]))
-            if len(values) < 2:
-                continue
+            if len(values) < 2: continue
             for value in values:
-                if time.time() > deadline:
-                    return None
-                verdict, trace, cause = refute_candidate(
-                    self.state, self.constraints, cell, value,
-                    min(per_candidate, max(0.05, deadline - time.time())),
-                )
-                if verdict is not True:
-                    continue
-                forced = None
-                if len(values) == 2:
-                    forced = values[0] if values[1] == value else values[1]
-                intro = self._contradiction_intro(cell, value, "start", pre_dom, pre_vals)
+                if time.time() > deadline: return None
+                verdict,_,cause = refute_candidate(self.state,self.constraints,cell,value,
+                                                   min(per_candidate,max(.05,deadline-time.time())))
+                if verdict is not True: continue
+                name=cell_name(cell,self.state.n)
+                intro=Step(index=len(self.steps),technique="contradiction",tier=4,title="反证开始",
+                    detail=f"反证开始：假设 {name} = {value}，并填入盘面。",
+                    events=[Event("place",cell,value,Reason("contradiction",{"cell":cell,"value":value,"phase":"start"}),pre_dom[cell])],
+                    visual={"focus":[],"premise":[],"groups":[{"cells":[cell],"kind":"assumption"}],"links":[],"chips":[],
+                            "assumption":{"cells":[cell],"label":f"反证开始：假设 {name}={value}"}},branch=True)
+                intro.pre_dom,intro.pre_vals=pre_dom,pre_vals
+                intro.candidates=[{"cell":cell,"digits":[value]}]
                 self.steps.append(intro)
-                if self.on_step is not None:
-                    try:
-                        self.on_step(intro)
-                    except Exception:
-                        pass
-                meaningful = [
-                    e for e in trace
-                    if e.kind == "place" or e.reason.kind != "unit_peer"
-                ] or trace
-                chunks = [meaningful[i:i + 6] for i in range(0, len(meaningful), 6)] or [[]]
-                for index, chunk in enumerate(chunks):
-                    lines = [
-                        f"反证检查（{index + 1}/{len(chunks)}）："
-                        f"在假设 {cell_name(cell, self.state.n)} = {value} 下："
-                    ]
-                    for event in chunk:
-                        effect = (
-                            f"{cell_name(event.cell, self.state.n)} = {event.value}"
-                            if event.kind == "place"
-                            else f"{cell_name(event.cell, self.state.n)} ≠ {event.value}"
-                        )
-                        lines.append(f"→ {effect}（{event.reason.kind}）")
-                    if index == len(chunks) - 1:
-                        lines.append(f"沿这些结果继续推导，最终矛盾：{cause}。")
-                    else:
-                        lines.append("继续正常推理…")
-                    check = Step(
-                        index=len(self.steps), technique="contradiction", tier=4,
-                        title="反证检查", detail="\n".join(lines), events=[],
-                        visual={
-                            "focus": [], "premise": [],
-                            "groups": [{"cells": [cell], "kind": "assumption"}],
-                            "links": [], "chips": [],
-                            "assumption": {
-                                "cells": [cell],
-                                "label": f"反证检查：假设 {cell_name(cell, self.state.n)}={value}",
-                            },
-                        },
-                    )
-                    check.pre_dom, check.pre_vals = pre_dom, pre_vals
-                    check.candidates = []
-                    self.steps.append(check)
-                    if self.on_step is not None:
-                        try:
-                            self.on_step(check)
-                        except Exception:
-                            pass
-                reason = Reason("contradiction", {
-                    "cell": cell, "value": value, "forced": forced,
-                    "phase": "end", "cause": cause, "proof": cause,
-                })
+                if self.on_step:
+                    try:self.on_step(intro)
+                    except Exception:pass
+                revert=Step(index=len(self.steps),technique="contradiction",tier=4,title="反证回退",
+                    detail=f"反证回退：撤销假设 {name} = {value}。",events=[],
+                    visual={"focus":[],"premise":[],"groups":[{"cells":[cell],"kind":"assumption"}],"links":[],"chips":[],
+                            "assumption":{"cells":[cell],"label":f"反证回退：假设 {name}={value}"}},branch=True,revert=True)
+                revert.pre_dom,revert.pre_vals=pre_dom,pre_vals; revert.candidates=[]
+                self.steps.append(revert)
+                if self.on_step:
+                    try:self.on_step(revert)
+                    except Exception:pass
+                forced=values[0] if len(values)==2 and values[1]==value else (values[1] if len(values)==2 else None)
+                reason=Reason("contradiction",{"cell":cell,"value":value,"forced":forced,"phase":"end","cause":cause})
                 self.state.begin()
-                if forced is not None:
-                    self.state.place(cell, forced, reason)
-                else:
-                    self.state.elim(cell, value, reason)
-                events = self.state.end()
-                step = self._commit(events, pre_dom, pre_vals)
-                if step is None:
-                    return None
-                step.title = "反证推翻"
-                self.steps.append(step)
-                if self.on_step is not None:
-                    try:
-                        self.on_step(step)
-                    except Exception:
-                        pass
+                if forced is not None:self.state.place(cell,forced,reason)
+                else:self.state.elim(cell,value,reason)
+                events=self.state.end(); step=self._commit(events,pre_dom,pre_vals)
+                if step is None:return None
+                step.title="反证推翻"; self.steps.append(step)
+                if self.on_step:
+                    try:self.on_step(step)
+                    except Exception:pass
                 return step
         return None
 

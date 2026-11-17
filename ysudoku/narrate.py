@@ -78,6 +78,8 @@ class Step:
     pre_vals: list[int] = field(default_factory=list, repr=False)
     candidates: list[dict] = field(default_factory=list)
     audit: str = "unchecked"
+    branch: bool = False
+    revert: bool = False
 
     def to_dict(self, n: int) -> dict:
         return {
@@ -90,6 +92,8 @@ class Step:
             "pre_dom": self.pre_dom,
             "candidates": self.candidates,
             "audit": self.audit,
+            "branch": self.branch,
+            "revert": self.revert,
             "events": [e.to_dict() for e in self.events],
         }
 
