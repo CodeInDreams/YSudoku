@@ -217,7 +217,7 @@ function StepNarrative({ step, lang, n, t }) {
       {classLead && <p className="text-[13px] leading-7 text-foreground/90">{classLead}</p>}
       {combos.length > 0 && (
         <div className="rounded-lg border bg-muted/30 p-3">
-          <SectionLabel extra={<Badge variant="outline">{t("step.combinationCount", { n: comboCount || combos.length })}</Badge>}>{t("step.combinations")}</SectionLabel>
+          <SectionLabel extra={<Badge variant="outline">{comboCount === 1 || combos.length === 1 ? t("step.combinationOne") : t("step.combinationCount", { n: comboCount || combos.length })}</Badge>}>{t("step.combinations")}</SectionLabel>
           <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
             {combos.map((digits, index) => (
               <div key={index} className="flex items-center justify-center gap-1 rounded-md border bg-background px-2 py-1.5 shadow-sm">
@@ -472,7 +472,7 @@ export default function App() {
     try {
       const actions = buildStepActions(nextAnalysis);
       let hash = 2166136261;
-      const text = "frame-v14:" + JSON.stringify(actions);
+      const text = "frame-v16:" + JSON.stringify(actions);
       for (let i = 0; i < text.length; i++) { hash ^= text.charCodeAt(i); hash = Math.imul(hash, 16777619); }
       const data = await postJson("/api/live/build", {
         url: nextAnalysis.source_url || "",

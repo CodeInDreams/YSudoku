@@ -283,6 +283,13 @@ async function clearSelection() {
     const select = document.getElementById("control-select");
     if (select && /selected/.test(select.className)) select.click();
   }).catch(() => {});
+  const box = await page.locator("svg.boardsvg").boundingBox().catch(() => null);
+  if (box) {
+    const viewport = page.viewportSize() || { width: 1200, height: 900 };
+    const x = box.x + box.width / 2;
+    const y = Math.min(viewport.height - 4, box.y + box.height + 24);
+    await page.mouse.click(x, y).catch(() => {});
+  }
   await page.waitForTimeout(15);
 }
 
@@ -366,6 +373,19 @@ async function clearCellValue(cell) {
   if (after.values[cell]) throw new Error(`could not clear stray value at cell ${cell}`);
 }
 
+async function setCellValue(cell, value) {
+  await clearSelection();
+  const r = Math.floor(cell / board.n);
+  const c = cell % board.n;
+  const [x, y] = await cellPoint(r, c);
+  await page.mouse.click(x, y);
+  if (!(await useTool("control-normal"))) throw new Error("digit tool unavailable");
+  await page.keyboard.type(String(value));
+  await page.waitForTimeout(25);
+  const after = await readBoard();
+  if (after.values[cell] !== Number(value)) throw new Error(`could not restore value at cell ${cell}`);
+}
+
 async function buildSession(url, steps, session, targetDir) {
   await open(url);
   const dir = targetDir || path.join(process.cwd(), ".cache", "frames", session);
@@ -377,16 +397,21 @@ async function buildSession(url, steps, session, targetDir) {
       if (action.op === "place") expected.set(action.cell, Number(action.value));
       await act(action);
     }
-    // Safety net: only values scheduled by a place action may remain.
+    // Safety net: restore scheduled values; only clear values never scheduled.
     let actual = await readBoard();
+    const wrong = actual.values
+      .map((value, cell) => (value && expected.has(cell) && value !== expected.get(cell) ? cell : -1))
+      .filter((cell) => cell >= 0);
+    for (const cell of wrong) await setCellValue(cell, expected.get(cell));
+    actual = await readBoard();
     const stray = actual.values
-      .map((value, cell) => (value && expected.get(cell) !== value ? cell : -1))
+      .map((value, cell) => (value && !expected.has(cell) ? cell : -1))
       .filter((cell) => cell >= 0);
     for (const cell of stray) await clearCellValue(cell);
     if (stray.length) {
       actual = await readBoard();
       const left = actual.values
-        .map((value, cell) => (value && expected.get(cell) !== value ? cell : -1))
+        .map((value, cell) => (value && !expected.has(cell) ? cell : -1))
         .filter((cell) => cell >= 0);
       if (left.length) throw new Error(`stray values remain: ${left.join(",")}`);
     }
