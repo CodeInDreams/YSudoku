@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle, ArrowUpDown, Check, ChevronDown, ChevronLeft, ChevronRight,
   Database, FilePenLine, FolderOpen, Languages, Loader2, Moon, Pause, Play,
-  Save, Search, Settings, ShieldCheck, Sparkles, Star, Sun, X,
+  Save, Search, Settings, ShieldCheck, Sparkles, Star, Sun, Trash2, X,
 } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
@@ -611,6 +611,13 @@ export default function App() {
     refreshStore();
   }
 
+  async function removeEntry(entry) {
+    if (entry.key === analysis?.storage?.key) return;
+    if (!window.confirm(t("history.deletePuzzleConfirm", { title: entry.title }))) return;
+    await postJson("/api/store/delete", { key: entry.key, layer: "all" });
+    refreshStore();
+  }
+
   async function saveSettings() {
     await postJson("/api/store/settings", settings);
     refreshStore();
@@ -927,7 +934,10 @@ export default function App() {
                 <td className="px-3 py-2.5">
                   <div className="flex items-center gap-2">
                     <div className="min-w-0"><div className="truncate font-medium">{entry.title}</div><div className="text-[10.5px] text-muted-foreground">{entry.author || entry.key}{isCurrent ? ` · ${t("history.current")}` : ""}</div></div>
-                    <button className={`ml-auto ${entry.favorite ? "text-amber-500" : "text-muted-foreground"}`} onClick={(e) => { e.stopPropagation(); toggleFavorite(entry); }}><Star className="h-3.5 w-3.5" fill={entry.favorite ? "currentColor" : "none"} /></button>
+                    <div className="ml-auto flex items-center gap-1.5">
+                      <button className={`${entry.favorite ? "text-amber-500" : "text-muted-foreground"}`} title={t("history.favorite")} onClick={(e) => { e.stopPropagation(); toggleFavorite(entry); }}><Star className="h-3.5 w-3.5" fill={entry.favorite ? "currentColor" : "none"} /></button>
+                      <button className={`${isCurrent ? "cursor-not-allowed opacity-30" : "text-rose-500 hover:text-rose-600"}`} disabled={isCurrent} title={isCurrent ? t("history.currentProtected") : t("history.deletePuzzle")} onClick={(e) => { e.stopPropagation(); removeEntry(entry); }}><Trash2 className="h-3.5 w-3.5" /></button>
+                    </div>
                   </div>
                 </td>
                 <td className="px-3 py-2.5"><Badge variant={["solved", "solved-global", "solved-search"].includes(entry.status) ? "success" : "outline"}>{statusLabel(entry.status)}</Badge></td>

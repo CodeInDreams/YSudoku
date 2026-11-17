@@ -131,7 +131,9 @@ def set_frames_hash(key: str, digest: str) -> None:
 
 
 def delete_layer(key: str, layer: str) -> None:
-    if layer == "rules":
+    if layer == "all":
+        delete_entry(key)
+    elif layer == "rules":
         (_entry_dir(key) / "rules.json").unlink(missing_ok=True)
         _update_meta(key, rules_hash=None, notes="")
         delete_layer(key, "steps")
