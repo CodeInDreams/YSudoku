@@ -229,10 +229,12 @@ class Solver:
             step.index = index
         return steps
 
-    def complete_by_search(self, values: list[int]) -> SolveResult:
+    def complete_by_search(self, values: list[int], proof: str = "unique") -> SolveResult:
         pre_dom, pre_vals = list(self.state.dom), list(self.state.vals)
         events = [
-            Event("place", cell, value, Reason("search", {"cell": cell, "value": value}))
+            Event("place", cell, value,
+                  Reason("search", {"cell": cell, "value": value, "proof": proof}),
+                  pre_dom[cell])
             for cell, value in enumerate(values)
             if not self.state.vals[cell]
         ]
@@ -240,7 +242,8 @@ class Solver:
         step.pre_dom, step.pre_vals = pre_dom, pre_vals
         step.candidates = self._candidates(events, pre_dom)
         step.detail = (
-            "当前规则技巧不足以继续，使用约束搜索补全剩余格子："
+            "当前规则技巧不足以继续，使用约束搜索补全剩余格子；"
+            "已通过严格反证：约束下不存在第二个解，因此每个补全值都是被迫的："
             + "、".join(f"{cell_name(e.cell, self.state.n)}={e.value}" for e in events)
         )
         self.steps.append(step)

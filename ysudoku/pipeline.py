@@ -374,11 +374,23 @@ def analyze(
                         pass
 
     if result.status == "stuck":
-        from .search import search_complete
+        from .search import count_solutions, search_complete
         values = search_complete(solver.state, rules.constraints, time_limit=8.0)
         if values is not None:
-            result = solver.complete_by_search(values)
-            warnings.append("规则技巧不足，最后一步由约束搜索补全")
+            count, _ = count_solutions(
+                solver.state, rules.constraints, limit=2, node_limit=120_000,
+            )
+            if count == 1:
+                result = solver.complete_by_search(values)
+                warnings.append(
+                    "规则技巧不足，最后一步由约束搜索补全；"
+                    "已通过唯一性反证（不存在第二个解）"
+                )
+            else:
+                warnings.append(
+                    "搜索补全未通过严格反证："
+                    + ("存在多个解" if count and count > 1 else "唯一性证明超预算")
+                )
 
     status = result.status
     message = result.message
