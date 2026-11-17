@@ -104,18 +104,20 @@ def satisfiable(st: State, constraints, cell: int, value: int, node_limit: int =
 
 
 def refute_candidate(st: State, constraints, cell: int, value: int,
-                     time_limit: float = 1.5) -> bool | None:
-    """True: assuming cell=value is impossible; False: a solution exists; None: timeout."""
+                     time_limit: float = 1.5):
+    """Return (verdict, trace, cause); verdict True means refuted."""
     import time
     if st.vals[cell]:
-        return value != st.vals[cell]
+        return (value != st.vals[cell], [], "")
     if not st.has(cell, value):
-        return True
+        return (True, [], "该候选已经不存在")
     child = st.copy()
+    child.record = True
+    child.events = []
     try:
-        child.place(cell, value)
+        child.place(cell, value, Reason("assumption", {"cell": cell, "value": value}))
     except Contradiction:
-        return True
+        return (True, [], "假设立即矛盾")
     started = time.time()
 
     def dfs(state: State) -> bool:
@@ -140,6 +142,35 @@ def refute_candidate(st: State, constraints, cell: int, value: int,
         return False
 
     try:
-        return not dfs(child)
+        if dfs(child):
+            return (False, [], "")
+        trace = [e for e in child.events if e.reason.kind != "assumption"]
+        return (True, trace, "沿规则继续推导后无解")
     except BudgetExceeded:
-        return None
+        return (None, [], "")
+
+
+def refute_direct_with_trace(st: State, constraints, cell: int, value: int):
+    """Assume cell=value and propagate once; return (refuted, trace, cause)."""
+    if st.vals[cell]:
+        return (value != st.vals[cell], [], "")
+    if not st.has(cell, value):
+        return (True, [], "该候选已经不存在")
+    child = st.copy()
+    child.record = True
+    child.events = []
+    try:
+        child.place(cell, value, Reason("assumption", {"cell": cell, "value": value}))
+        ok = propagate(child, constraints)
+    except Contradiction as exc:
+        ok = False
+        cause = str(exc)
+    else:
+        cause = ""
+    if ok:
+        return (False, [], "")
+    if not cause:
+        empty = [c for c in range(child.n2) if child.dom[c] == 0]
+        cause = f"{empty[0] // child.n + 1}行{empty[0] % child.n + 1}列没有候选" if empty else "约束传播无解"
+    trace = [e for e in child.events if e.reason.kind != "assumption"]
+    return (True, trace, cause)

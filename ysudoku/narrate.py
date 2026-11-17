@@ -601,9 +601,10 @@ def _explain_contradiction(events, data, n):
     cell, value = data["cell"], data["value"]
     forced = data.get("forced")
     prefix = "反证推翻" if data.get("phase") == "end" else "反证"
+    cause = data.get("cause") or "沿规则继续推导后无解"
     detail = (
         f"{prefix}：假设 {cell_name(cell, n)} = {value}。\n"
-        f"在这个假设下，把当前约束继续传播并穷举，最终无解。\n"
+        f"在假设下继续按规则推导，最终出现矛盾：{cause}。\n"
     )
     if forced is not None:
         detail += f"因此 {cell_name(cell, n)} 不可能是 {value}，只能是 {forced}。\n"

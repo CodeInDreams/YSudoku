@@ -279,7 +279,7 @@ class Solver:
             for value in values:
                 if time.time() > deadline:
                     return None
-                verdict = refute_candidate(
+                verdict, trace, cause = refute_candidate(
                     self.state, self.constraints, cell, value,
                     min(per_candidate, max(0.05, deadline - time.time())),
                 )
@@ -288,17 +288,53 @@ class Solver:
                 forced = None
                 if len(values) == 2:
                     forced = values[0] if values[1] == value else values[1]
-                for phase in ("start", "check"):
-                    intro = self._contradiction_intro(cell, value, phase, pre_dom, pre_vals)
-                    self.steps.append(intro)
-                    if self.on_step is not None:
-                        try:
-                            self.on_step(intro)
-                        except Exception:
-                            pass
+                intro = self._contradiction_intro(cell, value, "start", pre_dom, pre_vals)
+                self.steps.append(intro)
+                if self.on_step is not None:
+                    try:
+                        self.on_step(intro)
+                    except Exception:
+                        pass
+                meaningful = [
+                    e for e in trace
+                    if e.kind == "place" or e.reason.kind != "unit_peer"
+                ] or trace
+                selected = meaningful[-8:]
+                lines = [f"反证检查：在假设 {cell_name(cell, self.state.n)} = {value} 下："]
+                if len(meaningful) > len(selected):
+                    lines.append("（只列出最后几条关键连锁）")
+                for event in selected:
+                    effect = (
+                        f"{cell_name(event.cell, self.state.n)} = {event.value}"
+                        if event.kind == "place"
+                        else f"{cell_name(event.cell, self.state.n)} ≠ {event.value}"
+                    )
+                    lines.append(f"→ {effect}（{event.reason.kind}）")
+                lines.append(f"沿这些强制结果继续推导，最终矛盾：{cause}。")
+                check = Step(
+                    index=len(self.steps), technique="contradiction", tier=4,
+                    title="反证检查", detail="\n".join(lines), events=[],
+                    visual={
+                        "focus": [], "premise": [],
+                        "groups": [{"cells": [cell], "kind": "assumption"}],
+                        "links": [], "chips": [],
+                        "assumption": {
+                            "cells": [cell],
+                            "label": f"反证检查：假设 {cell_name(cell, self.state.n)}={value}",
+                        },
+                    },
+                )
+                check.pre_dom, check.pre_vals = pre_dom, pre_vals
+                check.candidates = []
+                self.steps.append(check)
+                if self.on_step is not None:
+                    try:
+                        self.on_step(check)
+                    except Exception:
+                        pass
                 reason = Reason("contradiction", {
                     "cell": cell, "value": value, "forced": forced,
-                    "phase": "end", "proof": "假设后约束传播/穷举无解",
+                    "phase": "end", "cause": cause, "proof": cause,
                 })
                 self.state.begin()
                 if forced is not None:
