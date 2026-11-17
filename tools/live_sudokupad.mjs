@@ -172,30 +172,97 @@ async function cellPoint(r, c) {
 async function readBoard() {
   return await page.evaluate((n) => {
     const values = new Array(n * n).fill(0);
+    const centre = Array.from({ length: n * n }, () => []);
     const corners = Array.from({ length: n * n }, () => []);
-    const toCell = (x, y) => {
-      const c = Math.floor((x - 32) / 64);
-      const r = Math.floor((y - 32) / 64);
+    const colors = Array.from({ length: n * n }, () => []);
+    const pen = Array.from({ length: n * n }, () => []);
+    const errors = Array.from({ length: n * n }, () => []);
+    const cellAt = (x, y) => {
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return -1;
+      let r, c;
+      if (Math.abs(x % 64) < 1 && Math.abs(y % 64) < 1) {
+        c = Math.round(x / 64); r = Math.round(y / 64);
+      } else {
+        c = Math.floor((x - 32) / 64); r = Math.floor((y - 32) / 64);
+      }
       if (r < 0 || r >= n || c < 0 || c >= n) return -1;
       return r * n + c;
     };
     for (const t of document.querySelectorAll("#cell-values text")) {
-      const x = parseFloat(t.getAttribute("x"));
-      const y = parseFloat(t.getAttribute("y"));
-      const cell = toCell(x, y - 3.8);
+      const cell = cellAt(parseFloat(t.getAttribute("x")), parseFloat(t.getAttribute("y")));
       if (cell >= 0) values[cell] = Number(t.textContent);
     }
     for (const t of document.querySelectorAll("#cell-candidates text")) {
-      const x = parseFloat(t.getAttribute("x"));
-      const y = parseFloat(t.getAttribute("y"));
-      const cell = toCell(x, y);
+      const cell = cellAt(parseFloat(t.getAttribute("x")), parseFloat(t.getAttribute("y")));
       if (cell < 0) continue;
       for (const span of t.querySelectorAll("tspan[data-val]")) {
         const v = Number(span.getAttribute("data-val"));
-        if (v) corners[cell].push(v);
+        if (v) centre[cell].push(v);
       }
     }
-    return { values, corners };
+    for (const t of document.querySelectorAll("#cell-pencilmarks text[data-val]")) {
+      const cell = cellAt(parseFloat(t.getAttribute("x")), parseFloat(t.getAttribute("y")));
+      const v = Number(t.getAttribute("data-val"));
+      if (cell >= 0 && v) corners[cell].push(v);
+    }
+    const colorNode = document.getElementById("cell-colors");
+    if (colorNode) {
+      for (const el of colorNode.querySelectorAll("rect, path, polygon, circle")) {
+        let x = parseFloat(el.getAttribute("x"));
+        let y = parseFloat(el.getAttribute("y"));
+        if (!Number.isFinite(x) || !Number.isFinite(y)) {
+          const box = el.getBBox?.();
+          if (box) { x = box.x; y = box.y; }
+        }
+        const cell = cellAt(x, y);
+        if (cell < 0) continue;
+        colors[cell].push({
+          fill: el.getAttribute("fill") || getComputedStyle(el).fill,
+          stroke: el.getAttribute("stroke") || null,
+        });
+      }
+    }
+    const penNode = document.getElementById("cell-pen");
+    if (penNode) {
+      for (const el of penNode.querySelectorAll("path, line, polyline, circle, rect")) {
+        const box = el.getBBox?.();
+        if (!box) continue;
+        const cell = cellAt(box.x + box.width / 2, box.y + box.height / 2);
+        if (cell < 0) continue;
+        pen[cell].push({ tag: el.tagName, d: el.getAttribute("d") || "", fill: el.getAttribute("fill") || null });
+      }
+    }
+    const errorNode = document.getElementById("cell-errors");
+    if (errorNode) {
+      for (const el of errorNode.querySelectorAll("*")) {
+        let x = parseFloat(el.getAttribute("x"));
+        let y = parseFloat(el.getAttribute("y"));
+        if (!Number.isFinite(x) || !Number.isFinite(y)) {
+          const box = el.getBBox?.();
+          if (box) { x = box.x; y = box.y; }
+        }
+        const cell = cellAt(x, y);
+        if (cell >= 0) errors[cell].push(el.tagName);
+      }
+    }
+    const state = Array.from({ length: n * n }, (_, cell) => ({
+      value: values[cell] || 0,
+      centre: [...new Set(centre[cell])].sort((a, b) => a - b),
+      corners: [...new Set(corners[cell])].sort((a, b) => a - b),
+      colors: colors[cell],
+      pen: pen[cell],
+      errors: errors[cell],
+    }));
+    return {
+      values,
+      corners: centre,
+      centre,
+      pencilmarks: corners,
+      colors,
+      pen,
+      errors,
+      state,
+    };
   }, board.n);
 }
 
@@ -492,6 +559,9 @@ const server = http.createServer((req, res) => {
   if (req.method === "GET" && url.pathname === "/health") {
     return json(res, 200, { ok: true, ready: Boolean(page), browser: Boolean(browser),
                             n: board?.n || 0, idle_for: Math.round((Date.now() - lastUsed) / 1000) });
+  }
+  if (req.method === "GET" && url.pathname === "/state") {
+    return readBoard().then((state) => json(res, 200, state)).catch((err) => json(res, 500, { error: String(err?.message || err) }));
   }
   if (req.method === "GET" && url.pathname === "/frame" && url.searchParams.get("session")) {
     const session = path.basename(url.searchParams.get("session") || "");
