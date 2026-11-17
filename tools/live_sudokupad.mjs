@@ -560,27 +560,6 @@ const server = http.createServer((req, res) => {
     return json(res, 200, { ok: true, ready: Boolean(page), browser: Boolean(browser),
                             n: board?.n || 0, idle_for: Math.round((Date.now() - lastUsed) / 1000) });
   }
-  if (req.method === "POST" && url.pathname === "/debug") {
-    let body = "";
-    req.on("data", (chunk) => { body += chunk; });
-    req.on("end", async () => {
-      try {
-        const action = JSON.parse(body || "{}").action;
-        if (action === "undo") {
-          await page.click("#control-undo", { force: true });
-          await page.waitForTimeout(250);
-        } else if (action === "redo") {
-          await page.click("#control-redo", { force: true });
-          await page.waitForTimeout(250);
-        }
-        const state = await readBoard();
-        return json(res, 200, { ok: true, action, state });
-      } catch (err) {
-        return json(res, 500, { error: String(err?.message || err) });
-      }
-    });
-    return;
-  }
   if (req.method === "GET" && url.pathname === "/state") {
     return readBoard().then((state) => json(res, 200, state)).catch((err) => json(res, 500, { error: String(err?.message || err) }));
   }
