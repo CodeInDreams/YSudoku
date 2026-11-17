@@ -428,6 +428,12 @@ export default function App() {
   }, [streamSteps, streamTarget]);
 
   useEffect(() => {
+    const el = stepListRef.current;
+    if (!el) return;
+    el.scrollTop = stepScrollRef.current;
+  }, [streamSteps.length, displaySteps.length, phase]);
+
+  useEffect(() => {
     let lastY = window.scrollY;
     const onScroll = () => {
       const y = window.scrollY;
@@ -998,7 +1004,12 @@ export default function App() {
         </div>
       </CardHeader>
       <CardContent className="p-2 pt-0">
-        <div className="max-h-[260px] overflow-y-auto">
+        <div
+          ref={stepListRef}
+          className="max-h-[260px] overflow-y-auto"
+          style={{ overflowAnchor: "none" }}
+          onScroll={(e) => { stepScrollRef.current = e.currentTarget.scrollTop; }}
+        >
           {displaySteps.map((step, i) => (
             <button key={i} onClick={() => { setPlaying(false); setIdx(i); }} className={`flex w-full items-center gap-3 rounded-md px-2.5 py-1.5 text-left text-xs ${i === idx ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:bg-muted/60"}`}>
               <span className="w-6 text-right font-mono text-[10.5px]">{i + 1}</span><span className="truncate">{stepTitle(step)}</span>
