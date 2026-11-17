@@ -97,6 +97,18 @@ class Solver:
             return None, f"规则「{constraint.describe()}」推导出矛盾：{exc}"
         events = self.state.end()
         if events:
+            # A rule/constraint that itself leaves one host in its scope fills it
+            # immediately. Peer eliminations outside the scope remain dependent
+            # follow-up steps.
+            reason = events[0].reason
+            for cell in constraint.cells():
+                if self.state.vals[cell] or self.state.dom[cell].bit_count() != 1:
+                    continue
+                value = (self.state.dom[cell] & -self.state.dom[cell]).bit_length()
+                self.state.record = True
+                self.state.place(cell, value, reason)
+                self.state.record = False
+            events = self.state.events
             return self._commit(events, pre_dom, pre_vals)
         return None
 
