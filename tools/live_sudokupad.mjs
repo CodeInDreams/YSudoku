@@ -150,6 +150,8 @@ async function open(url) {
 }
 
 async function shot() {
+  // Let SudokuPad finish its render/undo animation before every snapshot.
+  await page.waitForTimeout(500);
   const { grid } = board;
   latest = await page.screenshot({
     clip: { x: grid.x, y: grid.y, width: grid.width, height: grid.height },
