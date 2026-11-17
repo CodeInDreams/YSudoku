@@ -754,6 +754,27 @@ export default function App() {
                 const color = ["#2563eb", "#d97706", "#059669", "#dc2626", "#7c3aed", "#0d9488"][i % 6];
                 return <rect key={i} x={Math.min(...cols) + 0.03} y={Math.min(...rows) + 0.03} width={Math.max(...cols) - Math.min(...cols) + 0.94} height={Math.max(...rows) - Math.min(...rows) + 0.94} rx="0.08" fill={color} fillOpacity="0.10" stroke={color} strokeOpacity="0.55" strokeWidth="0.045" />;
               })}
+              {overlay.visual.assumption && (() => {
+                const a = overlay.visual.assumption;
+                const cells = a.cells || [];
+                if (!cells.length) return null;
+                const rows = cells.map((c) => Math.floor(c / n));
+                const cols = cells.map((c) => c % n);
+                const minR = Math.min(...rows), maxR = Math.max(...rows);
+                const minC = Math.min(...cols), maxC = Math.max(...cols);
+                const label = a.label || "假设";
+                const width = Math.min(n - 0.1, Math.max(1.1, label.length * 0.098 + 0.3));
+                const x = Math.min(n - width - 0.05, Math.max(0.05, (minC + maxC + 1) / 2 - width / 2));
+                const above = minR > 0.7;
+                const y = above ? Math.max(0.03, minR - 0.26) : Math.min(n - 0.28, maxR + 1.03);
+                return (
+                  <g>
+                    <rect x={minC + 0.02} y={minR + 0.02} width={maxC - minC + 0.96} height={maxR - minR + 0.96} rx="0.07" fill="#dc2626" fillOpacity="0.10" stroke="#dc2626" strokeWidth="0.055" strokeDasharray="0.12 0.07" />
+                    <rect x={x} y={y} width={width} height="0.24" rx="0.06" fill="#dc2626" fillOpacity="0.92" />
+                    <text x={x + width / 2} y={y + 0.17} textAnchor="middle" fontSize="0.135" fontWeight="600" fill="#fff" style={{ fontFamily: "ui-sans-serif, system-ui" }}>{label}</text>
+                  </g>
+                );
+              })()}
               {(overlay.visual.focus || []).map((cell) => {
                 const r = Math.floor(cell / n), c = cell % n;
                 return <rect key={`f${cell}`} x={c + 0.03} y={r + 0.03} width="0.94" height="0.94" rx="0.06" fill="rgba(217,119,6,.12)" stroke="#d97706" strokeWidth="0.045" />;

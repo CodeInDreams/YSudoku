@@ -610,7 +610,12 @@ def _explain_contradiction(events, data, n):
         detail += f"因此 {cell_name(cell, n)} ≠ {value}，删除该候选。\n"
     detail += "注意：这一步通过反证排除候选，不是直接推理。"
     visual = _basic_visual(events, n)
-    visual["focus"] = [cell]
+    visual["focus"] = []
+    visual["groups"].append({"cells": [cell], "kind": "assumption"})
+    visual["assumption"] = {
+        "cells": [cell],
+        "label": f"假设 {cell_name(cell, n)}={value}",
+    }
     return detail, visual
 
 
