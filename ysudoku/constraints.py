@@ -128,6 +128,12 @@ class Cage(Constraint):
                     if any(_matchable(combo, probe) for combo in feasible):
                         allowed |= 1 << (value - 1)
             changed |= st.restrict(cell, allowed, reason)
+        # A cage that leaves one host for a value should fill it immediately.
+        for cell in cells:
+            if st.vals[cell] or st.dom[cell].bit_count() != 1:
+                continue
+            value = (st.dom[cell] & -st.dom[cell]).bit_length()
+            changed |= st.place(cell, value, reason)
         return changed
 
 

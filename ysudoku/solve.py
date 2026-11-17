@@ -74,15 +74,6 @@ class Solver:
                 self.state.place(cell, value, reason)
                 self.state.record = False
                 placed.add(cell)
-        if not any(e.kind == "place" and e.reason.kind == "naked_single" for e in self.state.events):
-            for cell in range(self.state.n * self.state.n):
-                if self.state.vals[cell] or self.state.dom[cell].bit_count() != 1:
-                    continue
-                value = (self.state.dom[cell] & -self.state.dom[cell]).bit_length()
-                self.state.record = True
-                self.state.place(cell, value, Reason("naked_single", {"cell": cell, "value": value}))
-                self.state.record = False
-                break
         events = self.state.events
         step = build_step(len(self.steps), events, self.state.n)
         step.pre_dom, step.pre_vals = pre_dom, pre_vals
@@ -176,6 +167,42 @@ class Solver:
                 return result, None
         return None, None
 
+    def _merge_direct_singles(self, steps: list[Step]) -> list[Step]:
+        """Fold a naked single caused directly by the previous step into it."""
+        changed = True
+        while changed:
+            changed = False
+            merged: list[Step] = []
+            i = 0
+            while i < len(steps):
+                current = steps[i]
+                if i + 1 < len(steps) and steps[i + 1].technique == "naked_single":
+                    nxt = steps[i + 1]
+                    places = [e for e in nxt.events if e.kind == "place"]
+                    affected = {e.cell for e in current.events}
+                    if places and all(place.cell in affected for place in places):
+                        current.events.extend(nxt.events)
+                        current.candidates = current.candidates + [
+                            c for c in nxt.candidates
+                            if c["cell"] not in {x["cell"] for x in current.candidates}
+                        ]
+                        focus = set(current.visual.get("focus", [])) | {p.cell for p in places}
+                        current.visual["focus"] = sorted(focus)
+                        extra = "；".join(
+                            f"{cell_name(p.cell, self.state.n)} = {p.value}（单候选自动填入）"
+                            for p in places
+                        )
+                        current.detail = current.detail + "\n" + extra
+                        i += 2
+                        changed = True
+                        continue
+                merged.append(current)
+                i += 1
+            steps = merged
+        for index, step in enumerate(steps):
+            step.index = index
+        return steps
+
     def run(self, max_steps: int = 4000) -> SolveResult:
         if self.invalid:
             return SolveResult("invalid", [], self.state.vals, self.invalid)
@@ -194,7 +221,8 @@ class Solver:
                     f"已尝试 {len(tried)} 类技巧仍卡住{hint}",
                 )
             self.steps.append(step)
-        return SolveResult("solved", self.steps, self.state.vals, "")
+        return SolveResult("solved", self._merge_direct_singles(self.steps),
+                           self.state.vals, "")
 
 
 # ------------------------------------------------------------------ validation
