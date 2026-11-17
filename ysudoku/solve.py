@@ -299,39 +299,44 @@ class Solver:
                     e for e in trace
                     if e.kind == "place" or e.reason.kind != "unit_peer"
                 ] or trace
-                selected = meaningful[-8:]
-                lines = [f"反证检查：在假设 {cell_name(cell, self.state.n)} = {value} 下："]
-                if len(meaningful) > len(selected):
-                    lines.append("（只列出最后几条关键连锁）")
-                for event in selected:
-                    effect = (
-                        f"{cell_name(event.cell, self.state.n)} = {event.value}"
-                        if event.kind == "place"
-                        else f"{cell_name(event.cell, self.state.n)} ≠ {event.value}"
-                    )
-                    lines.append(f"→ {effect}（{event.reason.kind}）")
-                lines.append(f"沿这些强制结果继续推导，最终矛盾：{cause}。")
-                check = Step(
-                    index=len(self.steps), technique="contradiction", tier=4,
-                    title="反证检查", detail="\n".join(lines), events=[],
-                    visual={
-                        "focus": [], "premise": [],
-                        "groups": [{"cells": [cell], "kind": "assumption"}],
-                        "links": [], "chips": [],
-                        "assumption": {
-                            "cells": [cell],
-                            "label": f"反证检查：假设 {cell_name(cell, self.state.n)}={value}",
+                chunks = [meaningful[i:i + 6] for i in range(0, len(meaningful), 6)] or [[]]
+                for index, chunk in enumerate(chunks):
+                    lines = [
+                        f"反证检查（{index + 1}/{len(chunks)}）："
+                        f"在假设 {cell_name(cell, self.state.n)} = {value} 下："
+                    ]
+                    for event in chunk:
+                        effect = (
+                            f"{cell_name(event.cell, self.state.n)} = {event.value}"
+                            if event.kind == "place"
+                            else f"{cell_name(event.cell, self.state.n)} ≠ {event.value}"
+                        )
+                        lines.append(f"→ {effect}（{event.reason.kind}）")
+                    if index == len(chunks) - 1:
+                        lines.append(f"沿这些结果继续推导，最终矛盾：{cause}。")
+                    else:
+                        lines.append("继续正常推理…")
+                    check = Step(
+                        index=len(self.steps), technique="contradiction", tier=4,
+                        title="反证检查", detail="\n".join(lines), events=[],
+                        visual={
+                            "focus": [], "premise": [],
+                            "groups": [{"cells": [cell], "kind": "assumption"}],
+                            "links": [], "chips": [],
+                            "assumption": {
+                                "cells": [cell],
+                                "label": f"反证检查：假设 {cell_name(cell, self.state.n)}={value}",
+                            },
                         },
-                    },
-                )
-                check.pre_dom, check.pre_vals = pre_dom, pre_vals
-                check.candidates = []
-                self.steps.append(check)
-                if self.on_step is not None:
-                    try:
-                        self.on_step(check)
-                    except Exception:
-                        pass
+                    )
+                    check.pre_dom, check.pre_vals = pre_dom, pre_vals
+                    check.candidates = []
+                    self.steps.append(check)
+                    if self.on_step is not None:
+                        try:
+                            self.on_step(check)
+                        except Exception:
+                            pass
                 reason = Reason("contradiction", {
                     "cell": cell, "value": value, "forced": forced,
                     "phase": "end", "cause": cause, "proof": cause,
