@@ -78,7 +78,7 @@ async function open(url) {
       showseen: false,
       checkonfinish: false,
       pauseonstart: false,
-      selection: "cage",
+      selection: "default",
       multicolour: false,
       outlinesondigits: false,
       outlinesonlines: false,
