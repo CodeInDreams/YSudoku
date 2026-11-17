@@ -419,13 +419,12 @@ async function act(action) {
     return;
   }
   if (action.op === "undo_to_snapshot") {
-    const target = branchSnapshot?.state?.[action.cell];
-    let targetMatched = false;
-    for (let i = 0; i < 400; i++) {
+    let matched = false;
+    for (let i = 0; i < 1000; i++) {
       const now = await readBoard();
-      if (target && cellEqual(now.state?.[action.cell], target)) { targetMatched = true; break; }
+      if (boardEqual(branchSnapshot, now)) { matched = true; break; }
       await page.click("#control-undo", { force: true }).catch(() => {});
-      await page.waitForTimeout(250);
+      await page.waitForTimeout(120);
       if (activeDir) {
         try {
           const png = await page.screenshot({ clip: { x: board.grid.x, y: board.grid.y,
@@ -434,28 +433,22 @@ async function act(action) {
         } catch { /* ignore */ }
       }
     }
-    if (!targetMatched) throw new Error("assumed cell did not return to snapshot");
-    let now = await readBoard();
-    for (let cell = 0; cell < now.values.length; cell++) {
-      const wanted = branchSnapshot.values[cell] || 0;
-      if (now.values[cell] === wanted) continue;
-      if (wanted) await setCellValue(cell, wanted);
-      else await clearCellValue(cell);
-    }
-    now = await readBoard();
-    if (!boardEqual(branchSnapshot, now)) {
-      for (let i = 0; i < 160; i++) {
-        await page.click("#control-redo", { force: true }).catch(() => {});
-        await page.waitForTimeout(250);
-        now = await readBoard();
-        if (boardEqual(branchSnapshot, now)) break;
-      }
-    }
-    if (!boardEqual(branchSnapshot, now)) throw new Error("global snapshot mismatch after undo");
+    if (!matched) throw new Error("global snapshot not reached by undo");
+    const now = await readBoard();
     valueState = new Map();
     markState = new Map();
     now.values.forEach((value, cell) => { if (value) valueState.set(cell, value); });
     now.corners.forEach((digits, cell) => markState.set(cell, new Set(digits)));
+    return;
+  }
+  if (action.op === "reload_base") {
+    await open(action.url);
+    for (const item of action.actions || []) await act(item);
+    await page.waitForTimeout(200);
+    const now = await readBoard();
+    valueState = new Map(); markState = new Map();
+    now.values.forEach((v,c)=>{if(v)valueState.set(c,v)});
+    now.corners.forEach((d,c)=>markState.set(c,new Set(d)));
     return;
   }
   if (action.op === "batch") {

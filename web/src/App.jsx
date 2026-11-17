@@ -77,16 +77,17 @@ function buildStepActions(analysis) {
   const digits = (mask) => digitsOf(mask || 0, n);
   const same = (a, b) => a.size === b.size && [...a].every((d) => b.has(d));
 
-  for (const step of analysis.steps.slice(0, RENDER_LIMIT)) {
+  for (let stepIndex = 0; stepIndex < Math.min(analysis.steps.length, RENDER_LIMIT); stepIndex++) {
+    const step = analysis.steps[stepIndex];
     const actions = [];
     if (step.branch && !inBranch) {
       inBranch = true;
       branchCell = (step.events || []).find((ev) => ev.kind === "place")?.cell ?? null;
       branchBase = { state: new Map(state), marked: new Set(marked), values: new Map(values) };
-      actions.push({ op: "snapshot_start", cell: branchCell });
     }
     if (step.revert) {
-      actions.push({ op: "undo_to_snapshot", cell: branchCell });
+      actions.push({ op: "reload_base", url: analysis.source_url || analysis.puzzle?.source_url || "",
+                     actions: baseActions.slice() });
       if (branchBase) {
         state = new Map(branchBase.state);
         marked.clear();
@@ -157,6 +158,7 @@ function buildStepActions(analysis) {
       update(cell, desired, placeByCell.get(cell));
     }
     state = nextState;
+    if (!step.branch) baseActions.push(...actions);
     steps.push(actions);
   }
   return steps;
