@@ -27,6 +27,8 @@ let ledger = new Map();  // cell -> { digit: number, corners: Set<number> }
 let valueState = new Map();  // cell -> placed digit
 let markState = new Map();   // cell -> Set of Centre candidates
 let branchSnapshot = null;
+let activeDir = null;
+let revertShot = 0;
 let lastUsed = Date.now();
 
 function touch() { lastUsed = Date.now(); }
@@ -424,6 +426,13 @@ async function act(action) {
       if (target && cellEqual(now.state?.[action.cell], target)) { targetMatched = true; break; }
       await page.click("#control-undo", { force: true }).catch(() => {});
       await page.waitForTimeout(250);
+      if (activeDir) {
+        try {
+          const png = await page.screenshot({ clip: { x: board.grid.x, y: board.grid.y,
+            width: board.grid.width, height: board.grid.height }, type: "png" });
+          fs.writeFileSync(path.join(activeDir, `revert-${String(revertShot++).padStart(3, "0")}.png`), png);
+        } catch { /* ignore */ }
+      }
     }
     if (!targetMatched) throw new Error("assumed cell did not return to snapshot");
     let now = await readBoard();
@@ -540,6 +549,8 @@ async function ensureCellValue(cell, value) {
 async function buildSession(url, steps, session, targetDir) {
   await open(url);
   const dir = targetDir || path.join(process.cwd(), ".cache", "frames", session);
+  activeDir = dir;
+  revertShot = 0;
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "-1.png"), await shot());
   try {

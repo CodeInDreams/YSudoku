@@ -61,6 +61,8 @@ function candidateStateUpTo(analysis, idx) {
   return state;
 }
 
+const RENDER_LIMIT = 80;
+
 function buildStepActions(analysis) {
   const n = analysis.puzzle.size;
   const steps = [];
@@ -75,7 +77,7 @@ function buildStepActions(analysis) {
   const digits = (mask) => digitsOf(mask || 0, n);
   const same = (a, b) => a.size === b.size && [...a].every((d) => b.has(d));
 
-  for (const step of analysis.steps) {
+  for (const step of analysis.steps.slice(0, RENDER_LIMIT)) {
     const actions = [];
     if (step.branch && !inBranch) {
       inBranch = true;
@@ -374,7 +376,7 @@ export default function App() {
 
   const t = (key, vars) => translate(lang, key, vars);
   const puzzleUnit = (count) => (lang === "zh" ? "个谜题" : count === 1 ? "puzzle" : "puzzles");
-  const steps = analysis?.steps || [];
+  const steps = (analysis?.steps || []).slice(0, RENDER_LIMIT);
   const n = analysis?.puzzle?.size || 9;
   const current = idx >= 0 ? steps[idx] : null;
   const statusLabel = (status) => t(`status.${status || "none"}`) || status;
@@ -543,7 +545,7 @@ export default function App() {
     setNotes(data.notes || data.rules?.notes || "");
     setPhase("rendering");
     startLive(data);
-    startFrameProgress(data.storage?.key, data.steps?.length || 0);
+    startFrameProgress(data.storage?.key, Math.min(data.steps?.length || 0, RENDER_LIMIT));
     refreshStore();
   }
 
