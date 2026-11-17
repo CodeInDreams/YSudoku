@@ -66,12 +66,36 @@ function buildStepActions(analysis) {
   const steps = [];
   let state = new Map();
   const marked = new Set();
+  const values = new Map();
+  (analysis.puzzle?.givens || []).forEach((value, cell) => { if (value) values.set(cell, value); });
+  let inBranch = false;
+  let branchBase = null;
+  let branchCell = null;
   const MAX_POSITIVE = 6;
   const digits = (mask) => digitsOf(mask || 0, n);
   const same = (a, b) => a.size === b.size && [...a].every((d) => b.has(d));
 
   for (const step of analysis.steps) {
     const actions = [];
+    if (step.branch && !inBranch) {
+      inBranch = true;
+      branchCell = (step.events || []).find((ev) => ev.kind === "place")?.cell ?? null;
+      branchBase = { state: new Map(state), marked: new Set(marked), values: new Map(values) };
+      actions.push({ op: "snapshot_start", cell: branchCell });
+    }
+    if (step.revert) {
+      actions.push({ op: "undo_to_snapshot", cell: branchCell });
+      if (branchBase) {
+        state = new Map(branchBase.state);
+        marked.clear();
+        branchBase.marked.forEach((cell) => marked.add(cell));
+        values.clear();
+        branchBase.values.forEach((value, cell) => values.set(cell, value));
+      }
+      inBranch = false;
+      steps.push(actions);
+      continue;
+    }
     const pre = step.pre_dom || [];
     const elimsByCell = new Map();
     const placeByCell = new Map();
@@ -92,6 +116,7 @@ function buildStepActions(analysis) {
       if (place !== undefined) {
         if (isMarked || current?.size) actions.push({ op: "candidates", cell, digits: [] });
         actions.push({ op: "place", cell, value: place });
+        values.set(cell, place);
         marked.delete(cell);
         return;
       }
@@ -336,6 +361,9 @@ export default function App() {
   const [stars, setStars] = useState(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [headerHidden, setHeaderHidden] = useState(false);
+  const [liveView, setLiveView] = useState("");
+  const [liveMessage, setLiveMessage] = useState("");
+  const [liveBusy, setLiveBusy] = useState(false);
   const [phase, setPhase] = useState("idle");
   const [streamRules, setStreamRules] = useState([]);
   const [streamSteps, setStreamSteps] = useState([]);
@@ -618,6 +646,32 @@ export default function App() {
     refreshStore();
   }
 
+  async function refreshLiveView() {
+    try {
+      const res = await fetch("/api/live/screenshot", { cache: "no-store" });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+      const blob = await res.blob();
+      setLiveView((old) => { if (old) URL.revokeObjectURL(old); return URL.createObjectURL(blob); });
+    } catch (err) {
+      setLiveMessage(err.message);
+    }
+  }
+
+  async function liveDebug(action) {
+    setLiveBusy(true);
+    try {
+      const res = await postJson("/api/live/debug", { action });
+      const values = (res.state?.values || []).filter(Boolean).length;
+      const marks = (res.state?.state || []).reduce((sum, cell) => sum + (cell.centre?.length || 0) + (cell.corners?.length || 0), 0);
+      setLiveMessage(`${action}: values ${values}, marks ${marks}`);
+      await refreshLiveView();
+    } catch (err) {
+      setLiveMessage(`${action}: ${err.message}`);
+    } finally {
+      setLiveBusy(false);
+    }
+  }
+
   async function saveSettings() {
     await postJson("/api/store/settings", settings);
     refreshStore();
@@ -819,6 +873,17 @@ export default function App() {
           onValueChange={([value]) => { setPlaying(false); setIdx(value); }}
           disabled={!steps.length || deleted}
         />
+      </div>
+      <div className="space-y-2 border-t px-4 py-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Live view</span>
+          <Button size="sm" variant="outline" className="h-7 px-2 text-[11px]" disabled={liveBusy} onClick={() => liveDebug("undo")}>{t("debug.undo")}</Button>
+          <Button size="sm" variant="outline" className="h-7 px-2 text-[11px]" disabled={liveBusy} onClick={() => liveDebug("redo")}>{t("debug.redo")}</Button>
+          <Button size="sm" variant="outline" className="h-7 px-2 text-[11px]" disabled={liveBusy} onClick={() => liveDebug("check")}>{t("debug.check")}</Button>
+          <Button size="sm" variant="outline" className="h-7 px-2 text-[11px]" disabled={liveBusy} onClick={refreshLiveView}>{t("debug.refresh")}</Button>
+          <span className="truncate text-[11px] text-muted-foreground">{liveMessage}</span>
+        </div>
+        {liveView ? <img src={liveView} alt="live SudokuPad" className="max-h-[260px] w-full rounded-md border object-contain" /> : null}
       </div>
     </Card>
   );

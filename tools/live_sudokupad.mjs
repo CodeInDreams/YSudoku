@@ -26,6 +26,7 @@ let work = Promise.resolve();
 let ledger = new Map();  // cell -> { digit: number, corners: Set<number> }
 let valueState = new Map();  // cell -> placed digit
 let markState = new Map();   // cell -> Set of Centre candidates
+let branchSnapshot = null;
 let lastUsed = Date.now();
 
 function touch() { lastUsed = Date.now(); }
@@ -399,7 +400,48 @@ async function clearSelection() {
   await page.waitForTimeout(15);
 }
 
+function cellEqual(a, b) {
+  if (!a || !b) return false;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+function boardEqual(a, b) {
+  if (!a || !b) return false;
+  if (a.state && b.state) return JSON.stringify(a.state) === JSON.stringify(b.state);
+  return false;
+}
+
 async function act(action) {
+  if (action.op === "snapshot_start") {
+    branchSnapshot = await readBoard();
+    return;
+  }
+  if (action.op === "undo_to_snapshot") {
+    const target = branchSnapshot?.state?.[action.cell];
+    let targetMatched = false;
+    for (let i = 0; i < 400; i++) {
+      const now = await readBoard();
+      if (target && cellEqual(now.state?.[action.cell], target)) { targetMatched = true; break; }
+      await page.click("#control-undo", { force: true }).catch(() => {});
+      await page.waitForTimeout(250);
+    }
+    if (!targetMatched) throw new Error("assumed cell did not return to snapshot");
+    let now = await readBoard();
+    if (!boardEqual(branchSnapshot, now)) {
+      for (let i = 0; i < 160; i++) {
+        await page.click("#control-redo", { force: true }).catch(() => {});
+        await page.waitForTimeout(250);
+        now = await readBoard();
+        if (boardEqual(branchSnapshot, now)) break;
+      }
+    }
+    if (!boardEqual(branchSnapshot, now)) throw new Error("global snapshot mismatch after undo");
+    valueState = new Map();
+    markState = new Map();
+    now.values.forEach((value, cell) => { if (value) valueState.set(cell, value); });
+    now.corners.forEach((digits, cell) => markState.set(cell, new Set(digits)));
+    return;
+  }
   if (action.op === "batch") {
     await page.click("#control-select").catch(() => {});
     for (const cell of action.cells || []) {
@@ -562,6 +604,37 @@ const server = http.createServer((req, res) => {
   }
   if (req.method === "GET" && url.pathname === "/state") {
     return readBoard().then((state) => json(res, 200, state)).catch((err) => json(res, 500, { error: String(err?.message || err) }));
+  }
+  if (req.method === "GET" && url.pathname === "/screenshot") {
+    if (!page) return json(res, 409, { error: "live page not open" });
+    page.screenshot({ type: "png" }).then((data) => {
+      res.writeHead(200, { "Content-Type": "image/png", "Content-Length": data.length,
+                           "Cache-Control": "no-store" });
+      res.end(data);
+    }).catch((err) => json(res, 500, { error: String(err?.message || err) }));
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/debug") {
+    let body = "";
+    req.on("data", (chunk) => { body += chunk; });
+    req.on("end", async () => {
+      try {
+        const action = JSON.parse(body || "{}").action;
+        if (!page) return json(res, 409, { error: "live page not open" });
+        if (action === "undo") {
+          await page.click("#control-undo", { force: true });
+          await page.waitForTimeout(300);
+        } else if (action === "redo") {
+          await page.click("#control-redo", { force: true });
+          await page.waitForTimeout(300);
+        }
+        const state = await readBoard();
+        return json(res, 200, { ok: true, action, state });
+      } catch (err) {
+        return json(res, 500, { error: String(err?.message || err) });
+      }
+    });
+    return;
   }
   if (req.method === "GET" && url.pathname === "/frame" && url.searchParams.get("session")) {
     const session = path.basename(url.searchParams.get("session") || "");
