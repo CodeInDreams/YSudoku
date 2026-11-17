@@ -703,14 +703,23 @@ export default function App() {
   }
 
   async function loadEntry(entry) {
-    setBusy(true); setError(""); setPlaying(false);
-    try {
-      const data = entry.demo ? await postJson("/api/demo", {}) : await postJson("/api/solve", { url: entry.target, llm, audit, chains: true });
-      setTarget(entry.demo ? "" : entry.target);
-      setUrl(entry.demo ? "" : entry.target);
-      applyAnalysis(data);
-    } catch (err) { setError(`${t("error.solve")}: ${err.message}`); }
-    finally { setBusy(false); }
+    setView("solve");
+    setError("");
+    setPlaying(false);
+    setAnalysis(null);
+    setStreamRules([]);
+    setStreamSteps([]);
+    setStreamTarget([]);
+    setPhase("rules");
+    const targetUrl = entry.demo ? "" : entry.target;
+    setTarget(targetUrl);
+    setUrl(targetUrl);
+    await streamSolve(
+      entry.demo
+        ? { demo: true, llm, audit, chains: true }
+        : { url: entry.target, llm, audit, chains: true, demo: false },
+      targetUrl,
+    );
   }
 
   async function cacheAlive() {
