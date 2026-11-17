@@ -103,34 +103,43 @@ def satisfiable(st: State, constraints, cell: int, value: int, node_limit: int =
     return False if complete else None
 
 
-def search_complete(st: State, constraints, time_limit: float = 8.0) -> list[int] | None:
-    """Find one completion from the current state, with a wall-clock budget."""
+def refute_candidate(st: State, constraints, cell: int, value: int,
+                     time_limit: float = 1.5) -> bool | None:
+    """True: assuming cell=value is impossible; False: a solution exists; None: timeout."""
     import time
+    if st.vals[cell]:
+        return value != st.vals[cell]
+    if not st.has(cell, value):
+        return True
+    child = st.copy()
+    try:
+        child.place(cell, value)
+    except Contradiction:
+        return True
     started = time.time()
 
-    def dfs(state: State) -> list[int] | None:
+    def dfs(state: State) -> bool:
         if time.time() - started > time_limit:
             raise BudgetExceeded
         if not propagate(state, constraints):
-            return None
+            return False
         if state.solved:
-            return state.vals.copy()
-        cell = min(
+            return True
+        pick = min(
             (c for c in range(state.n2) if state.vals[c] == 0),
             key=lambda c: state.dom[c].bit_count(),
         )
-        for value in bits(state.dom[cell]):
-            child = state.copy()
+        for candidate in bits(state.dom[pick]):
+            branch = state.copy()
             try:
-                child.place(cell, value)
+                branch.place(pick, candidate)
             except Contradiction:
                 continue
-            found = dfs(child)
-            if found is not None:
-                return found
-        return None
+            if dfs(branch):
+                return True
+        return False
 
     try:
-        return dfs(st.copy())
+        return not dfs(child)
     except BudgetExceeded:
         return None

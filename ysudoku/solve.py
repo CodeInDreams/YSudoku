@@ -229,28 +229,55 @@ class Solver:
             step.index = index
         return steps
 
-    def complete_by_search(self, values: list[int], proof: str = "unique") -> SolveResult:
-        pre_dom, pre_vals = list(self.state.dom), list(self.state.vals)
-        events = [
-            Event("place", cell, value,
-                  Reason("search", {"cell": cell, "value": value, "proof": proof}),
-                  pre_dom[cell])
-            for cell, value in enumerate(values)
-            if not self.state.vals[cell]
-        ]
-        step = build_step(len(self.steps), events, self.state.n)
-        step.pre_dom, step.pre_vals = pre_dom, pre_vals
-        step.candidates = self._candidates(events, pre_dom)
-        step.detail = (
-            "当前规则技巧不足以继续，使用约束搜索补全剩余格子；"
-            "已通过严格反证：约束下不存在第二个解，因此每个补全值都是被迫的："
-            + "、".join(f"{cell_name(e.cell, self.state.n)}={e.value}" for e in events)
+    def contradiction_step(self, deadline: float, per_candidate: float = 1.2):
+        """Assume a candidate; prove it impossible; eliminate it or place the other."""
+        import time
+        from .search import refute_candidate
+
+        pre_dom, pre_vals = self._pre()
+        cells = sorted(
+            (c for c in range(self.state.n2) if self.state.vals[c] == 0),
+            key=lambda c: self.state.dom[c].bit_count(),
         )
-        self.steps.append(step)
-        self.state.vals = list(values)
-        self.state.dom = [1 << (v - 1) for v in values]
-        return SolveResult("solved-search", self.steps, list(values),
-                           "人类技巧卡住后，由约束搜索补全；搜索步骤不等同于人类推理")
+        for cell in cells:
+            if time.time() > deadline:
+                return None
+            values = list(bits(self.state.dom[cell]))
+            if len(values) < 2:
+                continue
+            for value in values:
+                if time.time() > deadline:
+                    return None
+                verdict = refute_candidate(
+                    self.state, self.constraints, cell, value,
+                    min(per_candidate, max(0.05, deadline - time.time())),
+                )
+                if verdict is not True:
+                    continue
+                forced = None
+                if len(values) == 2:
+                    forced = values[0] if values[1] == value else values[1]
+                reason = Reason("contradiction", {
+                    "cell": cell, "value": value, "forced": forced,
+                    "proof": "假设后约束传播/穷举无解",
+                })
+                self.state.begin()
+                if forced is not None:
+                    self.state.place(cell, forced, reason)
+                else:
+                    self.state.elim(cell, value, reason)
+                events = self.state.end()
+                step = self._commit(events, pre_dom, pre_vals)
+                if step is None:
+                    return None
+                self.steps.append(step)
+                if self.on_step is not None:
+                    try:
+                        self.on_step(step)
+                    except Exception:
+                        pass
+                return step
+        return None
 
     def run(self, max_steps: int = 4000) -> SolveResult:
         if self.invalid:

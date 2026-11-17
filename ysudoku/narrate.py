@@ -21,6 +21,7 @@ TITLES = {
     "x_chain": "X-Chain（单数字链）",
     "als": "ALS-XZ",
     "forcing_chain": "反证（试探）",
+    "contradiction": "反证",
     "custom": "自定义规则（L2）",
     "parity": "奇偶",
     "odd": "奇数",
@@ -58,7 +59,7 @@ TIERS = {
     "anti_king": 1, "naked_single": 1, "hidden_single": 1, "innie": 2,
     "outie": 2, "locked": 2,
     "subset": 2, "hidden_subset": 2, "x_wing": 3, "xy_wing": 3, "w_wing": 3,
-    "forcing_chain": 4, "custom": 2, "coloring": 3, "parity": 1, "odd": 1, "even": 1,
+    "forcing_chain": 4, "contradiction": 4, "custom": 2, "coloring": 3, "parity": 1, "odd": 1, "even": 1,
     "clone": 1, "sandwich": 2, "skyscraper": 2, "region_sum": 2,
     "chaos_pattern": 2, "class_cover": 2,
 }
@@ -593,6 +594,23 @@ def _explain_w_wing(events, data, n):
     visual = _basic_visual(events, n)
     visual["groups"].append({"cells": [x, y, p, q], "kind": "pair"})
     visual["links"] = [_link([x, p], n, "#f59e0b", "dashed"), _link([y, q], n, "#f59e0b", "dashed")]
+    return detail, visual
+
+
+def _explain_contradiction(events, data, n):
+    cell, value = data["cell"], data["value"]
+    forced = data.get("forced")
+    detail = (
+        f"反证：假设 {cell_name(cell, n)} = {value}。\n"
+        f"在这个假设下，把当前约束继续传播并穷举，最终无解。\n"
+    )
+    if forced is not None:
+        detail += f"因此 {cell_name(cell, n)} 不可能是 {value}，只能是 {forced}。\n"
+    else:
+        detail += f"因此 {cell_name(cell, n)} ≠ {value}，删除该候选。\n"
+    detail += "注意：这一步通过反证排除候选，不是直接推理。"
+    visual = _basic_visual(events, n)
+    visual["focus"] = [cell]
     return detail, visual
 
 
