@@ -404,8 +404,15 @@ async function buildSession(url, steps, session, targetDir) {
       if (action.op === "place") expected.set(action.cell, Number(action.value));
       await act(action);
     }
-    // Safety net: restore scheduled values; only clear values never scheduled.
+    // Safety net: make every scheduled value present, then restore wrong values.
     let actual = await readBoard();
+    for (const [cell, value] of expected.entries()) {
+      if (actual.values[cell] !== value) {
+        try { await setCellValue(cell, value); }
+        catch (err) { console.error(JSON.stringify({event:"restore-warning", cell, value, message:String(err?.message||err)})); }
+      }
+    }
+    actual = await readBoard();
     const wrong = actual.values
       .map((value, cell) => (value && expected.has(cell) && value !== expected.get(cell) ? cell : -1))
       .filter((cell) => cell >= 0);

@@ -74,6 +74,15 @@ class Solver:
                 self.state.place(cell, value, reason)
                 self.state.record = False
                 placed.add(cell)
+        if not any(e.kind == "place" and e.reason.kind == "naked_single" for e in self.state.events):
+            for cell in range(self.state.n * self.state.n):
+                if self.state.vals[cell] or self.state.dom[cell].bit_count() != 1:
+                    continue
+                value = (self.state.dom[cell] & -self.state.dom[cell]).bit_length()
+                self.state.record = True
+                self.state.place(cell, value, Reason("naked_single", {"cell": cell, "value": value}))
+                self.state.record = False
+                break
         events = self.state.events
         step = build_step(len(self.steps), events, self.state.n)
         step.pre_dom, step.pre_vals = pre_dom, pre_vals
