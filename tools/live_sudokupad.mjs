@@ -24,6 +24,8 @@ let board = null;
 let latest = null;
 let work = Promise.resolve();
 let ledger = new Map();  // cell -> { digit: number, corners: Set<number> }
+let valueState = new Map();  // cell -> placed digit
+let markState = new Map();   // cell -> Set of Centre candidates
 let lastUsed = Date.now();
 
 function touch() { lastUsed = Date.now(); }
@@ -138,6 +140,11 @@ async function open(url) {
     height: box.height * (1 - 2 * pad),
   };
   board = { box, grid, n };
+  const initial = await readBoard();
+  valueState = new Map();
+  markState = new Map();
+  initial.values.forEach((value, cell) => { if (value) valueState.set(cell, value); });
+  initial.corners.forEach((digits, cell) => markState.set(cell, new Set(digits)));
   puzzleUrl = url;
 }
 
@@ -157,14 +164,9 @@ function center(r, c) {
 }
 
 async function cellPoint(r, c) {
-  const box = await page.locator("svg.boardsvg").boundingBox();
-  const viewBox = await page.locator("svg.boardsvg").getAttribute("viewBox");
-  const parts = (viewBox || "-16 -16 608 608").trim().split(/\s+/).map(Number);
-  const units = parts[2] || 608;
-  const pad = 16 / units;
-  const unit = (box.width * (1 - 2 * pad)) / board.n;
-  return [box.x + box.width * pad + (c + 0.5) * unit,
-          box.y + box.height * pad + (r + 0.5) * unit];
+  const unit = board.grid.width / board.n;
+  return [board.grid.x + (c + 0.5) * unit,
+          board.grid.y + (r + 0.5) * unit];
 }
 
 async function readBoard() {
@@ -321,11 +323,10 @@ async function clearSelection() {
     const select = document.getElementById("control-select");
     if (select && /selected/.test(select.className)) select.click();
   }).catch(() => {});
-  const box = await page.locator("svg.boardsvg").boundingBox().catch(() => null);
-  if (box) {
+  if (board) {
     const viewport = page.viewportSize() || { width: 1200, height: 900 };
-    const x = box.x + box.width / 2;
-    const y = Math.min(viewport.height - 4, box.y + box.height + 24);
+    const x = board.grid.x + board.grid.width / 2;
+    const y = Math.min(viewport.height - 4, board.box.y + board.box.height + 24);
     await page.mouse.click(x, y).catch(() => {});
   }
   await page.waitForTimeout(15);
@@ -353,43 +354,31 @@ async function act(action) {
       await page.waitForTimeout(20);
     }
   } else if (action.op === "place") {
-    await clearSelection();
     const r = Math.floor(action.cell / board.n);
     const c = action.cell % board.n;
     const [x, y] = await cellPoint(r, c);
     await page.mouse.click(x, y);
     if (!(await useTool("control-normal"))) throw new Error("digit tool unavailable");
     await page.keyboard.type(String(action.value));
-    await page.waitForTimeout(30);
-    const placed = await readBoard();
-    if (placed.values[action.cell] !== Number(action.value)) {
-      console.error(JSON.stringify({
-        event: "place-warning", cell: action.cell, wanted: action.value,
-        actual: placed.values[action.cell] || 0,
-      }));
-    }
+    valueState.set(action.cell, Number(action.value));
+    markState.delete(action.cell);
+    await page.waitForTimeout(20);
   } else if (action.op === "candidates") {
-    await clearSelection();
     const r = Math.floor(action.cell / board.n);
     const c = action.cell % board.n;
     const [x, y] = await cellPoint(r, c);
     await page.mouse.click(x, y);
     if (!(await useTool("control-centre"))) throw new Error("centre tool unavailable");
-    const current = await readBoard();
-    if (current.values[action.cell]) {
+    if (valueState.get(action.cell)) {
       console.error(JSON.stringify({ event: "candidate-skip-solved", cell: action.cell }));
       return;
     }
-    const before = new Set(current.corners[action.cell] || []);
+    const before = new Set(markState.get(action.cell) || []);
     const wanted = new Set((action.digits || []).map(Number));
     for (const digit of before) if (!wanted.has(digit)) await page.keyboard.type(String(digit));
     for (const digit of wanted) if (!before.has(digit)) await page.keyboard.type(String(digit));
-    await page.waitForTimeout(20);
-    const after = await readBoard();
-    const got = new Set(after.corners[action.cell] || []);
-    if (after.values[action.cell] || got.size !== wanted.size || [...wanted].some((d) => !got.has(d))) {
-      throw new Error(`candidate mismatch at cell ${action.cell}`);
-    }
+    markState.set(action.cell, wanted);
+    await page.waitForTimeout(12);
   } else if (action.op === "mark" || action.op === "elim" || action.op === "clear") {
     if (!(await useTool("control-centre"))) throw new Error("centre tool unavailable");
     const r = Math.floor(action.cell / board.n);
@@ -405,29 +394,27 @@ async function act(action) {
 }
 
 async function clearCellValue(cell) {
-  await clearSelection();
   const r = Math.floor(cell / board.n);
   const c = cell % board.n;
   const [x, y] = await cellPoint(r, c);
   await page.mouse.click(x, y);
   if (!(await useTool("control-normal"))) throw new Error("digit tool unavailable");
   await page.keyboard.press("Backspace");
-  await page.waitForTimeout(25);
-  const after = await readBoard();
-  if (after.values[cell]) throw new Error(`could not clear stray value at cell ${cell}`);
+  valueState.delete(cell);
+  markState.delete(cell);
+  await page.waitForTimeout(15);
 }
 
 async function setCellValue(cell, value) {
-  await clearSelection();
   const r = Math.floor(cell / board.n);
   const c = cell % board.n;
   const [x, y] = await cellPoint(r, c);
   await page.mouse.click(x, y);
   if (!(await useTool("control-normal"))) throw new Error("digit tool unavailable");
   await page.keyboard.type(String(value));
-  await page.waitForTimeout(25);
-  const after = await readBoard();
-  if (after.values[cell] !== Number(value)) throw new Error(`could not restore value at cell ${cell}`);
+  valueState.set(cell, Number(value));
+  markState.delete(cell);
+  await page.waitForTimeout(15);
 }
 
 async function ensureCellValue(cell, value) {
@@ -453,7 +440,7 @@ async function buildSession(url, steps, session, targetDir) {
       if (action.op === "place") expected.set(action.cell, Number(action.value));
       await act(action);
     }
-    // Safety net: make every scheduled value present, then restore wrong values.
+    // One reconciliation pass per step: missing, wrong, then stray values.
     let actual = await readBoard();
     for (const [cell, value] of expected.entries()) {
       if (actual.values[cell] !== value) {
@@ -461,26 +448,23 @@ async function buildSession(url, steps, session, targetDir) {
         if (!ok) console.error(JSON.stringify({event:"restore-warning", cell, value}));
       }
     }
-    actual = await readBoard();
     const wrong = actual.values
       .map((value, cell) => (value && expected.has(cell) && value !== expected.get(cell) ? cell : -1))
       .filter((cell) => cell >= 0);
     for (const cell of wrong) await setCellValue(cell, expected.get(cell));
-    actual = await readBoard();
     const stray = actual.values
       .map((value, cell) => (value && !expected.has(cell) ? cell : -1))
       .filter((cell) => cell >= 0);
     for (const cell of stray) await clearCellValue(cell);
-    if (stray.length) {
+    if (wrong.length || stray.length) {
       actual = await readBoard();
       const left = actual.values
         .map((value, cell) => (value && !expected.has(cell) ? cell : -1))
         .filter((cell) => cell >= 0);
       if (left.length) throw new Error(`stray values remain: ${left.join(",")}`);
     }
-    const beforeShot = await readBoard();
     for (const [cell, value] of expected.entries()) {
-      if (beforeShot.values[cell] !== value) {
+      if (actual.values[cell] !== value) {
         const ok = await ensureCellValue(cell, value);
         if (!ok) console.error(JSON.stringify({event:"final-restore-warning", cell, value}));
       }
