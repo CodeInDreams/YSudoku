@@ -38,6 +38,7 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
             cached["notes"] = meta.get("notes", "")
             if isinstance(cached.get("rules"), dict):
                 cached["rules"]["notes"] = meta.get("notes", "")
+            cached["cached"] = True
             cached["storage"] = {
                 "key": key, "location": store.storage_info()["location"],
                 "settings": store.load_settings(),

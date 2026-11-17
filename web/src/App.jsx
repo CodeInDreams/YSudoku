@@ -623,8 +623,12 @@ export default function App() {
         if (job.status === "done") {
           setTarget(targetUrl);
           setUrl(targetUrl);
-          finalPayload.current = job.payload;
-          setPhase("solving");
+          if (job.payload?.cached) {
+            applyAnalysis(job.payload);
+          } else {
+            finalPayload.current = job.payload;
+            setPhase("solving");
+          }
           break;
         }
         if (job.status === "failed") throw new Error(job.error || "solve failed");

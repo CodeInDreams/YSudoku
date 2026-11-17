@@ -287,6 +287,22 @@ class Solver:
                 if self.on_step:
                     try:self.on_step(intro)
                     except Exception:pass
+                child = self.state.copy()
+                child.record = True
+                child.events = []
+                child.place(cell, value, Reason("contradiction", {
+                    "cell": cell, "value": value, "phase": "start"}))
+                branch = Solver(self.puzzle, self.rules, allow_chains=False)
+                branch.state = child
+                branch.steps = []
+                branch.initial = self.initial
+                branch.run(max_steps=80)
+                for bstep in branch.steps:
+                    bstep.branch = True
+                    self.steps.append(bstep)
+                    if self.on_step:
+                        try:self.on_step(bstep)
+                        except Exception:pass
                 revert=Step(index=len(self.steps),technique="contradiction",tier=4,title="反证回退",
                     detail=f"反证回退：撤销假设 {name} = {value}。",events=[],
                     visual={"focus":[],"premise":[],"groups":[{"cells":[cell],"kind":"assumption"}],"links":[],"chips":[],

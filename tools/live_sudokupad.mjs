@@ -436,6 +436,13 @@ async function act(action) {
     }
     if (!targetMatched) throw new Error("assumed cell did not return to snapshot");
     let now = await readBoard();
+    for (let cell = 0; cell < now.values.length; cell++) {
+      const wanted = branchSnapshot.values[cell] || 0;
+      if (now.values[cell] === wanted) continue;
+      if (wanted) await setCellValue(cell, wanted);
+      else await clearCellValue(cell);
+    }
+    now = await readBoard();
     if (!boardEqual(branchSnapshot, now)) {
       for (let i = 0; i < 160; i++) {
         await page.click("#control-redo", { force: true }).catch(() => {});
@@ -495,6 +502,16 @@ async function act(action) {
     const wanted = new Set((action.digits || []).map(Number));
     for (const digit of before) if (!wanted.has(digit)) await page.keyboard.type(String(digit));
     for (const digit of wanted) if (!before.has(digit)) await page.keyboard.type(String(digit));
+    const check = await readBoard();
+    if (check.values[action.cell]) {
+      // A failed tool switch turned a candidate into a digit.
+      await clearCellValue(action.cell);
+      await page.waitForTimeout(30);
+      await page.mouse.click(...(await cellPoint(r, c)));
+      await useTool("control-centre");
+      for (const digit of wanted) await page.keyboard.type(String(digit));
+      await page.waitForTimeout(30);
+    }
     markState.set(action.cell, wanted);
     await page.waitForTimeout(12);
   } else if (action.op === "mark" || action.op === "elim" || action.op === "clear") {
