@@ -24,7 +24,7 @@ class NarrationTest(unittest.TestCase):
 
     def test_double_slit_does_not_crash(self):
         analysis = analyze(str(ROOT / "fixtures" / "double-slit.json"), use_llm=False)
-        self.assertIn(analysis.status, {"solved", "stuck"})
+        self.assertIn(analysis.status, {"solved", "solved-search", "stuck"})
         self.assertGreater(len(analysis.result.steps), 0)
 
 

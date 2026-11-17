@@ -351,6 +351,16 @@ def parse_puzzle(data: dict, puzzle_id: str = "") -> Puzzle:
             cell = int(x) * n + int(y)
             markers.append(Circle(i, (x, y), [cell], fill, border, thick))
 
+    # Some editors store X/V as underlays rather than overlays.
+    for i, over in enumerate(data.get("underlays") or []):
+        mark = str(over.get("text") or "").strip().upper()
+        if mark not in ("X", "V"):
+            continue
+        center = over.get("center") or [0, 0]
+        pair = _dot_cells(float(center[0]), float(center[1]), n)
+        if pair:
+            xv_clues.append(XVClue(1000 + i, (float(center[0]), float(center[1])), pair, mark))
+
     texts: list[TextMark] = []
     for i, over in enumerate(data.get("overlays") or []):
         text = over.get("text")

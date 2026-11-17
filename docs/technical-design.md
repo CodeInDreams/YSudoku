@@ -109,7 +109,7 @@ Rules 页允许填写补充规则。补充文本会以“权威规则文本”�
 当前实现包括：
 
 - `Cage`：杀手笼；数值和、不重复；笼内只剩一个宿主时直接落子。
-- `XV`：SudokuPad 的 X/V overlay 会解析成 `xv_clues`，再提升为 `xv` 约束；自动补齐 LLM 漏掉的 X/V。
+- `XV`：SudokuPad 的 X/V overlay/underlay 会解析成 `xv_clues`，再提升为 `xv` 约束；自动补齐 LLM 漏掉的 X/V，支持任意边位置与 X/V 两种值。
 - `Thermo`、`Arrow`、`Between`、`SumLine`、`RegionSum`、`XSums`
 - `PairRule`（Kropki / XV 等）、`Quadruple`、`Palindrome`、`Renban`
 - `Parity`、`Clone`、`Sandwich`、`Skyscraper`
