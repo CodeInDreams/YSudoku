@@ -156,6 +156,53 @@ class Solver:
                 return result, None
         return None, None
 
+    def _merge_sibling_singles(self, steps: list[Step]) -> list[Step]:
+        """Merge independent singles that share the same immediate origin."""
+        changed = True
+        while changed:
+            changed = False
+            i = 1
+            while i + 1 < len(steps):
+                origin, left, right = steps[i - 1], steps[i], steps[i + 1]
+                if left.technique != right.technique or left.technique not in (
+                    "naked_single", "hidden_single",
+                ):
+                    i += 1
+                    continue
+                origin_cells = {e.cell for e in origin.events}
+                left_places = [e for e in left.events if e.kind == "place"]
+                right_places = [e for e in right.events if e.kind == "place"]
+                if not left_places or not right_places:
+                    i += 1
+                    continue
+                if not all(p.cell in origin_cells for p in left_places + right_places):
+                    i += 1
+                    continue
+                left_cells = {e.cell for e in left.events}
+                right_cells = {e.cell for e in right.events}
+                if left_cells & right_cells:
+                    i += 1
+                    continue
+                left.events.extend(right.events)
+                left.candidates = left.candidates + [
+                    c for c in right.candidates
+                    if c["cell"] not in {x["cell"] for x in left.candidates}
+                ]
+                left.visual["focus"] = sorted(
+                    set(left.visual.get("focus", [])) | set(right.visual.get("focus", []))
+                )
+                extra = "；".join(
+                    f"{cell_name(p.cell, self.state.n)} = {p.value}"
+                    for p in right_places
+                )
+                left.detail = left.detail + "\n" + extra
+                steps.pop(i + 1)
+                changed = True
+            i = 1
+        for index, step in enumerate(steps):
+            step.index = index
+        return steps
+
     def run(self, max_steps: int = 4000) -> SolveResult:
         if self.invalid:
             return SolveResult("invalid", [], self.state.vals, self.invalid)
@@ -174,7 +221,8 @@ class Solver:
                     f"已尝试 {len(tried)} 类技巧仍卡住{hint}",
                 )
             self.steps.append(step)
-        return SolveResult("solved", self.steps, self.state.vals, "")
+        return SolveResult("solved", self._merge_sibling_singles(self.steps),
+                           self.state.vals, "")
 
 
 # ------------------------------------------------------------------ validation
