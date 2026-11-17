@@ -64,7 +64,10 @@ class Solver:
         events = [e for e in events if not pre_vals[e.cell]]
         if not events:
             return None
-        events = self.state.events
+        events = [
+            e for e in self.state.events
+            if e.kind == "place" or not self.state.vals[e.cell]
+        ]
         step = build_step(len(self.steps), events, self.state.n)
         step.pre_dom, step.pre_vals = pre_dom, pre_vals
         step.candidates = self._candidates(events, pre_dom)
@@ -186,7 +189,14 @@ class Solver:
             ):
                 places = [e for e in steps[j].events if e.kind == "place"]
                 if places and all(p.cell in origin_cells for p in places):
-                    direct.append(j)
+                    cells = {p.cell for p in places}
+                    blocked = any(
+                        e.cell in cells
+                        for middle in steps[i + 1:j]
+                        for e in middle.events
+                    )
+                    if not blocked:
+                        direct.append(j)
                 j += 1
             if len(direct) >= 2:
                 target = steps[direct[0]]
