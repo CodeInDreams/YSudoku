@@ -96,9 +96,11 @@ function buildStepActions(analysis) {
         return;
       }
       if (desired.size === 1) {
-        if (isMarked || current?.size) actions.push({ op: "candidates", cell, digits: [] });
-        actions.push({ op: "place", cell, value: [...desired][0] });
-        marked.delete(cell);
+        if (!current || !isMarked || !same(current, desired)) {
+          actions.push({ op: "candidates", cell, digits: [...desired] });
+          marked.add(cell);
+        }
+        nextState.set(cell, desired);
         return;
       }
       if (desired.size === 0) {
@@ -472,7 +474,7 @@ export default function App() {
     try {
       const actions = buildStepActions(nextAnalysis);
       let hash = 2166136261;
-      const text = "frame-v23:" + JSON.stringify(actions);
+      const text = "frame-v24:" + JSON.stringify(actions);
       for (let i = 0; i < text.length; i++) { hash ^= text.charCodeAt(i); hash = Math.imul(hash, 16777619); }
       const data = await postJson("/api/live/build", {
         url: nextAnalysis.source_url || "",
