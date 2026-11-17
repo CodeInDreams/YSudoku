@@ -512,7 +512,6 @@ export default function App() {
   useEffect(() => {
     if (!session || deleted) return undefined;
     let cancelled = false;
-    setReady(false);
     const src = `/api/live/frame?session=${session}&step=${idx}&t=${retry}`;
     const probe = new Image();
     probe.onload = () => {
