@@ -200,6 +200,8 @@ def analyze(
     use_global: bool = True,
     global_time_limit: float = 60.0,
     notes: str = "",
+    on_rules=None,
+    on_step=None,
 ) -> Analysis:
     from .sudokupad import load
 
@@ -258,8 +260,13 @@ def analyze(
     rules = compile_spec(puzzle, inventory, spec, source=source)
     warnings.extend(spec.get("warnings", []))
     warnings.extend(rules.warnings)
+    if on_rules is not None:
+        try:
+            on_rules(rules.describe())
+        except Exception:
+            pass
 
-    solver = Solver(puzzle, rules, allow_chains=allow_chains)
+    solver = Solver(puzzle, rules, allow_chains=allow_chains, on_step=on_step)
 
     clue_ids = {f"clue:{i}" for i in range(len(puzzle.clues))}
     used_ids = {
@@ -353,7 +360,8 @@ def analyze(
             repaired = _llm_repair(puzzle, inventory, config, spec, diagnostics, warnings)
             if repaired is not None:
                 new_spec, new_rules = repaired
-                solver2 = Solver(puzzle, new_rules, allow_chains=allow_chains)
+                solver2 = Solver(puzzle, new_rules, allow_chains=allow_chains,
+                                 on_step=on_step)
                 result2 = solver2.run(max_steps=max_steps)
                 if (result2.status == "solved"
                         or len(result2.steps) > len(result.steps)):

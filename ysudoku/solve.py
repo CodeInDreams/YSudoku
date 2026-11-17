@@ -20,7 +20,7 @@ class SolveResult:
 
 
 class Solver:
-    def __init__(self, puzzle, rules, allow_chains: bool = False):
+    def __init__(self, puzzle, rules, allow_chains: bool = False, on_step=None):
         self.puzzle = puzzle
         self.rules = rules
         self.units = build_units(puzzle, (rules.diagonal_main, rules.diagonal_anti),
@@ -28,6 +28,7 @@ class Solver:
         self.state = State(puzzle.size, self.units)
         self.constraints = list(rules.constraints)
         self.allow_chains = allow_chains
+        self.on_step = on_step
         self.steps: list[Step] = []
         self.focus: set[int] = set()
         self.invalid: str | None = None
@@ -233,6 +234,11 @@ class Solver:
                     f"已尝试 {len(tried)} 类技巧仍卡住{hint}",
                 )
             self.steps.append(step)
+            if self.on_step is not None:
+                try:
+                    self.on_step(step)
+                except Exception:
+                    pass
         return SolveResult("solved", self._merge_sibling_singles(self.steps),
                            self.state.vals, "")
 

@@ -336,6 +336,12 @@ export default function App() {
   const [stars, setStars] = useState(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [headerHidden, setHeaderHidden] = useState(false);
+  const [phase, setPhase] = useState("idle");
+  const [streamRules, setStreamRules] = useState([]);
+  const [streamSteps, setStreamSteps] = useState([]);
+  const [frameProgress, setFrameProgress] = useState({ frames: 0, total: 0, complete: false });
+  const frameTimer = useRef(null);
+  const streamToken = useRef(0);
 
   const t = (key, vars) => translate(lang, key, vars);
   const puzzleUnit = (count) => (lang === "zh" ? "个谜题" : count === 1 ? "puzzle" : "puzzles");
@@ -478,7 +484,9 @@ export default function App() {
     setFrameErrors(0);
     setError("");
     setNotes(data.notes || data.rules?.notes || "");
+    setPhase("rendering");
     startLive(data);
+    startFrameProgress(data.storage?.key, data.steps?.length || 0);
     refreshStore();
   }
 
@@ -507,22 +515,75 @@ export default function App() {
     }
   }
 
-  async function submit(payload) {
+  function startFrameProgress(key, total) {
+    if (frameTimer.current) clearInterval(frameTimer.current);
+    setFrameProgress({ frames: 0, total, complete: false });
+    if (!key || !total) { setPhase("done"); return; }
+    const tick = async () => {
+      try {
+        const res = await fetch(`/api/live/progress?session=${encodeURIComponent(key)}&total=${total}`);
+        if (res.ok) {
+          const data = await res.json();
+          setFrameProgress({ frames: data.frames || 0, total: data.total || total, complete: !!data.complete });
+          if (data.error) {
+            setError(`${t("error.build")}: ${data.error.message || "render failed"}`);
+            setPhase("failed");
+            if (frameTimer.current) clearInterval(frameTimer.current);
+            frameTimer.current = null;
+            return;
+          }
+          if (data.complete) {
+            setPhase("done");
+            if (frameTimer.current) clearInterval(frameTimer.current);
+            frameTimer.current = null;
+          }
+        }
+      } catch { /* keep polling */ }
+    };
+    tick();
+    frameTimer.current = setInterval(tick, 500);
+  }
+
+  async function streamSolve(body, targetUrl) {
+    const token = ++streamToken.current;
+    if (frameTimer.current) clearInterval(frameTimer.current);
     setBusy(true); setError(""); setPlaying(false);
+    setAnalysis(null); setStreamRules([]); setStreamSteps([]);
+    setPhase("rules");
     try {
-      const data = await postJson("/api/solve", { url: payload.url, llm, audit, chains: true });
-      setTarget(payload.url); setUrl(payload.url); applyAnalysis(data);
-    } catch (err) { setError(`${t("error.solve")}: ${err.message}`); }
-    finally { setBusy(false); }
+      const { id } = await postJson("/api/solve/start", body);
+      while (token === streamToken.current) {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        const res = await fetch(`/api/job?id=${encodeURIComponent(id)}`);
+        const job = await res.json().catch(() => ({}));
+        if (token !== streamToken.current) return;
+        if (!res.ok) throw new Error(job.error || "job failed");
+        setStreamRules(job.rules || []);
+        setStreamSteps(job.steps || []);
+        if (job.phase) setPhase(job.phase);
+        if (job.status === "done") {
+          setTarget(targetUrl);
+          setUrl(targetUrl);
+          setPhase("rendering");
+          applyAnalysis(job.payload);
+          break;
+        }
+        if (job.status === "failed") throw new Error(job.error || "solve failed");
+      }
+    } catch (err) {
+      setPhase("failed");
+      setError(`${t("error.solve")}: ${err.message}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submit(payload) {
+    await streamSolve({ url: payload.url, llm, audit, chains: true, demo: false }, payload.url);
   }
 
   async function demo() {
-    setBusy(true); setError(""); setPlaying(false);
-    try {
-      const data = await postJson("/api/demo", {});
-      setTarget(""); setUrl(""); applyAnalysis(data);
-    } catch (err) { setError(`${t("error.solve")}: ${err.message}`); }
-    finally { setBusy(false); }
+    await streamSolve({ demo: true, llm, audit, chains: true }, "");
   }
 
   async function refreshRules() {
@@ -628,13 +689,26 @@ export default function App() {
 
   const resolvedRules = useMemo(() => {
     const merged = new Map();
-    for (const rule of analysis?.rules?.resolved || []) {
+    for (const rule of analysis?.rules?.resolved || streamRules || []) {
       if (rule.kind === "_ignored") continue;
       const label = ruleLabel(rule);
       merged.set(label, (merged.get(label) || 0) + Number(rule.count || 1));
     }
     return [...merged.entries()].map(([label, count]) => ({ label, count }));
-  }, [analysis, lang]);
+  }, [analysis, lang, streamRules]);
+
+  const displaySteps = analysis ? steps : streamSteps;
+  const phasePct = phase === "rules" ? 8
+    : phase === "solving" ? Math.min(85, 15 + streamSteps.length * 2)
+      : phase === "rendering" ? (frameProgress.total ? Math.round((frameProgress.frames / frameProgress.total) * 100) : 12)
+        : phase === "done" ? 100 : 0;
+  const phaseLabel = phase === "rules" ? t("phase.rules")
+    : phase === "solving" ? `${t("phase.solving")} · ${t("phase.steps", { n: streamSteps.length })}`
+      : phase === "rendering" ? `${t("phase.rendering")} · ${t("phase.frames", { done: frameProgress.frames, total: frameProgress.total })}`
+        : phase === "done" ? t("phase.done") : "";
+  const phaseHint = phase === "rules" ? t("phase.rulesHint")
+    : phase === "solving" ? t("phase.solvingHint")
+      : phase === "rendering" ? t("phase.renderingHint") : "";
 
   const currentEntry = (store?.entries || []).find((entry) => entry.key === analysis?.storage?.key);
   const candidateCount = current?.candidates?.length || 0;
@@ -651,7 +725,7 @@ export default function App() {
     <Card className="overflow-hidden">
       <CardHeader className="flex-row items-center gap-3 space-y-0 border-b py-3.5">
         <div><CardTitle className="text-sm">{t("board.title")}</CardTitle><p className="mt-0.5 text-xs text-muted-foreground">{t(candidateCount === 1 ? "board.descCandidate" : "board.descCandidates", { i: idx + 1, c: candidateCount })}</p></div>
-        <div className="ml-auto flex items-center gap-1.5"><Badge variant="outline">{t("board.readonly")}</Badge><Badge variant="outline">{t("board.readonly.badge")}</Badge></div>
+        <div className="ml-auto flex items-center gap-1.5">{phase === "rendering" && <Badge variant="outline">{phaseLabel}</Badge>}<Badge variant="outline">{t("board.readonly")}</Badge><Badge variant="outline">{t("board.readonly.badge")}</Badge></div>
       </CardHeader>
       <CardContent className="p-5">
         <div className="relative mx-auto flex aspect-square w-full max-w-[540px] items-center justify-center overflow-hidden rounded-[2px] border bg-white dark:border-border dark:bg-neutral-800">
@@ -746,6 +820,13 @@ export default function App() {
                   <Button size="sm" className="flex-1" onClick={nextStep} disabled={idx >= steps.length - 1 || deleted}>{t("step.next")}</Button>
                 </div>
               </div>
+            ) : phase !== "idle" && !analysis ? (
+              <div className="space-y-3 py-3">
+                <div className="flex items-center gap-2 text-sm font-medium"><Loader2 className="h-4 w-4 animate-spin text-primary" />{phaseLabel}</div>
+                <div className="space-y-2">
+                  {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-3 animate-pulse rounded bg-muted" style={{ width: `${92 - i * 16}%` }} />)}
+                </div>
+              </div>
             ) : (
               <div className="py-6 text-center"><div className="text-sm font-medium">{t("step.none")}</div><p className="mt-1 text-xs text-muted-foreground">{t("step.noneHint")}</p></div>
             )}
@@ -773,16 +854,34 @@ export default function App() {
     </Card>
   );
 
-  const stepsCard = analysis && (
+  const stepsCard = (analysis || ["rules", "solving", "rendering"].includes(phase)) && (
     <Card>
-      <CardHeader className="flex-row items-center justify-between space-y-0 py-3.5"><CardTitle className="text-sm">{t("tabs.steps")}</CardTitle><span className="text-[11px] text-muted-foreground">{steps.length}</span></CardHeader>
+      <CardHeader className="flex-row items-center justify-between space-y-0 py-3.5">
+        <CardTitle className="text-sm">{t("tabs.steps")}</CardTitle>
+        <div className="flex items-center gap-2">
+          {["rules", "solving", "rendering"].includes(phase) && <Badge variant="outline">{phaseLabel}</Badge>}
+          <span className="text-[11px] text-muted-foreground">{displaySteps.length}{phase === "solving" ? "…" : ""}</span>
+        </div>
+      </CardHeader>
       <CardContent className="p-2 pt-0">
         <div className="max-h-[260px] overflow-y-auto">
-          {steps.map((step, i) => (
+          {displaySteps.map((step, i) => (
             <button key={i} onClick={() => { setPlaying(false); setIdx(i); }} className={`flex w-full items-center gap-3 rounded-md px-2.5 py-1.5 text-left text-xs ${i === idx ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:bg-muted/60"}`}>
               <span className="w-6 text-right font-mono text-[10.5px]">{i + 1}</span><span className="truncate">{stepTitle(step)}</span>
               <Badge variant="outline" className="ml-auto">{t("step.tier", { tier: step.tier })}</Badge>
             </button>
+          ))}
+          {phase === "rendering" && (
+            <div className="flex animate-pulse items-center gap-3 rounded-md px-2.5 py-2 text-[11px] text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" />{phaseLabel}
+            </div>
+          )}
+          {["rules", "solving"].includes(phase) && !analysis && Array.from({ length: 3 }).map((_, i) => (
+            <div key={`sk-${i}`} className="flex animate-pulse items-center gap-3 rounded-md px-2.5 py-2">
+              <span className="h-2.5 w-5 rounded bg-muted" />
+              <span className="h-2.5 flex-1 rounded bg-muted" />
+              <span className="h-2.5 w-8 rounded bg-muted" />
+            </div>
           ))}
         </div>
       </CardContent>
@@ -930,11 +1029,33 @@ export default function App() {
         {view === "solve" && (
           <>
             <PageHead
-              title={analysis?.puzzle?.title || t("page.waiting")}
-              description={analysis ? `${analysis.puzzle.author || ""} · ${t("page.givens", { n: analysis.puzzle.givens.filter(Boolean).length })}${isSolved ? ` · ${statusLabel(analysis.status)}` : ""}` : t("empty.solve")}
-              badges={analysis ? <><Badge variant="outline">{n}×{n}</Badge><Badge variant={isSolved ? "success" : "outline"}>{statusLabel(analysis.status)}</Badge></> : null}
+              title={analysis?.puzzle?.title || (phase !== "idle" ? phaseLabel : t("page.waiting"))}
+              description={analysis ? `${analysis.puzzle.author || ""} · ${t("page.givens", { n: analysis.puzzle.givens.filter(Boolean).length })}${isSolved ? ` · ${statusLabel(analysis.status)}` : ""}` : (phaseHint || t("empty.solve"))}
+              badges={analysis ? <><Badge variant="outline">{n}×{n}</Badge><Badge variant={isSolved ? "success" : "outline"}>{statusLabel(analysis.status)}</Badge></> : (phase !== "idle" ? <Badge variant="outline">{phaseLabel}</Badge> : null)}
             />
-            {!analysis ? emptySolve : (
+            {phase !== "idle" && phase !== "done" && (
+              <div className="mb-5 rounded-lg border bg-card px-3 py-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <span className="font-medium">{phaseLabel}</span>
+                  <span className="text-muted-foreground">{phasePct}%</span>
+                </div>
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+                  <div className={`h-full rounded-full bg-primary transition-all ${phase === "rules" || phase === "solving" ? "animate-pulse" : ""}`} style={{ width: `${Math.max(4, phasePct)}%` }} />
+                </div>
+                {phaseHint && <div className="mt-1 text-[11px] text-muted-foreground">{phaseHint}</div>}
+              </div>
+            )}
+            {!analysis ? (phase === "idle" ? emptySolve : (
+              <Card>
+                <CardContent className="flex min-h-[320px] flex-col items-center justify-center gap-4 text-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                  <div className="text-sm font-medium">{phaseLabel}</div>
+                  <div className="w-full max-w-md space-y-2">
+                    {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-3 animate-pulse rounded bg-muted" style={{ width: `${90 - i * 12}%` }} />)}
+                  </div>
+                </CardContent>
+              </Card>
+            )) : (
               <>
                 <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.55fr)_minmax(320px,.85fr)]">
                   <div className="min-w-0 space-y-6">{boardCard}</div>
@@ -953,8 +1074,24 @@ export default function App() {
 
         {view === "rules" && (
           <>
-            <PageHead title={t("rules.title")} description={analysis ? t("rules.desc", { model: "deepseek-flash" }) : t("empty.solve")} />
-            {!analysis ? emptySolve : (
+            <PageHead title={t("rules.title")} description={analysis ? t("rules.desc", { model: "deepseek-flash" }) : (phaseHint || t("empty.solve"))}
+              badges={phase !== "idle" && phase !== "done" ? <Badge variant="outline">{phaseLabel}</Badge> : null} />
+            {!analysis ? (phase === "idle" ? emptySolve : (
+              <Card>
+                <CardHeader className="flex-row items-center justify-between space-y-0 py-3.5">
+                  <div><CardTitle className="text-sm">{t("rules.title")}</CardTitle><p className="mt-0.5 text-xs text-muted-foreground">{phaseHint}</p></div>
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                </CardHeader>
+                <CardContent className="space-y-2 pt-0">
+                  {resolvedRules.map((rule, i) => (
+                    <div key={i} className="flex items-center justify-between border-b py-2 text-sm last:border-0"><span>{rule.label}</span><span className="text-xs text-muted-foreground">× {rule.count}</span></div>
+                  ))}
+                  {!resolvedRules.length && Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="flex animate-pulse items-center justify-between border-b py-2"><span className="h-3 w-1/3 rounded bg-muted" /><span className="h-3 w-8 rounded bg-muted" /></div>
+                  ))}
+                </CardContent>
+              </Card>
+            )) : (
               <div className="space-y-6">
                 <Card className="overflow-hidden">
                   <CardHeader className="flex-row items-start gap-3 space-y-0 border-b py-3.5">

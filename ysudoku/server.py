@@ -8,7 +8,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+import math
+import threading
 import time
+import uuid
 
 from . import history, live, store
 from .pipeline import analyze
@@ -16,7 +19,8 @@ from .pipeline import analyze
 STATIC_DIR = Path(__file__).parent / "static"
 DIST_DIR = Path(__file__).parent.parent / "web" / "dist"
 def _stored_analysis(target: str, body: dict, demo: bool = False,
-                     force_rules: bool = False, force_steps: bool = False):
+                     force_rules: bool = False, force_steps: bool = False,
+                     on_rules=None, on_step=None):
     key = store.key_for(target)
     if force_rules:
         for layer in ("rules", "steps", "frames"):
@@ -38,6 +42,17 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
                 "key": key, "location": store.storage_info()["location"],
                 "settings": store.load_settings(),
             }
+            if on_rules is not None:
+                try:
+                    on_rules(cached.get("rules", {}).get("resolved", []))
+                except Exception:
+                    pass
+            if on_step is not None:
+                for index, step in enumerate(cached.get("steps", [])):
+                    try:
+                        on_step(index, step)
+                    except Exception:
+                        pass
             return key, cached
 
     analysis = analyze(
@@ -50,6 +65,8 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
         use_global=bool(body.get("global", True)),
         global_time_limit=float(body.get("global_timeout", 60)),
         notes=notes,
+        on_rules=on_rules,
+        on_step=on_step,
     )
     payload = analysis.to_json()
     payload["notes"] = notes
@@ -74,6 +91,63 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
         "settings": store.load_settings(),
     }
     return key, payload
+
+
+_JOBS: dict[str, dict] = {}
+_JOBS_LOCK = threading.Lock()
+
+
+def _job_update(job_id: str, **values) -> None:
+    with _JOBS_LOCK:
+        job = _JOBS.get(job_id)
+        if job is not None:
+            job.update(values)
+
+
+def _start_job(target: str, body: dict, demo: bool) -> str:
+    job_id = uuid.uuid4().hex[:12]
+    job = {
+        "id": job_id, "phase": "rules", "status": "running",
+        "rules": [], "steps": [], "error": None, "payload": None,
+        "key": None, "started": time.time(),
+    }
+    with _JOBS_LOCK:
+        _JOBS[job_id] = job
+        while len(_JOBS) > 20:
+            _JOBS.pop(next(iter(_JOBS)))
+
+    def on_rules(rules):
+        _job_update(job_id, phase="solving", rules=list(rules or []))
+
+    def on_step(first, second=None):
+        if second is not None:
+            index, data = first, second
+        else:
+            step = first
+            n = max(1, int(math.isqrt(len(step.pre_dom) or 1)))
+            data = step.to_dict(n)
+            with _JOBS_LOCK:
+                index = len(_JOBS[job_id]["steps"])
+        data = dict(data)
+        data["index"] = index
+        with _JOBS_LOCK:
+            _JOBS[job_id]["steps"].append(data)
+
+    def run():
+        try:
+            key, payload = _stored_analysis(
+                target, body, demo=demo, on_rules=on_rules, on_step=on_step,
+            )
+            _job_update(
+                job_id, phase="done", status="done", key=key, payload=payload,
+                rules=payload.get("rules", {}).get("resolved", []),
+                steps=payload.get("steps", []),
+            )
+        except Exception as exc:  # noqa: BLE001
+            _job_update(job_id, phase="failed", status="failed", error=str(exc))
+
+    threading.Thread(target=run, daemon=True).start()
+    return job_id
 
 
 _CONTENT_TYPES = {
@@ -110,6 +184,49 @@ class Handler(BaseHTTPRequestHandler):
             info = store.storage_info()
             payload = {"info": info, "entries": store.list_entries()}
             self._send(200, json.dumps(payload, ensure_ascii=False).encode(), "application/json")
+            return
+        if path == "/api/job":
+            query = parse_qs(urlparse(self.path).query)
+            job_id = (query.get("id") or [""])[0]
+            with _JOBS_LOCK:
+                job = dict(_JOBS.get(job_id) or {})
+            if not job:
+                self._send(404, b'{"error":"job not found"}', "application/json")
+                return
+            payload = {
+                "id": job["id"], "phase": job["phase"], "status": job["status"],
+                "rules": job.get("rules", []), "steps": job.get("steps", []),
+                "error": job.get("error"), "key": job.get("key"),
+                "count": len(job.get("steps", [])),
+            }
+            if job.get("payload") is not None:
+                payload["payload"] = job["payload"]
+            self._send(200, json.dumps(payload, ensure_ascii=False).encode(), "application/json")
+            return
+        if path == "/api/live/progress":
+            query = parse_qs(urlparse(self.path).query)
+            session = (query.get("session") or [""])[0]
+            total = int((query.get("total") or ["0"])[0] or 0)
+            directory = store.frames_dir(session)
+            numbers = []
+            if directory.exists():
+                for file in directory.glob("*.png"):
+                    try:
+                        numbers.append(int(file.stem))
+                    except ValueError:
+                        pass
+            complete = bool(total) and (total - 1) in numbers
+            error = None
+            error_file = store.frames_dir(session) / "error.json"
+            if error_file.exists():
+                try:
+                    error = json.loads(error_file.read_text(encoding="utf-8"))
+                except Exception:
+                    error = {"message": "frame build failed"}
+            self._send(200, json.dumps({
+                "frames": len([n for n in numbers if n >= 0]),
+                "complete": complete, "total": total, "error": error,
+            }).encode(), "application/json")
             return
         if path == "/api/live/health":
             self._send(200, json.dumps({"ok": live._healthy()}).encode(), "application/json")
@@ -178,7 +295,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         if urlparse(self.path).path not in (
-            "/api/solve", "/api/demo", "/api/live/start", "/api/live/place",
+            "/api/solve", "/api/solve/start", "/api/demo", "/api/live/start", "/api/live/place",
             "/api/live/build", "/api/history/clear",
             "/api/store/settings", "/api/store/delete", "/api/store/favorite",
             "/api/store/refresh_rules",
@@ -256,6 +373,17 @@ class Handler(BaseHTTPRequestHandler):
             self._send(400, b'{"error":"bad json"}', "application/json")
             return
         target = (body.get("url") or "").strip()
+        demo = urlparse(self.path).path == "/api/demo"
+        if urlparse(self.path).path == "/api/solve/start":
+            demo = bool(body.get("demo"))
+            if demo:
+                target = str(STATIC_DIR.parent.parent / "fixtures" / "demo-globosite.json")
+            if not target:
+                self._send(400, b'{"error":"missing url"}', "application/json")
+                return
+            job_id = _start_job(target, body, demo)
+            self._send(200, json.dumps({"id": job_id}).encode(), "application/json")
+            return
         if urlparse(self.path).path == "/api/demo":
             target = str(STATIC_DIR.parent.parent / "fixtures" / "demo-globosite.json")
         if not target:
