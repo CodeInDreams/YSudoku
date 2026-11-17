@@ -119,6 +119,11 @@ def build(url: str, steps: list[list[dict]], directory: str | None = None,
     return json.loads(_request("/build", payload, timeout=900))
 
 
+def debug(action: str) -> dict:
+    ensure()
+    return json.loads(_request("/debug", {"action": action}, timeout=60))
+
+
 def frame(session: str | None = None, step: int | str | None = None) -> bytes:
     ensure()
     if session is not None:

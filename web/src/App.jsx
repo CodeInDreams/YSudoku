@@ -336,6 +336,8 @@ export default function App() {
   const [stars, setStars] = useState(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [headerHidden, setHeaderHidden] = useState(false);
+  const [debugBusy, setDebugBusy] = useState(false);
+  const [debugMessage, setDebugMessage] = useState("");
   const [phase, setPhase] = useState("idle");
   const [streamRules, setStreamRules] = useState([]);
   const [streamSteps, setStreamSteps] = useState([]);
@@ -618,6 +620,21 @@ export default function App() {
     refreshStore();
   }
 
+  async function debugAction(action) {
+    setDebugBusy(true);
+    try {
+      const res = await postJson("/api/live/debug", { action });
+      const state = res.state || {};
+      const values = (state.values || []).filter(Boolean).length;
+      const marks = (state.state || []).reduce((sum, cell) => sum + (cell.centre?.length || 0) + (cell.corners?.length || 0), 0);
+      setDebugMessage(`${action}: values ${values}, marks ${marks}`);
+    } catch (err) {
+      setDebugMessage(`${action}: ${err.message}`);
+    } finally {
+      setDebugBusy(false);
+    }
+  }
+
   async function saveSettings() {
     await postJson("/api/store/settings", settings);
     refreshStore();
@@ -809,6 +826,13 @@ export default function App() {
         <span className="ml-2 hidden text-xs text-muted-foreground sm:inline">{t("player.speed")}</span>
         <Slider value={[2600 - speed]} min={200} max={2400} step={100} onValueChange={([value]) => setSpeed(2600 - value)} className="w-28" />
         <span className="ml-auto font-mono text-[11px] text-muted-foreground">{t("player.step", { i: idx + 1, n: steps.length })}</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 border-t px-4 py-2">
+        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Debug</span>
+        <Button size="sm" variant="outline" className="h-7 px-2 text-[11px]" disabled={debugBusy} onClick={() => debugAction("undo")}>{t("debug.undo")}</Button>
+        <Button size="sm" variant="outline" className="h-7 px-2 text-[11px]" disabled={debugBusy} onClick={() => debugAction("redo")}>{t("debug.redo")}</Button>
+        <Button size="sm" variant="outline" className="h-7 px-2 text-[11px]" disabled={debugBusy} onClick={() => debugAction("check")}>{t("debug.check")}</Button>
+        <span className="truncate text-[11px] text-muted-foreground">{debugMessage}</span>
       </div>
       <div className="border-t px-4 py-3">
         <Slider
