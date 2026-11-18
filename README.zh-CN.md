@@ -16,6 +16,8 @@ YSudoku 把 [SudokuPad](https://sudokupad.app) 上的变形数独链接，变成
 - 可机械校验：可选穷举反证，对每一步结论做独立检查
 - 可交互：网页里逐步播放高亮、描边、候选数划除、填数动画
 
+维护前先读：[维护要求](docs/REQUIREMENTS.zh-CN.md)。
+
 ## 快速开始
 
 核心零第三方依赖，Python 3.10+：
