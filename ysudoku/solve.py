@@ -649,7 +649,68 @@ class Solver:
                            for c in cells]
         return step
 
+    def _combo_step(self):
+        for arrow in self.constraints:
+            if getattr(arrow, "kind", "") != "arrow":
+                continue
+            arm = list(arrow.arm)
+            circle = arrow.circle
+            for pair in self.constraints:
+                if getattr(pair, "_kind", None) != "xv":
+                    continue
+                a, b = getattr(pair, "a", None), getattr(pair, "b", None)
+                if a is None or b is None or a not in arm or b not in arm:
+                    continue
+                total = (pair.params or {}).get("sum")
+                if total is None:
+                    continue
+                rest = [c for c in arm if c not in (a, b)]
+                if not rest:
+                    continue
+                def rest_sums():
+                    sums = {0}
+                    for c in rest:
+                        sums = {x + v for x in sums for v in bits(self.state.dom[c])}
+                    return sums
+                allowed_circle = 0
+                for value in bits(self.state.dom[circle]):
+                    if (value - total) in rest_sums():
+                        allowed_circle |= 1 << (value - 1)
+                pre_dom, pre_vals = self._pre()
+                self.state.begin()
+                changed = False
+                try:
+                    changed |= self.state.restrict(circle, allowed_circle,
+                                                   Reason("arrow", {"circle": circle, "arm": arm, "pair_sum": total}))
+                    for c in rest:
+                        allowed = 0
+                        for value in bits(self.state.dom[c]):
+                            others = rest_sums() if len(rest) == 1 else None
+                            if any((value + others_sum + total) in
+                                   {v for v in bits(self.state.dom[circle])}
+                                   for others_sum in ({0} if len(rest) == 1 else rest_sums())):
+                                allowed |= 1 << (value - 1)
+                        changed |= self.state.restrict(c, allowed,
+                                                       Reason("arrow", {"circle": circle, "arm": arm, "pair_sum": total}))
+                except Contradiction:
+                    self.state.rollback()
+                    return None
+                events = self.state.end()
+                if events:
+                    step = self._commit(events, pre_dom, pre_vals)
+                    if step is not None:
+                        step.title = "箭头 + 配对和"
+                        step.detail = (f"箭头与配对和组合：R{circle // 9 + 1}C{circle % 9 + 1} = "
+                                       f"其余箭身 + {total}。")
+                        return step
+                else:
+                    self.state.rollback()
+        return None
+
     def _narrowing_step(self):
+        combo = self._combo_step()
+        if combo is not None:
+            return combo
         for constraint in self.constraints:
             pre_dom, pre_vals = self._pre()
             self.state.begin()
