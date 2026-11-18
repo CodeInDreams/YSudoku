@@ -29,8 +29,13 @@ async function main() {
   const ratio = rect.width / rect.imageWidth;
   if (ratio < 0.7 || ratio > 0.9) throw new Error(`unexpected grid ratio ${ratio}`);
 
-  const img = await fetch(`${BASE}/api/live/frame?session=${key}&step=-1`);
-  if (!img.ok) throw new Error(`frame ${img.status}`);
+  let img = null;
+  for (let i = 0; i < 60; i++) {
+    img = await fetch(`${BASE}/api/live/frame?session=${key}&step=-1`);
+    if (img.ok) break;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  if (!img || !img.ok) throw new Error("frame never appeared");
   const png = Buffer.from(await img.arrayBuffer());
   const width = png.readUInt32BE(16);
   const height = png.readUInt32BE(20);
