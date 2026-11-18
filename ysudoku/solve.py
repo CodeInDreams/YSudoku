@@ -260,6 +260,54 @@ class Solver:
         step.candidates = []
         return step
 
+    def _minimal_trace(self, child, trace, cause=""):
+        dom = list(child.dom)
+        for e in trace:
+            if e.kind == "place":
+                dom[e.cell] = 1 << (e.value - 1)
+            else:
+                dom[e.cell] &= ~(1 << (e.value - 1))
+        empty = next((c for c in range(len(dom)) if dom[c] == 0), None)
+        if empty is None:
+            import re
+            m = re.search(r"(\d+)行(\d+)列没有候选", cause)
+            if m:
+                empty = (int(m.group(1)) - 1) * 9 + int(m.group(2)) - 1
+        if empty is None:
+            return list(trace)
+        last_place = {}
+        last_elim = {}
+        for idx, e in enumerate(trace):
+            if e.kind == "place":
+                last_place[e.cell] = idx
+            else:
+                last_elim[(e.cell, e.value)] = idx
+        needed = set()
+        stack = [last_elim[(empty, v)] for v in range(1, 10) if (empty, v) in last_elim]
+        while stack:
+            idx = stack.pop()
+            if idx in needed:
+                continue
+            needed.add(idx)
+            e = trace[idx]
+            if e.kind == "elim" and e.reason.kind == "unit_peer":
+                by = e.reason.data.get("by")
+                if by in last_place:
+                    stack.append(last_place[by])
+        return [trace[i] for i in sorted(needed)] or list(trace)
+
+    def _group_events(self, events):
+        groups = []
+        for e in events:
+            data = e.reason.data or {}
+            scope = tuple(sorted(data.get("cells") or data.get("unit_cells") or []))
+            key = (e.reason.kind, scope, data.get("by"))
+            if groups and groups[-1][0] == key:
+                groups[-1][1].append(e)
+            else:
+                groups.append((key, [e]))
+        return [g[1] for g in groups]
+
     def contradiction_step(self, deadline: float, per_candidate: float = 1.2):
         import time
         from .search import refute_direct_with_trace
@@ -323,7 +371,8 @@ class Solver:
         child = self.state.copy()
         child.place(cell, value, Reason("contradiction", {
             "cell": cell, "value": value, "phase": "start"}))
-        chunks = [list(trace)[i:i + 6] for i in range(0, len(trace), 6)]
+        minimal = self._minimal_trace(child, list(trace), cause)
+        chunks = self._group_events(minimal)
         run_state = child
         for index, chunk in enumerate(chunks):
             if not chunk:
