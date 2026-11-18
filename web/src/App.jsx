@@ -371,11 +371,11 @@ export default function App() {
           if (data && !cancelled) { setGridRect(data); return; }
         }
       } catch { /* retry */ }
-      if (attempt < 40 && !cancelled) timer = setTimeout(() => load(attempt + 1), 500);
+      if (attempt < 120 && !cancelled) timer = setTimeout(() => load(attempt + 1), 500);
     };
     load();
     return () => { cancelled = true; if (timer) clearTimeout(timer); };
-  }, [session]);
+  }, [session, frameProgress.complete, frameStep]);
   const [frameSrc, setFrameSrc] = useState("");
   const [frameStep, setFrameStep] = useState(-2);
   const [ready, setReady] = useState(false);
