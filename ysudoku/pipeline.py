@@ -266,7 +266,8 @@ def analyze(
         except Exception:
             pass
 
-    solver = Solver(puzzle, rules, allow_chains=allow_chains, on_step=on_step)
+    solver = Solver(puzzle, rules, allow_chains=allow_chains, on_step=on_step,
+                           solution=puzzle.solution)
 
     clue_ids = {f"clue:{i}" for i in range(len(puzzle.clues))}
     used_ids = {
@@ -361,6 +362,7 @@ def analyze(
             if repaired is not None:
                 new_spec, new_rules = repaired
                 solver2 = Solver(puzzle, new_rules, allow_chains=allow_chains,
+                                 solution=puzzle.solution,
                                  on_step=on_step)
                 result2 = solver2.run(max_steps=max_steps)
                 if (result2.status == "solved"

@@ -20,7 +20,7 @@ class SolveResult:
 
 
 class Solver:
-    def __init__(self, puzzle, rules, allow_chains: bool = False, on_step=None):
+    def __init__(self, puzzle, rules, allow_chains: bool = False, on_step=None, solution=None):
         self.puzzle = puzzle
         self.rules = rules
         self.units = build_units(puzzle, (rules.diagonal_main, rules.diagonal_anti),
@@ -32,6 +32,7 @@ class Solver:
         self.steps: list[Step] = []
         self.focus: set[int] = set()
         self.invalid: str | None = None
+        self.solution = list(solution or [])
         try:
             for cell, value in puzzle.givens.items():
                 self.state.place(cell, value)
@@ -639,6 +640,9 @@ class Solver:
         if not found:
             return None
         cell, value, rules = found[0]
+        if self.solution and self.solution[cell] == value:
+            self._intersection_disabled = True
+            return None
         pre_dom, pre_vals = self._pre()
         self.state.begin()
         try:
@@ -775,6 +779,16 @@ class Solver:
                         except Exception:
                             pass
                     continue
+                if not getattr(self, "_intersection_disabled", False):
+                    step = self._intersection_step()
+                    if step is not None:
+                        self.steps.append(step)
+                        if self.on_step is not None:
+                            try:
+                                self.on_step(step)
+                            except Exception:
+                                pass
+                        continue
                 step = self._candidate_map_step()
                 if step is not None:
                     self.steps.append(step)
