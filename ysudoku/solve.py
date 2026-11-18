@@ -299,6 +299,14 @@ class Solver:
                 branch.run(max_steps=80)
                 for bstep in branch.steps:
                     bstep.branch = True
+                    bstep.visual = bstep.visual or {}
+                    bstep.visual["assumption"] = {
+                        "cells": [cell],
+                        "label": f"假设中：{name}={value}",
+                    }
+                    groups = list(bstep.visual.get("groups") or [])
+                    groups.append({"cells": [cell], "kind": "assumption"})
+                    bstep.visual["groups"] = groups
                     self.steps.append(bstep)
                     if self.on_step:
                         try:self.on_step(bstep)

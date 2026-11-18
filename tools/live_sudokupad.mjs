@@ -432,6 +432,10 @@ async function act(action) {
     now.corners.forEach((digits, cell) => markState.set(cell, new Set(digits)));
     return;
   }
+  if (action.op === "settle") {
+    await page.waitForTimeout(500);
+    return;
+  }
   if (action.op === "reload_base") {
     await open(action.url);
     for (const item of action.actions || []) await act(item);

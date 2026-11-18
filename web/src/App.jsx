@@ -157,6 +157,7 @@ function buildStepActions(analysis) {
       update(cell, desired, placeByCell.get(cell));
     }
     state = nextState;
+    if (step.branch) actions.push({ op: "settle" });
     if (!step.branch) baseActions.push(...actions);
     steps.push(actions);
   }
