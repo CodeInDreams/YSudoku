@@ -632,7 +632,19 @@ class Solver:
         events = self.state.end()
         step = self._commit(events, pre_dom, pre_vals)
         if step is None:
-            return None
+            kind = "place" if forced is not None else "elim"
+            event = Event(kind, cell, forced if forced is not None else value,
+                          reason, pre_dom[cell])
+            step = Step(
+                index=len(self.steps), technique="contradiction", tier=4,
+                title="反证结论",
+                detail=(f"反证结论：排除 {name} = {value}。"
+                        if forced is None else f"反证结论：{name} = {forced}。"),
+                events=[event], visual={"focus": [cell], "premise": [],
+                                        "groups": [], "links": [], "chips": []})
+            step.pre_dom, step.pre_vals = pre_dom, pre_vals
+            step.candidates = [{"cell": cell,
+                                "digits": [forced if forced is not None else value]}]
         step.title = "反证结论"
         self.steps.append(step)
         if self.on_step:
