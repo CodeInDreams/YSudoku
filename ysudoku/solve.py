@@ -676,34 +676,24 @@ class Solver:
             for i, first in enumerate(pairs):
                 for second in pairs[i + 1:]:
                     a, b = first.cells(), second.cells()
-                    excluded = target_exclusions(target, a, b, peers)
-                    if not excluded:
-                        continue
-                    hits = [v for v in excluded if self.state.dom[target] >> (v - 1) & 1]
-                    if self.solution and self.solution[target] in hits:
-                        continue
-                    if len(hits) < 3:
-                        continue
-                    pre_dom, pre_vals = self._pre()
-                    self.state.begin()
-                    reason = Reason("v_colour", {"cell": target, "values": sorted(hits),
-                                                   "pairs": [a, b]})
-                    for v in hits:
-                        self.state.elim(target, v, reason)
-                    events = self.state.end()
-                    step = self._commit(events, pre_dom, pre_vals)
-                    if step is None:
+                    if target_exclusions(target, a, b, peers) != {1, 2, 3, 4}:
                         continue
                     self._v_colour_done = True
-                    from . import palette as pal
                     left, right = pal.pair_colours(0)
-                    step.visual["colours"] = [
-                        {"cells": a, "colour": left},
-                        {"cells": b, "colour": right},
-                    ]
-                    step.title = "V 颜色类联合"
-                    step.detail = (f"两组 V + anti 联合：{a} / {b} 覆盖 1–4，"
-                                   f"R{target // self.state.n + 1}C{target % self.state.n + 1} 排除 1–4。")
+                    step = Step(
+                        index=len(self.steps), technique="colour_class", tier=1,
+                        title="颜色分类",
+                        detail=(f"两组 V 颜色类：{a} / {b}。\n"
+                                f"四类覆盖 1–4；目标 R{target // self.state.n + 1}C{target % self.state.n + 1} "
+                                "被四格马步攻击，因此不能取 1–4。"),
+                        events=[], visual={"focus": [], "premise": [], "groups": [],
+                                           "links": [], "chips": [],
+                                           "colours": [
+                                               {"cells": a, "colour": left},
+                                               {"cells": b, "colour": right},
+                                           ]})
+                    step.pre_dom, step.pre_vals = self._pre()
+                    step.candidates = [{"cell": target, "digits": [5, 6, 7, 8, 9]}]
                     return step
         return None
 
