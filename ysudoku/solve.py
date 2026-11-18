@@ -353,6 +353,20 @@ class Solver:
             return f"参与：{cell_name(data['a'], self.state.n)} / {cell_name(data['b'], self.state.n)}。"
         return ""
 
+    def _why_placed(self, event, pre_dom):
+        data = event.reason.data or {}
+        n = self.state.n
+        values = lambda cell: [v for v in range(1, n + 1) if pre_dom[cell] >> (v - 1) & 1]
+        if event.reason.kind == "naked_single":
+            return f"{cell_name(event.cell, n)} 的候选只剩 {values(event.cell)}。"
+        if event.reason.kind == "hidden_single":
+            unit = data.get("unit", "所在单元")
+            others = [c for c in data.get("unit_cells") or []
+                      if c != event.cell and event.value in values(c)]
+            return (f"{unit} 中数字 {event.value} 只能放在 {cell_name(event.cell, n)}；"
+                    f"其他格候选均不含 {event.value}。")
+        return ""
+
     def _why_eliminated(self, event, pre_dom):
         from itertools import product
         data = event.reason.data or {}
@@ -503,7 +517,10 @@ class Solver:
                     support_dom[event.cell] &= ~bit
             seen_reasons = set()
             for event in chunk:
-                if event.kind != "elim":
+                if event.kind == "place":
+                    why = self._why_placed(event, support_dom)
+                    if why:
+                        lines.append(f"依据：{why}")
                     continue
                 why = self._why_eliminated(event, support_dom)
                 key = (event.cell, event.value, event.reason.kind)

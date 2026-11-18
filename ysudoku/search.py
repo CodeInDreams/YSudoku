@@ -22,7 +22,7 @@ def propagate(st: State, constraints, max_rounds: int = 200) -> bool:
             if st.vals[cell] == 0 and st.dom[cell].bit_count() == 1:
                 try:
                     value = st.dom[cell].bit_length()
-                    st.place(cell, value, Reason("probe_single", {"cell": cell, "value": value}) if st.record else None)
+                    st.place(cell, value, Reason("naked_single", {"cell": cell, "value": value}) if st.record else None)
                 except Contradiction:
                     return False
                 changed = True
@@ -33,8 +33,9 @@ def propagate(st: State, constraints, max_rounds: int = 200) -> bool:
                     return False
                 if len(hosts) == 1 and st.vals[hosts[0]] == 0:
                     try:
-                        st.place(hosts[0], digit, Reason("probe_hidden", {
+                        st.place(hosts[0], digit, Reason("hidden_single", {
                             "cell": hosts[0], "value": digit, "unit": unit.label,
+                            "unit_cells": list(unit.cells),
                         }) if st.record else None)
                     except Contradiction:
                         return False
