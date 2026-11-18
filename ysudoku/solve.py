@@ -456,8 +456,15 @@ class Solver:
         import time
         from .search import refute_direct_with_trace
         pre_dom, pre_vals = self._pre()
+        focus_units = {u for c in self.focus if c < len(self.state.unit_of)
+                       for u in self.state.unit_of[c]}
+
+        def near_focus(cell):
+            units = set(self.state.unit_of[cell])
+            return 0 if cell in self.focus or (units & focus_units) else 1
+
         cells = sorted((c for c in range(self.state.n2) if not self.state.vals[c]),
-                       key=lambda c: self.state.dom[c].bit_count())
+                       key=lambda c: (near_focus(c), self.state.dom[c].bit_count()))
         best = None
         tested = 0
         for cell in cells:
@@ -476,11 +483,7 @@ class Solver:
                     continue
                 meaningful = [e for e in trace
                               if e.kind == "place" or e.reason.kind != "unit_peer"]
-                rare = sum(1 for e in meaningful
-                           if e.reason.kind in ("anti_king", "anti_knight",
-                                                "arrow", "german_whisper"))
                 score = (
-                    rare,
                     1 if len(values) == 2 else 0,
                     sum(1 for e in meaningful if e.kind == "place"),
                     sum(1 for e in meaningful if e.kind == "elim"),
