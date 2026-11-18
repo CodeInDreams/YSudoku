@@ -133,12 +133,12 @@ async function open(url) {
   const parts = (viewBox || "-16 -16 608 608").trim().split(/\s+/).map(Number);
   const units = parts[2] || 608;
   const n = Math.max(1, Math.round((units - 32) / 64));
-  const pad = 16 / units;
+  const scale = box.width / units;
   const grid = {
-    x: box.x + box.width * pad,
-    y: box.y + box.height * pad,
-    width: box.width * (1 - 2 * pad),
-    height: box.height * (1 - 2 * pad),
+    x: box.x - (parts[0] || 0) * scale,
+    y: box.y - (parts[1] || 0) * scale,
+    width: n * 64 * scale,
+    height: n * 64 * scale,
   };
   board = { box, grid, n };
   const initial = await readBoard();
