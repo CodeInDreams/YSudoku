@@ -215,6 +215,23 @@ def compile_spec(puzzle: Puzzle, elements: list[Element], spec: dict,
                 "kind": "xv", "elements": [element.id],
                 "sum": element.attrs.get("sum", 10),
             })
+    text_low = (puzzle.rules_text or "").lower()
+    if "x-sum" in text_low or "x sum" in text_low or "xsum" in text_low:
+        from .arrow_xsums import parse_arrows
+        existing = {tuple(r.get("cells") or []) for r in raw_rules}
+        for index, item in enumerate(parse_arrows(puzzle.raw or {}, n)):
+            cells = tuple(item["cells"])
+            if cells in existing:
+                continue
+            clue_index = min(index, max(0, len(puzzle.clues) - 1))
+            raw_rules.append({
+                "kind": "x_sums",
+                "elements": [f"clue:{clue_index}"],
+                "sum": item["total"],
+                "cells": list(cells),
+                "side": "arrow",
+            })
+
     spec["rules"] = raw_rules
 
     for raw in spec.get("rules", []):
