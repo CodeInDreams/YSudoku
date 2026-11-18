@@ -242,6 +242,12 @@ def analyze(
             + "\n\n=== USER SUPPLEMENT (treat as authoritative rule text) ===\n"
             + notes
         )
+    text_low = (puzzle.rules_text or "").lower()
+    arrow_xsum = (("x-sum" in text_low or "x sum" in text_low or "xsum" in text_low)
+                  and bool((puzzle.raw or {}).get("arrows")))
+    if arrow_xsum:
+        spec_override = None
+        use_llm = False
     fingerprint = rulecache.fingerprint(puzzle, inventory)
     cached = None
     if spec_override is None and use_llm and use_cache:
