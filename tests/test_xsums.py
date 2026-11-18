@@ -44,3 +44,18 @@ class DiagonalXSumsTest(unittest.TestCase):
         # 5 + 1+1+1+1 = 9; repeats are legal on a diagonal.
         XSums(cells, 9, "top").prune(st)
         self.assertTrue(st.dom[cells[0]] >> 4 & 1)
+
+
+class DiagonalBoxGroupsTest(unittest.TestCase):
+    def test_shared_box_members_are_distinct(self):
+        from ysudoku.constraints import XSums
+        from ysudoku.state import State, Unit
+        us = units()
+        # two cells in the same box: (1,1) and (2,2) of box 0
+        us.append(Unit("region", 0, [0, 1, 2, 9, 10, 11, 18, 19, 20]))
+        st = State(9, us)
+        cells = [10, 19]  # both in region 0
+        st.dom[cells[0]] = 0b10  # N=2
+        st.dom[cells[1]] = 0b10  # only 2, duplicate -> impossible
+        with self.assertRaises(Exception):
+            XSums(cells, 4, "top").prune(st)

@@ -871,23 +871,28 @@ class XSums(Constraint):
             if x < 1 or x > len(cells):
                 return False
             span = cells[:x]
-            # Digits are distinct only when every cell belongs to a common unit.
-            units = set(st.unit_of[span[0]])
-            for cell in span[1:]:
-                units &= set(st.unit_of[cell])
-            distinct = bool(units)
-            states = {(1 << (x - 1), x)}
-            for cell in span[1:]:
-                nxt = set()
-                for mask, total in states:
-                    for v in bits(st.dom[cell]):
-                        if distinct and mask >> (v - 1) & 1:
-                            continue
-                        nxt.add((mask | (1 << (v - 1)), total + v))
-                states = nxt
-                if not states:
-                    return False
-            return any(total == self.total for _mask, total in states)
+            groups = []
+            for unit in st.units:
+                members = [c for c in span if c in unit.cells]
+                if len(members) >= 2:
+                    groups.append(members)
+            values = [x]
+
+            def dfs(index: int) -> bool:
+                if index == len(span):
+                    return sum(values) == self.total
+                cell = span[index]
+                for v in bits(st.dom[cell]):
+                    if any(v in [values[span.index(c)] for c in group if span.index(c) < index]
+                           for group in groups if cell in group):
+                        continue
+                    values.append(v)
+                    if dfs(index + 1):
+                        return True
+                    values.pop()
+                return False
+
+            return dfs(1)
 
         for x in bits(st.dom[first]):
             if not feasible(x):
