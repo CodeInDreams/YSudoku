@@ -360,10 +360,21 @@ export default function App() {
   const [session, setSession] = useState(null);
   useEffect(() => {
     if (!session) { setGridRect(null); return; }
-    fetch(`/api/live/grid?session=${encodeURIComponent(session)}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => setGridRect(data || null))
-      .catch(() => setGridRect(null));
+    let cancelled = false;
+    let timer = null;
+    const load = async (attempt = 0) => {
+      if (cancelled) return;
+      try {
+        const r = await fetch(`/api/live/grid?session=${encodeURIComponent(session)}`);
+        if (r.ok) {
+          const data = await r.json();
+          if (data && !cancelled) { setGridRect(data); return; }
+        }
+      } catch { /* retry */ }
+      if (attempt < 40 && !cancelled) timer = setTimeout(() => load(attempt + 1), 500);
+    };
+    load();
+    return () => { cancelled = true; if (timer) clearTimeout(timer); };
   }, [session]);
   const [frameSrc, setFrameSrc] = useState("");
   const [frameStep, setFrameStep] = useState(-2);
