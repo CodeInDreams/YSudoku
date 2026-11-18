@@ -846,16 +846,6 @@ class Solver:
                         except Exception:
                             pass
                     continue
-                if not getattr(self, "_intersection_disabled", False):
-                    step = self._intersection_step()
-                    if step is not None:
-                        self.steps.append(step)
-                        if self.on_step is not None:
-                            try:
-                                self.on_step(step)
-                            except Exception:
-                                pass
-                        continue
                 step = self._candidate_map_step()
                 if step is not None:
                     self.steps.append(step)
