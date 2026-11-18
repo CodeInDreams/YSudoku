@@ -135,10 +135,10 @@ class State:
         if not self.dom[cell] & bit:
             return False
         self.dom[cell] ^= bit
-        if self.dom[cell] == 0:
-            raise Contradiction(f"{cell_name(cell, self.n)} has no candidates left")
         if self.record and reason is not None:
             self.events.append(Event("elim", cell, value, reason, self.dom[cell] | bit))
+        if self.dom[cell] == 0:
+            raise Contradiction(f"{cell_name(cell, self.n)} has no candidates left")
         return True
 
     def place(self, cell: int, value: int, reason: Reason | None = None) -> bool:
