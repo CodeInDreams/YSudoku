@@ -610,6 +610,24 @@ class Solver:
             except Exception: pass
         return step
 
+    def _narrowing_step(self):
+        for constraint in self.constraints:
+            pre_dom, pre_vals = self._pre()
+            self.state.begin()
+            try:
+                changed = constraint.prune(self.state)
+            except Contradiction:
+                self.state.rollback()
+                return None
+            events = self.state.end()
+            if events:
+                step = self._commit(events, pre_dom, pre_vals)
+                if step is not None:
+                    step.title = "候选缩小"
+                    step.detail = f"{constraint.describe()} 继续缩小候选。"
+                    return step
+        return None
+
     def run(self, max_steps: int = 4000) -> SolveResult:
         if self.invalid:
             return SolveResult("invalid", [], self.state.vals, self.invalid)
@@ -621,11 +639,20 @@ class Solver:
             if error:
                 return SolveResult("invalid", self.steps, self.state.vals, error)
             if step is None:
+                step = self._narrowing_step()
+                if step is not None:
+                    self.steps.append(step)
+                    if self.on_step is not None:
+                        try:
+                            self.on_step(step)
+                        except Exception:
+                            pass
+                    continue
                 tried = sorted({s.technique for s in self.steps})
                 hint = "" if self.allow_chains else "；可开启「反证」(--allow-chains) 尝试高级试探"
                 return SolveResult(
                     "stuck", self.steps, self.state.vals,
-                    f"已尝试 {len(tried)} 类技巧仍卡住{hint}",
+                    f"已对全部约束做固定点检查，没有候选可再缩小{hint}",
                 )
             self.steps.append(step)
             if self.on_step is not None:
