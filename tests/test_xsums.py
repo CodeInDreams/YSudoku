@@ -30,3 +30,17 @@ class XSumsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DiagonalXSumsTest(unittest.TestCase):
+    def test_diagonal_allows_repeats(self):
+        st = State(9, units())
+        cells = [r * 9 + r for r in range(9)]
+        st.dom[cells[0]] = 0b10000  # N=5
+        st.dom[cells[1]] = 0b1
+        st.dom[cells[2]] = 0b1
+        st.dom[cells[3]] = 0b1
+        st.dom[cells[4]] = 0b1
+        # 5 + 1+1+1+1 = 9; repeats are legal on a diagonal.
+        XSums(cells, 9, "top").prune(st)
+        self.assertTrue(st.dom[cells[0]] >> 4 & 1)

@@ -871,13 +871,17 @@ class XSums(Constraint):
             if x < 1 or x > len(cells):
                 return False
             span = cells[:x]
-            # All cells of an X-Sum line share a row/column, so digits are distinct.
+            # Digits are distinct only when every cell belongs to a common unit.
+            units = set(st.unit_of[span[0]])
+            for cell in span[1:]:
+                units &= set(st.unit_of[cell])
+            distinct = bool(units)
             states = {(1 << (x - 1), x)}
             for cell in span[1:]:
                 nxt = set()
                 for mask, total in states:
                     for v in bits(st.dom[cell]):
-                        if mask >> (v - 1) & 1:
+                        if distinct and mask >> (v - 1) & 1:
                             continue
                         nxt.add((mask | (1 << (v - 1)), total + v))
                 states = nxt
