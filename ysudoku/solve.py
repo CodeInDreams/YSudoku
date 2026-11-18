@@ -630,6 +630,25 @@ class Solver:
             except Exception: pass
         return step
 
+    def _candidate_map_step(self):
+        if getattr(self, "_candidate_map_done", False):
+            return None
+        pre_dom, pre_vals = self._pre()
+        cells = [c for c in range(self.state.n2) if not self.state.vals[c]]
+        if not cells:
+            return None
+        self._candidate_map_done = True
+        step = Step(
+            index=len(self.steps), technique="candidate_map", tier=1,
+            title="候选标记",
+            detail="把当前所有未解格的候选标出来，作为后续推理的起点。",
+            events=[], visual={"focus": [], "premise": [], "groups": [], "links": [], "chips": []})
+        step.pre_dom, step.pre_vals = pre_dom, pre_vals
+        step.candidates = [{"cell": c, "digits": [v for v in range(1, self.state.n + 1)
+                                                 if pre_dom[c] >> (v - 1) & 1]}
+                           for c in cells]
+        return step
+
     def _narrowing_step(self):
         for constraint in self.constraints:
             pre_dom, pre_vals = self._pre()
@@ -660,6 +679,15 @@ class Solver:
                 return SolveResult("invalid", self.steps, self.state.vals, error)
             if step is None:
                 step = self._narrowing_step()
+                if step is not None:
+                    self.steps.append(step)
+                    if self.on_step is not None:
+                        try:
+                            self.on_step(step)
+                        except Exception:
+                            pass
+                    continue
+                step = self._candidate_map_step()
                 if step is not None:
                     self.steps.append(step)
                     if self.on_step is not None:
