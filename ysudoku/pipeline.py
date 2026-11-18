@@ -17,6 +17,9 @@ from .state import cell_name
 from .narrate import Step
 
 
+ANALYSIS_VERSION = 2
+
+
 @dataclass
 class Analysis:
     puzzle: Puzzle
@@ -39,6 +42,7 @@ class Analysis:
     def to_json(self) -> dict:
         n = self.puzzle.size
         return {
+            "algo_version": ANALYSIS_VERSION,
             "puzzle": {
                 "id": self.puzzle.puzzle_id,
                 "title": self.puzzle.title,

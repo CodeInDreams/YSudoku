@@ -34,7 +34,9 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
     notes = str(body["notes"] if "notes" in body else meta.get("notes", "") or "").strip()
     if not force_rules and not force_steps and rules:
         cached = store.load_analysis(key)
-        if cached and meta.get("rules_hash") == rules.get("hash"):
+        from .pipeline import ANALYSIS_VERSION
+        if (cached and cached.get("algo_version") == ANALYSIS_VERSION
+                and meta.get("rules_hash") == rules.get("hash")):
             cached["notes"] = meta.get("notes", "")
             if isinstance(cached.get("rules"), dict):
                 cached["rules"]["notes"] = meta.get("notes", "")
