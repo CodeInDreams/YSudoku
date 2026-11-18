@@ -377,6 +377,7 @@ export default function App() {
     try { return localStorage.getItem("ysudoku.theme") === "dark"; } catch { return false; }
   });
   const [rulePrompt, setRulePrompt] = useState(() => readPersisted().rulePrompt || "");
+  const [conflictChoice, setConflictChoice] = useState(() => readPersisted().conflictChoice || "");
   const [settings, setSettings] = useState(() => ({
     ...DEFAULT_SETTINGS,
     ...(persisted.settings || {}),
@@ -385,12 +386,12 @@ export default function App() {
   useEffect(() => {
     try {
       localStorage.setItem(PERSIST_KEY, JSON.stringify({
-        speed, settings, view, inspectorTab, rulePrompt,
+        speed, settings, view, inspectorTab, rulePrompt, conflictChoice,
       }));
     } catch {
       /* storage unavailable */
     }
-  }, [speed, settings, view, inspectorTab, rulePrompt]);
+  }, [speed, settings, view, inspectorTab, rulePrompt, conflictChoice]);
   const [stars, setStars] = useState(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [headerHidden, setHeaderHidden] = useState(false);
@@ -1196,21 +1197,36 @@ export default function App() {
               ) : (phaseHint || t("empty.solve"))}
               badges={analysis ? <><Badge variant="outline">{n}×{n}</Badge><Badge variant={isSolved ? "success" : "outline"}>{statusLabel(analysis.status)}</Badge></> : (phase !== "idle" ? <Badge variant="outline">{phaseLabel}</Badge> : null)}
             />
-            {analysis?.conflicts?.length > 0 && (
-              <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs dark:border-amber-800 dark:bg-amber-950/30">
-                <p className="font-medium">{analysis.conflicts[0].question}</p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {analysis.conflicts[0].options.map((option) => (
-                    <button key={option.id} type="button"
-                      onClick={() => streamSolve({ url: target, llm: option.id === "llm", audit, chains: true, demo: false, rule_prompt: rulePrompt }, target)}
-                      className="rounded-md border bg-background px-2.5 py-1.5 hover:border-primary">
-                      {option.label}
+            {analysis?.conflicts?.length > 0 && !conflictChoice && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+                <div className="w-full max-w-lg rounded-xl border bg-card p-5 shadow-xl">
+                  <h2 className="text-base font-semibold">规则识别冲突</h2>
+                  <p className="mt-1.5 text-sm text-muted-foreground">
+                    {analysis.conflicts[0].question}
+                  </p>
+                  <div className="mt-4 grid gap-2">
+                    {analysis.conflicts[0].options.map((option, index) => (
+                      <button key={option.id} type="button"
+                        onClick={() => {
+                          setConflictChoice(option.id);
+                          streamSolve({ url: target, llm: option.id === "llm", audit, chains: true, demo: false, rule_prompt: rulePrompt }, target);
+                        }}
+                        className={`rounded-lg border px-3 py-2.5 text-left text-sm transition-colors hover:border-primary ${index === 0 ? "border-primary bg-primary/5" : "bg-background"}`}>
+                        <span className="font-medium">{option.label}</span>
+                        {index === 0 && <span className="ml-2 text-xs text-muted-foreground">推荐</span>}
+                      </button>
+                    ))}
+                  </div>
+                  <textarea value={rulePrompt} onChange={(e) => setRulePrompt(e.target.value)}
+                    placeholder="补充规则说明（可选）"
+                    className="mt-3 w-full resize-y rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary" rows={3} />
+                  <div className="mt-4 flex justify-end">
+                    <button type="button" onClick={() => setConflictChoice("dismiss")}
+                      className="rounded-lg border px-3 py-2 text-sm text-muted-foreground hover:text-foreground">
+                      暂不选择
                     </button>
-                  ))}
+                  </div>
                 </div>
-                <textarea value={rulePrompt} onChange={(e) => setRulePrompt(e.target.value)}
-                  placeholder="补充规则说明（可选）"
-                  className="mt-2 w-full resize-y rounded-md border bg-background px-2 py-1.5 outline-none" rows={2} />
               </div>
             )}
             {phase !== "idle" && phase !== "done" && (
