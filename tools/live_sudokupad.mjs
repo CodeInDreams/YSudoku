@@ -161,9 +161,9 @@ async function open(url, logicalN = 0) {
 }
 
 async function shot() {
-  const { grid } = board;
+  const { fullGrid } = board;
   latest = await page.screenshot({
-    clip: { x: grid.x, y: grid.y, width: grid.width, height: grid.height },
+    clip: { x: fullGrid.x, y: fullGrid.y, width: fullGrid.width, height: fullGrid.height },
     type: "png",
   });
   return latest;
