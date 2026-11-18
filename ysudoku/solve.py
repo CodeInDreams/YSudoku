@@ -69,7 +69,11 @@ class Solver:
             e for e in self.state.events
             if e.kind == "place" or not self.state.vals[e.cell]
         ]
+        from .visual_colours import xv_colours
         step = build_step(len(self.steps), events, self.state.n)
+        colours = xv_colours(events)
+        if colours:
+            step.visual["colours"] = colours
         step.pre_dom, step.pre_vals = pre_dom, pre_vals
         step.candidates = self._candidates(events, pre_dom)
         placed = {e.cell for e in events if e.kind == "place"}
