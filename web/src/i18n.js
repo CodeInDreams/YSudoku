@@ -23,6 +23,7 @@ export const DICT = {
     "help.llm": "用大模型把 SudokuPad 的规则文字和图形清单编译成结构化约束。题面若带官方答案，只用于自检，不参与求解；关闭后使用本地启发式规则识别。",
     "help.audit": "求解完成后，对每一步结论做独立穷举验证：假设该结论不成立，如果仍能解出，就把这一步标为异常。较慢，默认关闭。",
     "page.waiting": "等待题目",
+    "page.original": "原始谜题链接",
     "page.givens": "{n} 个提示数",
     "page.open": "在 SudokuPad 打开原题",
     "page.verified": "已验证",

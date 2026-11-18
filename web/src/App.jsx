@@ -1150,6 +1150,18 @@ export default function App() {
               description={analysis ? `${analysis.puzzle.author || ""} · ${t("page.givens", { n: analysis.puzzle.givens.filter(Boolean).length })}${isSolved ? ` · ${statusLabel(analysis.status)}` : ""}` : (phaseHint || t("empty.solve"))}
               badges={analysis ? <><Badge variant="outline">{n}×{n}</Badge><Badge variant={isSolved ? "success" : "outline"}>{statusLabel(analysis.status)}</Badge></> : (phase !== "idle" ? <Badge variant="outline">{phaseLabel}</Badge> : null)}
             />
+            {analysis && (analysis.source_url || target) && (
+              <div className="-mt-2 mb-3">
+                <a
+                  href={analysis.source_url || target}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                >
+                  {t("page.original")} ↗
+                </a>
+              </div>
+            )}
             {phase !== "idle" && phase !== "done" && (
               <div className="mb-5 rounded-lg border bg-card px-3 py-2.5">
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
