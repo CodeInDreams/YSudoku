@@ -140,12 +140,11 @@ async function open(url) {
     width: n * 64 * scale,
     height: n * 64 * scale,
   };
-  const pad = 16 / units;
   const fullGrid = {
-    x: box.x + box.width * pad,
-    y: box.y + box.height * pad,
-    width: box.width * (1 - 2 * pad),
-    height: box.height * (1 - 2 * pad),
+    x: box.x,
+    y: box.y,
+    width: box.width,
+    height: box.height,
   };
   const rect = { x: grid.x - fullGrid.x, y: grid.y - fullGrid.y,
                  width: grid.width, height: grid.height,
