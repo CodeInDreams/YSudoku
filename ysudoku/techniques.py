@@ -828,13 +828,17 @@ TRIGGERS = {
 }
 
 
+def naked_subset4(st: State, constraints=None):
+    return naked_subset(st, constraints, max_size=4)
+
+
 TECHNIQUES = [
     ("naked_single", 1, naked_single),
     ("hidden_single", 1, hidden_single),
     ("forty_five", 2, forty_five),
     ("hidden_subset", 2, hidden_subset),
     ("locked", 2, locked_candidates),
-    ("subset", 2, naked_subset),
+    ("subset", 2, naked_subset4),
     ("x_wing", 3, x_wing),
     ("xy_wing", 3, xy_wing),
     ("w_wing", 3, w_wing),
