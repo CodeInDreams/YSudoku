@@ -294,6 +294,7 @@ def analyze(
                 f"检测到 {len(clue_ids)} 个盘外提示，但当前规则没有使用任何一条",
             ],
             status="unsupported",
+            source_url=puzzle.source_url or (str(target) if str(target).startswith("http") else ""),
             message="盘外提示未被规则映射（可能是 Full Rank / X-Sums 的未知类型配对，或尚未实现的盘外线索）",
         )
     if clue_ids - mapped_clues:
@@ -316,6 +317,7 @@ def analyze(
                 initial=solver.initial, source=source,
                 warnings=warnings + ["检测到作者自定义的区域计数规则，首个混沌版本暂不支持"],
                 status="unsupported",
+                source_url=puzzle.source_url or (str(target) if str(target).startswith("http") else ""),
                 message="检测到作者自定义的区域语义（区域计数/视野/边界），首个混沌版本暂不支持",
             )
         pattern_steps = _chaos_pattern_steps(puzzle, rules, solver.state)
