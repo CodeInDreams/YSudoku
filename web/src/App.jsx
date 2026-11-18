@@ -990,6 +990,12 @@ export default function App() {
             {resolvedRules.map((rule, i) => (
               <div key={i} className="flex items-center justify-between border-b py-1.5 text-xs last:border-0"><span>{rule.label}</span><span className="text-muted-foreground">× {rule.count}</span></div>
             ))}
+            {analysis?.conflicts?.length > 0 && (
+              <Button variant="outline" size="sm" className="mt-3 w-full"
+                onClick={() => setConflictChoice("")}>
+                重新选择规则识别
+              </Button>
+            )}
             <Button variant="link" size="sm" className="mt-2 px-0" onClick={() => setView("rules")}>{t("nav.rules")} →</Button>
           </TabsContent>
         </CardContent>
