@@ -224,6 +224,23 @@ def compile_spec(puzzle: Puzzle, elements: list[Element], spec: dict,
         if kind not in KINDS:
             result.warnings.append(f"未知规则类型 {kind}（已忽略）")
             continue
+        if kind == "x_sums" and raw.get("cells"):
+            total = params.get("sum")
+            if total is None:
+                result.warnings.append("X-Sums 缺少和")
+                continue
+            cells = [int(c) for c in raw.get("cells") or []]
+            if len(cells) < 2:
+                continue
+            result.constraints.append(XSums(cells, int(total), str(params.get("side") or "arrow")))
+            result.resolved.append({
+                "kind": "x_sums", "label": KINDS["x_sums"],
+                "elements": ids, "count": 1,
+                "params": {"sum": int(total), "side": params.get("side") or "arrow",
+                           "cells": len(cells)},
+            })
+            used.update(ids)
+            continue
         if kind == "region_count":
             scope, eids = _resolve_scope(puzzle, elements, raw, result.warnings)
             if not scope:
@@ -726,5 +743,17 @@ def heuristic_spec(puzzle: Puzzle, elements: list[Element]) -> dict:
         elif _has(text, "anti-diagonal", "anti diagonal"):
             direction = "anti"
         globals_.append({"kind": "diagonal", "direction": direction})
+
+    if _has(text, "x-sum", "x-sums", "x sums", "xsum"):
+        from .arrow_xsums import parse_arrows
+        for index, item in enumerate(parse_arrows(puzzle.raw or {}, puzzle.size)):
+            clue_index = min(index, max(0, len(puzzle.clues) - 1))
+            rules.append({
+                "kind": "x_sums",
+                "elements": [f"clue:{clue_index}"],
+                "sum": item["total"],
+                "cells": item["cells"],
+                "side": "arrow",
+            })
 
     return {"rules": rules, "globals": globals_, "notes": "heuristic", "warnings": warnings}
