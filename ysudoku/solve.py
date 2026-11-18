@@ -728,13 +728,14 @@ class Solver:
         return step
 
     def _candidate_map_step(self):
-        if getattr(self, "_candidate_map_done", False):
-            return None
         pre_dom, pre_vals = self._pre()
+        signature = tuple(pre_dom)
+        if getattr(self, "_candidate_map_signature", None) == signature:
+            return None
         cells = [c for c in range(self.state.n2) if not self.state.vals[c]]
         if not cells:
             return None
-        self._candidate_map_done = True
+        self._candidate_map_signature = signature
         step = Step(
             index=len(self.steps), technique="candidate_map", tier=1,
             title="候选标记",
