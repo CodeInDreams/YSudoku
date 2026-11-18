@@ -866,17 +866,27 @@ class XSums(Constraint):
         first = cells[0]
         reason = Reason("x_sums", {"cells": self._cells, "sum": self.total, "side": self.side})
         changed = False
-        for x in bits(st.dom[first]):
-            if not 1 <= x <= len(cells):
-                changed |= st.elim(first, x, reason)
-                continue
+
+        def feasible(x: int) -> bool:
+            if x < 1 or x > len(cells):
+                return False
             span = cells[:x]
-            lo = hi = 0
-            for cell in span:
-                d = st.dom[cell]
-                lo += (d & -d).bit_length()
-                hi += d.bit_length()
-            if not (lo <= self.total <= hi):
+            # All cells of an X-Sum line share a row/column, so digits are distinct.
+            states = {(1 << (x - 1), x)}
+            for cell in span[1:]:
+                nxt = set()
+                for mask, total in states:
+                    for v in bits(st.dom[cell]):
+                        if mask >> (v - 1) & 1:
+                            continue
+                        nxt.add((mask | (1 << (v - 1)), total + v))
+                states = nxt
+                if not states:
+                    return False
+            return any(total == self.total for _mask, total in states)
+
+        for x in bits(st.dom[first]):
+            if not feasible(x):
                 changed |= st.elim(first, x, reason)
         return changed
 
