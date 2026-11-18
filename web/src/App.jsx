@@ -1147,18 +1147,21 @@ export default function App() {
           <>
             <PageHead
               title={analysis?.puzzle?.title || (phase !== "idle" ? phaseLabel : t("page.waiting"))}
-              description={analysis ? `${analysis.puzzle.author || ""} · ${t("page.givens", { n: analysis.puzzle.givens.filter(Boolean).length })}${isSolved ? ` · ${statusLabel(analysis.status)}` : ""}` : (phaseHint || t("empty.solve"))}
+              description={analysis ? (
+                <span>
+                  {analysis.puzzle.author || ""} · {t("page.givens", { n: analysis.puzzle.givens.filter(Boolean).length })}
+                  {(analysis.source_url || target) && (
+                    <> · <a
+                      href={analysis.source_url || target}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline-offset-4 hover:text-foreground hover:underline"
+                    >{t("page.original")} ↗</a></>
+                  )}
+                  {isSolved ? ` · ${statusLabel(analysis.status)}` : ""}
+                </span>
+              ) : (phaseHint || t("empty.solve"))}
               badges={analysis ? <><Badge variant="outline">{n}×{n}</Badge><Badge variant={isSolved ? "success" : "outline"}>{statusLabel(analysis.status)}</Badge></> : (phase !== "idle" ? <Badge variant="outline">{phaseLabel}</Badge> : null)}
-              actions={analysis && (analysis.source_url || target) ? (
-                <a
-                  href={analysis.source_url || target}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-                >
-                  {t("page.original")} ↗
-                </a>
-              ) : null}
             />
             {phase !== "idle" && phase !== "done" && (
               <div className="mb-5 rounded-lg border bg-card px-3 py-2.5">
