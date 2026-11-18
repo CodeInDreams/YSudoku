@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import threading
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -346,11 +347,24 @@ class Handler(BaseHTTPRequestHandler):
                         if key:
                             store.delete_layer(key, "frames")
                         directory = str(store.frames_dir(key)) if key else None
-                        result = live.build(str(body.get("url") or ""),
-                                            body.get("steps") or [],
-                                            directory=directory, session=key or None)
-                        if key and digest:
-                            store.set_frames_hash(key, digest)
+                        if key:
+                            def _build():
+                                try:
+                                    live.build(str(body.get("url") or ""),
+                                               body.get("steps") or [],
+                                               directory=directory, session=key)
+                                    if digest:
+                                        store.set_frames_hash(key, digest)
+                                except Exception as exc:  # noqa: BLE001
+                                    print(f"frame build failed: {exc}", flush=True)
+                            threading.Thread(target=_build, daemon=True).start()
+                            result = {"ok": True, "session": key, "building": True}
+                        else:
+                            result = live.build(str(body.get("url") or ""),
+                                                body.get("steps") or [],
+                                                directory=directory, session=None)
+                            if digest:
+                                store.set_frames_hash(key, digest)
                 elif urlparse(self.path).path == "/api/live/start":
                     result = live.start(str(body.get("url") or ""))
                 else:

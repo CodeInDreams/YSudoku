@@ -540,9 +540,10 @@ async function setCellValue(cell, value) {
   await page.waitForTimeout(15);
 }
 
-async function ensureCellValue(cell, value) {
+async function ensureCellValue(cell, value, known = null) {
+  if (known && known.values[cell] === Number(value)) return true;
   for (let attempt = 0; attempt < 4; attempt++) {
-    const now = await readBoard();
+    const now = attempt === 0 && known ? known : await readBoard();
     if (now.values[cell] === Number(value)) return true;
     try { await clearCellValue(cell); } catch { /* ignore */ }
     try { await setCellValue(cell, value); } catch { /* retry */ }
@@ -574,7 +575,7 @@ async function buildSession(url, steps, session, targetDir) {
     let actual = await readBoard();
     for (const [cell, value] of expected.entries()) {
       if (actual.values[cell] !== value) {
-        const ok = await ensureCellValue(cell, value);
+        const ok = await ensureCellValue(cell, value, actual);
         if (!ok) console.error(JSON.stringify({event:"restore-warning", cell, value}));
       }
     }
@@ -595,7 +596,7 @@ async function buildSession(url, steps, session, targetDir) {
     }
     for (const [cell, value] of expected.entries()) {
       if (actual.values[cell] !== value) {
-        const ok = await ensureCellValue(cell, value);
+        const ok = await ensureCellValue(cell, value, actual);
         if (!ok) console.error(JSON.stringify({event:"final-restore-warning", cell, value}));
       }
     }
