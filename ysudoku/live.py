@@ -123,7 +123,8 @@ def build(url: str, steps: list[list[dict]], directory: str | None = None,
 
 def grid(session: str | None = None) -> dict | None:
     ensure()
-    return json.loads(_request("/grid", timeout=10))
+    suffix = f"?session={session}" if session else ""
+    return json.loads(_request(f"/grid{suffix}", timeout=10))
 
 
 def frame(session: str | None = None, step: int | str | None = None) -> bytes:

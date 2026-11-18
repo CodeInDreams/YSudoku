@@ -239,7 +239,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/live/grid":
             try:
-                self._send(200, json.dumps(live.grid()).encode(), "application/json")
+                query = parse_qs(urlparse(self.path).query)
+                self._send(200, json.dumps(live.grid((query.get("session") or [None])[0])).encode(), "application/json")
             except Exception as exc:  # noqa: BLE001
                 self._send(500, json.dumps({"error": str(exc)}).encode(), "application/json")
             return

@@ -22,6 +22,7 @@ let page = null;
 let puzzleUrl = "";
 let board = null;
 let lastRect = null;
+const sessionRects = new Map();
 let latest = null;
 let work = Promise.resolve();
 let ledger = new Map();  // cell -> { digit: number, corners: Set<number> }
@@ -152,6 +153,7 @@ async function open(url, logicalN = 0) {
                  imageWidth: fullGrid.width, imageHeight: fullGrid.height };
   board = { box, grid, fullGrid, rect, n };
   lastRect = rect;
+  if (board.session) sessionRects.set(board.session, rect);
   const initial = await readBoard();
   valueState = new Map();
   markState = new Map();
@@ -565,6 +567,7 @@ async function ensureCellValue(cell, value, known = null) {
 
 async function buildSession(url, steps, session, targetDir, size = 0) {
   await open(url, size);
+  if (session) { board.session = session; sessionRects.set(session, board.rect); }
   const dir = targetDir || path.join(process.cwd(), ".cache", "frames", session);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "-1.png"), await shot());
@@ -638,7 +641,8 @@ const server = http.createServer((req, res) => {
                             n: board?.n || 0, idle_for: Math.round((Date.now() - lastUsed) / 1000) });
   }
   if (req.method === "GET" && url.pathname === "/grid") {
-    return json(res, 200, board?.rect || lastRect || null);
+    const session = url.searchParams.get("session");
+    return json(res, 200, (session && sessionRects.get(session)) || board?.rect || lastRect || null);
   }
   if (req.method === "GET" && url.pathname === "/state") {
     return readBoard().then((state) => json(res, 200, state)).catch((err) => json(res, 500, { error: String(err?.message || err) }));
