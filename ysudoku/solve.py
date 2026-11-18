@@ -116,6 +116,19 @@ class Solver:
             return self._commit(events, pre_dom, pre_vals)
         return None
 
+    def _constraint_gain(self, constraint):
+        copy = self.state.copy()
+        copy.begin()
+        try:
+            constraint.prune(copy)
+        except Contradiction:
+            copy.rollback()
+            return (10_000, 0)
+        events = copy.end()
+        copies = sum(1 for e in events if e.kind == "place")
+        elims = sum(1 for e in events if e.kind == "elim")
+        return (copies * 50 + elims, len(events))
+
     def next_step(self):
         # Explicit user/predicate constraints are authoritative and run first.
         for constraint in self.constraints:
@@ -151,10 +164,17 @@ class Solver:
             return (-overlap, smallest)
 
         ordered = sorted(self.constraints, key=constraint_key)
+        best = None
+        best_gain = (-1, -1)
         for constraint in ordered:
             if getattr(constraint, "kind", "") == "custom":
                 continue
-            result = self._constraint_step(constraint)
+            gain = self._constraint_gain(constraint)
+            if gain > best_gain:
+                best_gain = gain
+                best = constraint
+        if best is not None:
+            result = self._constraint_step(best)
             if isinstance(result, tuple):
                 return result
             if result is not None:
