@@ -558,7 +558,9 @@ async function buildSession(url, steps, session, targetDir) {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "-1.png"), await shot());
   try {
+  const initialBoard = await readBoard();
   let expected = new Map();
+  initialBoard.values.forEach((value, cell) => { if (value) expected.set(cell, value); });
   for (let i = 0; i < steps.length; i++) {
     let authoritative = false;
     for (const action of steps[i] || []) {
