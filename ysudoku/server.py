@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import threading
+
+_BUILDING: set[str] = set()
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -356,7 +358,10 @@ class Handler(BaseHTTPRequestHandler):
                         if key:
                             store.delete_layer(key, "frames")
                         directory = str(store.frames_dir(key)) if key else None
-                        if key:
+                        if key and key in _BUILDING:
+                            result = {"ok": True, "session": key, "building": True}
+                        elif key:
+                            _BUILDING.add(key)
                             def _build():
                                 try:
                                     live.build(str(body.get("url") or ""),
@@ -367,6 +372,8 @@ class Handler(BaseHTTPRequestHandler):
                                         store.set_frames_hash(key, digest)
                                 except Exception as exc:  # noqa: BLE001
                                     print(f"frame build failed: {exc}", flush=True)
+                                finally:
+                                    _BUILDING.discard(key)
                             threading.Thread(target=_build, daemon=True).start()
                             result = {"ok": True, "session": key, "building": True}
                         else:
