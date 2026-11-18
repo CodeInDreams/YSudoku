@@ -215,6 +215,20 @@ class Arrow(Constraint):
             reach = {s + v for s in reach for v in bits(st.dom[cell])}
         circle_mask = st.dom[self.circle]
         reachable = {s for s in reach if circle_mask >> (s - 1) & 1}
+
+        # Arm cells sharing a row/column/box are distinct; their sum has a
+        # lower bound 1+2+...+k even when the plain sum allows repeats.
+        arm = self.arm
+        shared = None
+        for unit in st.units:
+            members = [c for c in arm if c in set(unit.cells)]
+            if len(members) == len(arm):
+                shared = unit
+                break
+        if shared is not None:
+            k = len(arm)
+            reachable = {s for s in reachable if s >= k * (k + 1) // 2}
+
         if not reachable:
             raise Contradiction("arrow has no feasible sum")
         keep = 0
@@ -229,11 +243,7 @@ class Arrow(Constraint):
                 other_sums = {s + v for s in other_sums for v in bits(st.dom[other])}
             allowed = 0
             for v in bits(st.dom[cell]):
-                if any(
-                    (v + s) in possible
-                    for s in other_sums
-                    for possible in [{x for x in reachable}]
-                ):
+                if any((v + s) in reachable for s in other_sums):
                     allowed |= 1 << (v - 1)
             changed |= st.restrict(cell, allowed, reason)
         return changed

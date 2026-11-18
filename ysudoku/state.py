@@ -113,8 +113,15 @@ class State:
 
     # ------------------------------------------------------------- mutation
     def begin(self) -> None:
+        self._snapshot = (list(self.dom), list(self.vals))
         self.events = []
         self.record = True
+
+    def rollback(self) -> None:
+        if getattr(self, "_snapshot", None) is not None:
+            self.dom, self.vals = list(self._snapshot[0]), list(self._snapshot[1])
+        self.events = []
+        self.record = False
 
     def end(self) -> list[Event]:
         self.record = False
