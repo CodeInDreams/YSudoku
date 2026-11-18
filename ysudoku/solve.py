@@ -657,6 +657,8 @@ class Solver:
         return step
 
     def _v_colour_step(self):
+        if getattr(self, "_v_colour_done", False):
+            return None
         from .v_colour_pattern import target_exclusions
         from . import palette as pal
         pairs = [c for c in self.constraints
@@ -692,6 +694,13 @@ class Solver:
                     step = self._commit(events, pre_dom, pre_vals)
                     if step is None:
                         continue
+                    self._v_colour_done = True
+                    from . import palette as pal
+                    left, right = pal.pair_colours(0)
+                    step.visual["colours"] = [
+                        {"cells": a, "colour": left},
+                        {"cells": b, "colour": right},
+                    ]
                     step.title = "V 颜色类联合"
                     step.detail = (f"两组 V + anti 联合：{a} / {b} 覆盖 1–4，"
                                    f"R{target // self.state.n + 1}C{target % self.state.n + 1} 排除 1–4。")
