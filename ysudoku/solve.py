@@ -356,6 +356,22 @@ class Solver:
                 try: self.on_step(check)
                 except Exception: pass
 
+        refuted = Step(
+            index=len(self.steps), technique="contradiction", tier=4,
+            title="反证推翻",
+            detail=f"反证推翻：假设 {name} = {value} 的所有直接推导都导致矛盾，假设不成立。",
+            events=[], visual={"focus": [], "premise": [],
+                               "groups": [{"cells": [cell], "kind": "assumption"}],
+                               "links": [], "chips": [],
+                               "assumption": {"cells": [cell],
+                                              "label": f"反证推翻：假设 {name}={value}"}},
+            branch=True)
+        refuted.pre_dom, refuted.pre_vals = pre_dom, pre_vals
+        refuted.candidates = []
+        self.steps.append(refuted)
+        if self.on_step:
+            try: self.on_step(refuted)
+            except Exception: pass
         revert = Step(
             index=len(self.steps), technique="contradiction", tier=4,
             title="反证回退", detail=f"反证回退：撤销假设 {name} = {value}。",
@@ -387,7 +403,7 @@ class Solver:
         step = self._commit(events, pre_dom, pre_vals)
         if step is None:
             return None
-        step.title = "反证推翻"
+        step.title = "反证结论"
         self.steps.append(step)
         if self.on_step:
             try: self.on_step(step)

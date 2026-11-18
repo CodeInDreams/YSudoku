@@ -561,11 +561,18 @@ async function buildSession(url, steps, session, targetDir) {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "-1.png"), await shot());
   try {
-  const expected = new Map();
+  let expected = new Map();
   for (let i = 0; i < steps.length; i++) {
+    let authoritative = false;
     for (const action of steps[i] || []) {
       if (action.op === "place") expected.set(action.cell, Number(action.value));
+      if (["undo", "redo", "undo_to_snapshot", "reload_base"].includes(action.op)) authoritative = true;
       await act(action);
+    }
+    if (authoritative) {
+      const base = await readBoard();
+      expected = new Map();
+      base.values.forEach((value, cell) => { if (value) expected.set(cell, value); });
     }
     // One reconciliation pass per step: missing, wrong, then stray values.
     let actual = await readBoard();
