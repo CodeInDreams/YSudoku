@@ -614,6 +614,7 @@ export default function App() {
       for (let i = 0; i < text.length; i++) { hash ^= text.charCodeAt(i); hash = Math.imul(hash, 16777619); }
       const data = await postJson("/api/live/build", {
         url: nextAnalysis.source_url || "",
+        size: nextAnalysis.puzzle?.size || 0,
         steps: actions,
         key: nextAnalysis.storage?.key || "",
         steps_hash: (hash >>> 0).toString(16),

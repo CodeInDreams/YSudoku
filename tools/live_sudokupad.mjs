@@ -21,6 +21,7 @@ let context = null;
 let page = null;
 let puzzleUrl = "";
 let board = null;
+let lastRect = null;
 let latest = null;
 let work = Promise.resolve();
 let ledger = new Map();  // cell -> { digit: number, corners: Set<number> }
@@ -48,7 +49,7 @@ setInterval(async () => {
   if (Date.now() - lastUsed > IDLE_MS) await closeBrowser();
 }, CHECK_MS).unref();
 
-async function open(url) {
+async function open(url, logicalN = 0) {
   if (!browser) {
     browser = await chromium.launch({
       headless: true,
@@ -132,7 +133,7 @@ async function open(url) {
   const viewBox = await page.locator("svg.boardsvg").getAttribute("viewBox");
   const parts = (viewBox || "-16 -16 608 608").trim().split(/\s+/).map(Number);
   const units = parts[2] || 608;
-  const n = Math.max(1, Math.round((units - 32) / 64));
+  const n = logicalN || Math.max(1, Math.round((units - 32) / 64));
   const scale = box.width / units;
   const grid = {
     x: box.x - (parts[0] || 0) * scale,
@@ -150,6 +151,7 @@ async function open(url) {
                  width: grid.width, height: grid.height,
                  imageWidth: fullGrid.width, imageHeight: fullGrid.height };
   board = { box, grid, fullGrid, rect, n };
+  lastRect = rect;
   const initial = await readBoard();
   valueState = new Map();
   markState = new Map();
@@ -561,8 +563,8 @@ async function ensureCellValue(cell, value, known = null) {
   return final.values[cell] === Number(value);
 }
 
-async function buildSession(url, steps, session, targetDir) {
-  await open(url);
+async function buildSession(url, steps, session, targetDir, size = 0) {
+  await open(url, size);
   const dir = targetDir || path.join(process.cwd(), ".cache", "frames", session);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "-1.png"), await shot());
@@ -636,7 +638,7 @@ const server = http.createServer((req, res) => {
                             n: board?.n || 0, idle_for: Math.round((Date.now() - lastUsed) / 1000) });
   }
   if (req.method === "GET" && url.pathname === "/grid") {
-    return json(res, 200, board?.rect || null);
+    return json(res, 200, board?.rect || lastRect || null);
   }
   if (req.method === "GET" && url.pathname === "/state") {
     return readBoard().then((state) => json(res, 200, state)).catch((err) => json(res, 500, { error: String(err?.message || err) }));
@@ -672,8 +674,8 @@ const server = http.createServer((req, res) => {
         const steps = body.steps || [];
         const targetDir = body.dir || null;
         work = work.then(
-          () => buildSession(body.url, steps, session, targetDir),
-          () => buildSession(body.url, steps, session, targetDir),
+          () => buildSession(body.url, steps, session, targetDir, Number(body.size) || 0),
+          () => buildSession(body.url, steps, session, targetDir, Number(body.size) || 0),
         ).catch(() => {});
         return json(res, 200, { ok: true, session, count: steps.length });
       }

@@ -236,6 +236,12 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/live/health":
             self._send(200, json.dumps({"ok": live._healthy()}).encode(), "application/json")
             return
+        if path == "/api/live/grid":
+            try:
+                self._send(200, json.dumps(live.grid()).encode(), "application/json")
+            except Exception as exc:  # noqa: BLE001
+                self._send(500, json.dumps({"error": str(exc)}).encode(), "application/json")
+            return
         if path == "/api/live/frame":
             try:
                 query = parse_qs(urlparse(self.path).query)
@@ -353,7 +359,8 @@ class Handler(BaseHTTPRequestHandler):
                                 try:
                                     live.build(str(body.get("url") or ""),
                                                body.get("steps") or [],
-                                               directory=directory, session=key)
+                                               directory=directory, session=key,
+                                               size=int(body.get("size") or 0))
                                     if digest:
                                         store.set_frames_hash(key, digest)
                                 except Exception as exc:  # noqa: BLE001
@@ -363,7 +370,8 @@ class Handler(BaseHTTPRequestHandler):
                         else:
                             result = live.build(str(body.get("url") or ""),
                                                 body.get("steps") or [],
-                                                directory=directory, session=None)
+                                                directory=directory, session=None,
+                                                size=int(body.get("size") or 0))
                             if digest:
                                 store.set_frames_hash(key, digest)
                 elif urlparse(self.path).path == "/api/live/start":
