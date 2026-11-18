@@ -49,6 +49,10 @@ class Analysis:
                 "title": self.puzzle.title,
                 "author": self.puzzle.author,
                 "size": n,
+                "canvas_size": max(
+                    [len((self.puzzle.raw or {}).get("cells") or [])]
+                    + [len(row) for row in ((self.puzzle.raw or {}).get("cells") or [])]
+                ) or n,
                 "rules": self.puzzle.rules_text,
                 "givens": [self.puzzle.givens.get(c, 0) for c in range(n * n)],
                 "regions": self.puzzle.regions,

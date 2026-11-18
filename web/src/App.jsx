@@ -864,7 +864,7 @@ export default function App() {
               onLoad={() => setReady(true)} />
           )}
           {overlay && ready && !deleted && (
-            <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox={`0 0 ${n} ${n}`} preserveAspectRatio="none">
+            <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox={`0 0 ${analysis?.puzzle?.canvas_size || n} ${analysis?.puzzle?.canvas_size || n}`} preserveAspectRatio="none">
               {(overlay.visual.colours || []).map((item, i) => item.cells?.map((cell) => (
                 <rect key={`c-${i}-${cell}`} x={cell % n} y={Math.floor(cell / n)} width="1" height="1"
                   fill={item.hex || "#8ab4e8"} opacity="0.45" />
