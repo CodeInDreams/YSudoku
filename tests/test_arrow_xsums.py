@@ -49,3 +49,43 @@ class ArrowXsumTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CompileArrowTest(unittest.TestCase):
+    def test_nine_arrows_become_nine_xsums(self):
+        from ysudoku.model import parse_puzzle
+        from ysudoku import rules
+
+        underlays = [
+            {"center": [-0.667, 5.5], "text": "10"},
+            {"center": [3.5, -0.5], "text": "12"},
+            {"center": [5.5, 9.33], "text": "19"},
+        ]
+        arrows = [
+            arrow([[-0.2, 5.5], [0.2, 5.5]]),
+            arrow([[-0.2, 5.2], [0.2, 4.8]]),
+            arrow([[-0.2, 5.8], [0.2, 6.2]]),
+            arrow([[3.5, -0.2], [3.5, 0.2]]),
+            arrow([[3.2, -0.2], [2.8, 0.2]]),
+            arrow([[3.8, -0.2], [4.2, 0.2]]),
+            arrow([[5.5, 9.2], [5.5, 8.8]]),
+            arrow([[5.2, 9.2], [4.8, 8.8]]),
+            arrow([[5.8, 9.2], [6.2, 8.8]]),
+        ]
+        regions = [[[br * 3 + r + 1, bc * 3 + c + 1] for r in range(3) for c in range(3)]
+                   for br in range(3) for bc in range(3)]
+        data = {
+            "cells": [[{} for _ in range(9)] for _ in range(9)],
+            "regions": regions,
+            "underlays": underlays,
+            "arrows": arrows,
+            "metadata": {
+                "rules": "Clues outside the grid are omni-directional x-sums.",
+            },
+        }
+        puzzle = parse_puzzle(data)
+        spec = rules.heuristic_spec(puzzle, rules.build_inventory(puzzle))
+        compiled = rules.compile_spec(puzzle, rules.build_inventory(puzzle), spec)
+        sequence_rules = [r for r in compiled.resolved
+                          if r.get("kind") == "x_sums" and r.get("params", {}).get("cells")]
+        self.assertEqual(len(sequence_rules), 9)
