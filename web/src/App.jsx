@@ -866,7 +866,8 @@ export default function App() {
         <div className="ml-auto flex items-center gap-1.5">{phase === "rendering" && <Badge variant="outline">{phaseLabel}</Badge>}<Badge variant="outline">{t("board.readonly")}</Badge><Badge variant="outline">{t("board.readonly.badge")}</Badge></div>
       </CardHeader>
       <CardContent className="p-5">
-        <div className="relative mx-auto flex aspect-square w-full max-w-[540px] items-center justify-center overflow-hidden rounded-[2px] border bg-white dark:border-border dark:bg-neutral-800">
+        <div className="relative mx-auto flex w-full max-w-[540px] items-center justify-center overflow-hidden rounded-[2px] border bg-white dark:border-border dark:bg-neutral-800"
+          style={{ aspectRatio: gridRect ? `${gridRect.imageWidth} / ${gridRect.imageHeight}` : "1 / 1" }}>
           {!ready && !deleted && <div className="absolute inset-0 z-10 grid place-items-center gap-2 bg-white/80 text-xs text-slate-500 dark:bg-neutral-800/90 dark:text-neutral-300"><Loader2 className="h-5 w-5 animate-spin text-primary" />{phase === "rendering" ? t("phase.rendering") : t("board.loading")}</div>}
           {deleted && (
             <div className="absolute inset-0 z-20 grid place-items-center bg-background/90 p-6 text-center">
