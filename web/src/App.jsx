@@ -879,7 +879,7 @@ export default function App() {
           )}
           {frameSrc && !deleted && (
             <img src={frameSrc} alt="SudokuPad"
-              className={`h-full w-full object-contain transition-opacity ${ready ? "opacity-100" : "opacity-0"}`}
+              className={`h-full w-full object-fill transition-opacity ${ready ? "opacity-100" : "opacity-0"}`}
               style={{ filter: dark ? "brightness(0.8) contrast(1.04)" : undefined }}
               onLoad={() => setReady(true)} />
           )}
