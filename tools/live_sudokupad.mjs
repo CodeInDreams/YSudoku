@@ -467,6 +467,7 @@ async function act(action) {
       await page.waitForTimeout(20);
     }
   } else if (action.op === "place") {
+    await clearSelection();
     const r = Math.floor(action.cell / board.n);
     const c = action.cell % board.n;
     const [x, y] = await cellPoint(r, c);
@@ -477,6 +478,7 @@ async function act(action) {
     markState.delete(action.cell);
     await page.waitForTimeout(20);
   } else if (action.op === "candidates") {
+    await clearSelection();
     const r = Math.floor(action.cell / board.n);
     const c = action.cell % board.n;
     const [x, y] = await cellPoint(r, c);
@@ -517,6 +519,7 @@ async function act(action) {
 }
 
 async function clearCellValue(cell) {
+  await clearSelection();
   const r = Math.floor(cell / board.n);
   const c = cell % board.n;
   const [x, y] = await cellPoint(r, c);
@@ -529,6 +532,7 @@ async function clearCellValue(cell) {
 }
 
 async function setCellValue(cell, value) {
+  await clearSelection();
   const r = Math.floor(cell / board.n);
   const c = cell % board.n;
   const [x, y] = await cellPoint(r, c);
