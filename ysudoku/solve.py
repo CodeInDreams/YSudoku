@@ -323,29 +323,45 @@ class Solver:
         child = self.state.copy()
         child.place(cell, value, Reason("contradiction", {
             "cell": cell, "value": value, "phase": "start"}))
-        reasoning = Step(
-            index=len(self.steps), technique="contradiction", tier=4,
-            title="反证推理",
-            detail=(f"反证推理：在假设 {name} = {value} 下，按规则实际执行：\n"
-                    + "\n".join(
-                        (f"→ {cell_name(e.cell, self.state.n)} = {e.value}（{e.reason.kind}）"
-                         if e.kind == "place" else
-                         f"→ {cell_name(e.cell, self.state.n)} ≠ {e.value}（{e.reason.kind}）")
-                        for e in trace if e.kind == "place" or e.reason.kind != "unit_peer")),
-            events=list(trace),
-            visual={"focus": [], "premise": [],
-                    "groups": [{"cells": [cell], "kind": "assumption"}],
-                    "links": [], "chips": [],
-                    "assumption": {"cells": [cell],
-                                   "label": f"反证推理：假设 {name}={value}"}},
-            branch=True)
-        reasoning.pre_dom = list(child.dom)
-        reasoning.pre_vals = list(child.vals)
-        reasoning.candidates = self._candidates(list(trace), reasoning.pre_dom)
-        self.steps.append(reasoning)
-        if self.on_step:
-            try: self.on_step(reasoning)
-            except Exception: pass
+        chunks = [list(trace)[i:i + 6] for i in range(0, len(trace), 6)]
+        run_state = child
+        for index, chunk in enumerate(chunks):
+            if not chunk:
+                continue
+            pre_dom = list(run_state.dom)
+            pre_vals = list(run_state.vals)
+            lines = [f"反证推理（{index + 1}/{len(chunks)}）：在假设 {name} = {value} 下："]
+            for event in chunk:
+                if event.kind == "place":
+                    lines.append(f"→ {cell_name(event.cell, self.state.n)} = {event.value}（{event.reason.kind}）")
+                elif event.reason.kind != "unit_peer":
+                    lines.append(f"→ {cell_name(event.cell, self.state.n)} ≠ {event.value}（{event.reason.kind}）")
+            if index == len(chunks) - 1:
+                lines.append(f"出现矛盾：{cause}。")
+            reasoning = Step(
+                index=len(self.steps), technique="contradiction", tier=4,
+                title=f"反证推理 {index + 1}/{len(chunks)}",
+                detail="\n".join(lines), events=chunk,
+                visual={"focus": [], "premise": [],
+                        "groups": [{"cells": [cell], "kind": "assumption"}],
+                        "links": [], "chips": [],
+                        "assumption": {"cells": [cell],
+                                       "label": f"反证推理：假设 {name}={value}"}},
+                branch=True)
+            reasoning.pre_dom = pre_dom
+            reasoning.pre_vals = pre_vals
+            reasoning.candidates = self._candidates(chunk, pre_dom)
+            self.steps.append(reasoning)
+            if self.on_step:
+                try: self.on_step(reasoning)
+                except Exception: pass
+            for event in chunk:
+                bit = 1 << (event.value - 1)
+                if event.kind == "place":
+                    run_state.vals[event.cell] = event.value
+                    run_state.dom[event.cell] = bit
+                else:
+                    run_state.dom[event.cell] &= ~bit
 
         refuted = Step(
             index=len(self.steps), technique="contradiction", tier=4,
