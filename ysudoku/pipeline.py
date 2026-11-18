@@ -221,6 +221,7 @@ def analyze(
     demo: bool = False,
     use_global: bool = False,
     rule_prompt: str = "",
+    rule_mode: str = "auto",
     global_time_limit: float = 60.0,
     notes: str = "",
     on_rules=None,
@@ -245,7 +246,7 @@ def analyze(
     text_low = (puzzle.rules_text or "").lower()
     arrow_xsum = (("x-sum" in text_low or "x sum" in text_low or "xsum" in text_low)
                   and bool((puzzle.raw or {}).get("arrows")))
-    if arrow_xsum:
+    if arrow_xsum and rule_mode != "llm":
         spec_override = None
         use_llm = False
     fingerprint = rulecache.fingerprint(puzzle, inventory)

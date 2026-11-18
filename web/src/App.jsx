@@ -1241,7 +1241,7 @@ export default function App() {
                       <button key={option.id} type="button"
                         onClick={() => {
                           setConflictChoice(option.id);
-                          streamSolve({ url: target, llm: option.id === "llm", audit, chains: true, demo: false, rule_prompt: rulePrompt }, target);
+                          streamSolve({ url: target, llm: option.id === "llm", audit, chains: true, demo: false, rule_prompt: rulePrompt, rule_mode: option.id }, target);
                         }}
                         className={`rounded-lg border px-3 py-2.5 text-left text-sm transition-colors hover:border-primary ${index === 0 ? "border-primary bg-primary/5" : "bg-background"}`}>
                         <span className="font-medium">{option.label}</span>
