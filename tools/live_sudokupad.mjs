@@ -119,6 +119,13 @@ async function open(url, logicalN = 0) {
     await page.waitForTimeout(900);
   } catch { /* puzzle already started or a resume overlay */ }
   await page.waitForSelector("svg.boardsvg", { timeout: 30000 });
+  let lastView = "";
+  for (let i = 0; i < 20; i++) {
+    const current = await page.locator("svg.boardsvg").getAttribute("viewBox");
+    if (current && current === lastView) break;
+    lastView = current;
+    await page.waitForTimeout(250);
+  }
   await page.waitForTimeout(300);
   if (!started) {
     // Some reopen paths show a play/resume overlay instead of "Start Puzzle";
