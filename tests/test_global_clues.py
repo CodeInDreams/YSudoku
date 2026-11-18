@@ -15,6 +15,7 @@ class GlobalClueTest(unittest.TestCase):
         analysis = analyze(
             str(ROOT / "fixtures" / "double-take.json"),
             use_llm=False,
+            use_global=True,
             global_time_limit=120,
         )
         self.assertEqual(analysis.status, "solved-global")

@@ -197,7 +197,7 @@ def analyze(
     allow_chains: bool = False,
     chaos_time_limit: float = 8.0,
     demo: bool = False,
-    use_global: bool = True,
+    use_global: bool = False,
     global_time_limit: float = 60.0,
     notes: str = "",
     on_rules=None,
