@@ -301,7 +301,29 @@ class Solver:
                 for v in range(1, n + 1):
                     if v != e.value and (e.cell, v) in last_elim and last_elim[(e.cell, v)] < idx:
                         stack.append(last_elim[(e.cell, v)])
-        return [trace[i] for i in sorted(needed)] or list(trace)
+        selected = [trace[i] for i in sorted(needed)]
+        selected = [e for e in selected if not (
+            e.kind == "elim" and e.reason.kind == "unit_peer"
+            and e.reason.data.get("by") == assumption_cell)]
+        return selected or list(trace)
+
+    def _scope_note(self, chunk):
+        if not chunk:
+            return ""
+        data = chunk[0].reason.data or {}
+        kind = chunk[0].reason.kind
+        if kind == "unit_peer" and data.get("by") is not None:
+            return f"理由：{cell_name(data['by'], self.state.n)} 已填，同区排除。"
+        if kind == "xv":
+            return f"参与：{cell_name(data['a'], self.state.n)} / {cell_name(data['b'], self.state.n)}（V/X 配对）。"
+        if kind == "arrow":
+            circle = data.get("circle")
+            arm = data.get("arm") or []
+            return ("参与：圆 " + cell_name(circle, self.state.n) + "，箭身 "
+                    + "、".join(cell_name(c, self.state.n) for c in arm) + "。")
+        if kind in ("german_whisper", "dutch_whisper"):
+            return f"参与：{cell_name(data['a'], self.state.n)} / {cell_name(data['b'], self.state.n)}。"
+        return ""
 
     def _group_events(self, events):
         groups = []
@@ -403,8 +425,11 @@ class Solver:
             for event in chunk:
                 if event.kind == "place":
                     lines.append(f"→ {cell_name(event.cell, self.state.n)} = {event.value}（{event.reason.kind}）")
-                elif event.reason.kind != "unit_peer":
+                else:
                     lines.append(f"→ {cell_name(event.cell, self.state.n)} ≠ {event.value}（{event.reason.kind}）")
+            note = self._scope_note(chunk)
+            if note:
+                lines.append(note)
             if index == len(chunks) - 1:
                 lines.append(f"出现矛盾：{cause}。")
             reasoning = Step(
