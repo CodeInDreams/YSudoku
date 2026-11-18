@@ -286,43 +286,53 @@ class Solver:
                 last_elim[(e.cell, e.value)] = idx
 
         needed = set()
-        stack = [last_elim[(empty, v)] for v in range(1, n + 1) if (empty, v) in last_elim]
-        while stack:
-            idx = stack.pop()
-            if idx in needed:
-                continue
+
+        def scope_cells(event):
+            data = event.reason.data or {}
+            cells = set()
+            for key in ("cells", "unit_cells", "arm"):
+                for item in data.get(key) or []:
+                    if isinstance(item, int):
+                        cells.add(item)
+            for key in ("a", "b", "by", "circle", "cell"):
+                item = data.get(key)
+                if isinstance(item, int):
+                    cells.add(item)
+            return cells
+
+        def require(idx):
+            if idx in needed or idx < 0 or idx >= len(trace):
+                return
             needed.add(idx)
             e = trace[idx]
             if e.kind == "elim" and e.reason.kind == "unit_peer":
                 by = e.reason.data.get("by")
-                if by in last_place:
-                    stack.append(last_place[by])
-            elif e.kind == "place" and e.reason.kind in ("probe_single", "naked_single"):
-                for v in range(1, n + 1):
-                    if v != e.value and (e.cell, v) in last_elim and last_elim[(e.cell, v)] < idx:
-                        stack.append(last_elim[(e.cell, v)])
+                if by in last_place and last_place[by] < idx:
+                    require(last_place[by])
+                return
+            if e.kind == "elim":
+                scope = scope_cells(e)
+                for j in range(idx):
+                    if trace[j].cell in scope:
+                        require(j)
+                return
+            if e.kind == "place":
+                if e.reason.kind in ("probe_single", "naked_single"):
+                    for v in range(1, n + 1):
+                        if v != e.value and (e.cell, v) in last_elim and last_elim[(e.cell, v)] < idx:
+                            require(last_elim[(e.cell, v)])
+                elif e.reason.kind in ("probe_hidden", "hidden_single"):
+                    for c in e.reason.data.get("unit_cells") or []:
+                        if c != e.cell and (c, e.value) in last_elim and last_elim[(c, e.value)] < idx:
+                            require(last_elim[(c, e.value)])
+
+        for v in range(1, n + 1):
+            if (empty, v) in last_elim:
+                require(last_elim[(empty, v)])
         selected = [trace[i] for i in sorted(needed)]
         selected = [e for e in selected if not (
             e.kind == "elim" and e.reason.kind == "unit_peer"
             and e.reason.data.get("by") == assumption_cell)]
-        import json as _json
-        signatures = set()
-        for e in selected:
-            if e.reason.kind not in ("unit_peer", "probe_single", "probe_hidden"):
-                signatures.add((e.reason.kind, _json.dumps(e.reason.data, sort_keys=True)))
-        if signatures:
-            expanded = []
-            for e in trace:
-                sig = (e.reason.kind, _json.dumps(e.reason.data, sort_keys=True))
-                if sig in signatures:
-                    expanded.append(e)
-            if expanded:
-                seen = set()
-                merged = []
-                for e in selected + expanded:
-                    if id(e) not in seen:
-                        seen.add(id(e)); merged.append(e)
-                selected = sorted(merged, key=lambda e: trace.index(e))
         return selected or list(trace)
 
     def _scope_note(self, chunk):
@@ -341,6 +351,45 @@ class Solver:
                     + "、".join(cell_name(c, self.state.n) for c in arm) + "。")
         if kind in ("german_whisper", "dutch_whisper"):
             return f"参与：{cell_name(data['a'], self.state.n)} / {cell_name(data['b'], self.state.n)}。"
+        return ""
+
+    def _why_eliminated(self, event, pre_dom):
+        from itertools import product
+        data = event.reason.data or {}
+        kind = event.reason.kind
+        n = self.state.n
+        values = lambda cell: [v for v in range(1, n + 1) if pre_dom[cell] >> (v - 1) & 1]
+        cell = event.cell
+        value = event.value
+        if kind == "unit_peer" and data.get("by") is not None:
+            return f"{cell_name(data['by'], n)} 已经填入，同区不能再填 {value}。"
+        if kind == "xv":
+            a, b = data.get("a"), data.get("b")
+            other = b if cell == a else a
+            need = int(data.get("sum", 10)) - value
+            allowed = [v for v in values(other) if v == need]
+            return (f"若 {cell_name(cell, n)}={value}，则 {cell_name(other, n)} 必须为 {need}；"
+                    f"当前候选 {values(other)}，{'可行' if allowed else '无交集'}。")
+        if kind == "arrow":
+            circle = data.get("circle")
+            arm = data.get("arm") or []
+            if cell == circle:
+                return (f"箭身 {arm and '、'.join(cell_name(c, n) for c in arm)} 的候选和无法等于 {value}。")
+            others = [c for c in arm if c != cell]
+            circle_values = values(circle)
+            sums = set()
+            for combo in product(*[values(c) for c in others]):
+                total = sum(combo) + value
+                if total in circle_values:
+                    sums.add(total)
+            return (f"若 {cell_name(cell, n)}={value}，箭身可行和需落在圆 {cell_name(circle, n)} 的候选 "
+                    f"{circle_values}；当前{'有' if sums else '没有任何'}匹配和。")
+        if kind in ("german_whisper", "dutch_whisper"):
+            a, b = data.get("a"), data.get("b")
+            other = b if cell == a else a
+            partners = [v for v in values(other) if abs(v - value) >= 5]
+            return (f"若 {cell_name(cell, n)}={value}，{cell_name(other, n)} 需与它差至少 5；"
+                    f"当前候选 {values(other)}，{'有' if partners else '没有'}合法伙伴。")
         return ""
 
     def _group_events(self, events):
@@ -445,6 +494,22 @@ class Solver:
                     lines.append(f"→ {cell_name(event.cell, self.state.n)} = {event.value}（{event.reason.kind}）")
                 else:
                     lines.append(f"→ {cell_name(event.cell, self.state.n)} ≠ {event.value}（{event.reason.kind}）")
+            support_dom = list(pre_dom)
+            for event in chunk:
+                bit = 1 << (event.value - 1)
+                if event.kind == "place":
+                    support_dom[event.cell] = bit
+                else:
+                    support_dom[event.cell] &= ~bit
+            seen_reasons = set()
+            for event in chunk:
+                if event.kind != "elim":
+                    continue
+                why = self._why_eliminated(event, support_dom)
+                key = (event.cell, event.value, event.reason.kind)
+                if why and key not in seen_reasons:
+                    seen_reasons.add(key)
+                    lines.append(f"依据：{why}")
             note = self._scope_note(chunk)
             if note:
                 lines.append(note)
