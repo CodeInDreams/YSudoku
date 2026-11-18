@@ -243,7 +243,7 @@ def _dot_cells(x: float, y: float, n: int) -> list[int]:
     return []
 
 
-def _cell_from_coords(item, n: int) -> int | None:
+def _cell_from_coords(item, n: int, one_based: bool = False) -> int | None:
     if isinstance(item, dict):
         r, c = item.get("r"), item.get("c")
     elif isinstance(item, (list, tuple)) and len(item) == 2:
@@ -252,7 +252,12 @@ def _cell_from_coords(item, n: int) -> int | None:
         return None
     if r is None or c is None:
         return None
-    return int(r) * n + int(c)
+    r, c = int(r), int(c)
+    if one_based:
+        r, c = r - 1, c - 1
+    if r < 0 or c < 0 or r >= n or c >= n:
+        return None
+    return r * n + c
 
 
 def parse_puzzle(data: dict, puzzle_id: str = "") -> Puzzle:
@@ -264,10 +269,15 @@ def parse_puzzle(data: dict, puzzle_id: str = "") -> Puzzle:
     else:
         n = len(cells) or 9
     if len(cells) > n or any(len(row) > n for row in cells):
-        raise ValueError(
-            f"网格数据异常（期望 {n}x{n}，实际 {len(cells)} 行）；"
-            "雾战/带草稿表的题目暂不支持"
-        )
+        # SudokuPad/LMD often pads the playable n x n grid with an outer ring
+        # of rank/outside clues.  Keep only the playable top-left n x n area.
+        if len(cells) >= n and all(len(row) >= n for row in cells[:n]):
+            cells = [row[:n] for row in cells[:n]]
+        else:
+            raise ValueError(
+                f"网格数据异常（期望 {n}x{n}，实际 {len(cells)} 行）；"
+                "雾战/带草稿表的题目暂不支持"
+            )
     meta = data.get("metadata") or {}
 
     givens: dict[int, int] = {}
@@ -282,8 +292,14 @@ def parse_puzzle(data: dict, puzzle_id: str = "") -> Puzzle:
                 continue
 
     regions: list[list[int]] = []
+    one_based = any(
+        (isinstance(item, (list, tuple)) and len(item) == 2
+         and (int(item[0]) == n or int(item[1]) == n))
+        for region in (data.get("regions") or []) for item in region
+    )
     for region in data.get("regions") or []:
-        parsed = [p for p in (_cell_from_coords(item, n) for item in region) if p is not None]
+        parsed = [p for p in (_cell_from_coords(item, n, one_based) for item in region)
+                  if p is not None]
         if parsed:
             regions.append(parsed)
     if not regions:
