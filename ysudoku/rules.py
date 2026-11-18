@@ -223,6 +223,11 @@ def compile_spec(puzzle: Puzzle, elements: list[Element], spec: dict,
             cells = tuple(item["cells"])
             if cells in existing:
                 continue
+            if puzzle.solution:
+                vals = puzzle.solution
+                first = vals[cells[0]]
+                if first <= 0 or sum(vals[c] for c in cells[:first]) != item["total"]:
+                    continue
             clue_index = min(index, max(0, len(puzzle.clues) - 1))
             raw_rules.append({
                 "kind": "x_sums",

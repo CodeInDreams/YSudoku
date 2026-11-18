@@ -62,7 +62,7 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
     analysis = analyze(
         target,
         demo=demo,
-        use_llm=(force_rules or not rules),
+        use_llm=bool(body.get("llm", True)) and (force_rules or not rules),
         spec_override=rules["spec"] if rules and not force_rules else None,
         do_audit=bool(body.get("audit", False)),
         allow_chains=True if demo else bool(body.get("chains", True)),
