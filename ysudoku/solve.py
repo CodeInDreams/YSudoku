@@ -476,7 +476,11 @@ class Solver:
                     continue
                 meaningful = [e for e in trace
                               if e.kind == "place" or e.reason.kind != "unit_peer"]
+                rare = sum(1 for e in meaningful
+                           if e.reason.kind in ("anti_king", "anti_knight",
+                                                "arrow", "german_whisper"))
                 score = (
+                    rare,
                     1 if len(values) == 2 else 0,
                     sum(1 for e in meaningful if e.kind == "place"),
                     sum(1 for e in meaningful if e.kind == "elim"),
@@ -537,16 +541,18 @@ class Solver:
                 else:
                     support_dom[event.cell] &= ~bit
             seen_reasons = set()
+            seen_why = set()
             for event in chunk:
                 if event.kind == "place":
                     why = self._why_placed(event, support_dom)
-                    if why:
+                    if why and why not in seen_why:
+                        seen_why.add(why)
                         lines.append(f"依据：{why}")
                     continue
                 why = self._why_eliminated(event, support_dom)
                 key = (event.cell, event.value, event.reason.kind)
-                if why and key not in seen_reasons:
-                    seen_reasons.add(key)
+                if why and why not in seen_why:
+                    seen_why.add(why)
                     lines.append(f"依据：{why}")
             note = self._scope_note(chunk)
             if note:

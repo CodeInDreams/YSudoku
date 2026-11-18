@@ -172,6 +172,21 @@ def refute_direct_with_trace(st: State, constraints, cell: int, value: int):
         return (False, [], "")
     if not cause:
         empty = [c for c in range(child.n2) if child.dom[c] == 0]
-        cause = f"{empty[0] // child.n + 1}行{empty[0] % child.n + 1}列没有候选" if empty else "约束传播无解"
+        if empty:
+            cause = f"{empty[0] // child.n + 1}行{empty[0] % child.n + 1}列没有候选"
+        else:
+            cause = ""
+            for unit in child.units:
+                for digit in range(1, child.n + 1):
+                    if not any(child.has(c, digit) for c in unit.cells):
+                        cause = f"{unit.label} 没有位置放 {digit}"
+                        break
+                if cause:
+                    break
+            if not cause and child.events:
+                last = child.events[-1]
+                cause = (f"在 R{last.cell // child.n + 1}C{last.cell % child.n + 1} "
+                         f"执行 {last.reason.kind} 后无解")
+            cause = cause or "约束传播无解"
     trace = [e for e in child.events if e.reason.kind != "assumption"]
     return (True, trace, cause)
