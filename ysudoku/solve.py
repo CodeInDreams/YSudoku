@@ -305,6 +305,24 @@ class Solver:
         selected = [e for e in selected if not (
             e.kind == "elim" and e.reason.kind == "unit_peer"
             and e.reason.data.get("by") == assumption_cell)]
+        import json as _json
+        signatures = set()
+        for e in selected:
+            if e.reason.kind not in ("unit_peer", "probe_single", "probe_hidden"):
+                signatures.add((e.reason.kind, _json.dumps(e.reason.data, sort_keys=True)))
+        if signatures:
+            expanded = []
+            for e in trace:
+                sig = (e.reason.kind, _json.dumps(e.reason.data, sort_keys=True))
+                if sig in signatures:
+                    expanded.append(e)
+            if expanded:
+                seen = set()
+                merged = []
+                for e in selected + expanded:
+                    if id(e) not in seen:
+                        seen.add(id(e)); merged.append(e)
+                selected = sorted(merged, key=lambda e: trace.index(e))
         return selected or list(trace)
 
     def _scope_note(self, chunk):
