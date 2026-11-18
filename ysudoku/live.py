@@ -119,6 +119,11 @@ def build(url: str, steps: list[list[dict]], directory: str | None = None,
     return json.loads(_request("/build", payload, timeout=900))
 
 
+def grid(session: str | None = None) -> dict | None:
+    ensure()
+    return json.loads(_request("/grid", timeout=10))
+
+
 def frame(session: str | None = None, step: int | str | None = None) -> bytes:
     ensure()
     if session is not None:

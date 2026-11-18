@@ -358,6 +358,13 @@ export default function App() {
   const persisted = readPersisted();
   const [speed, setSpeed] = useState(() => Number(persisted.speed) || 1100);
   const [session, setSession] = useState(null);
+  useEffect(() => {
+    if (!session) { setGridRect(null); return; }
+    fetch(`/api/live/grid?session=${encodeURIComponent(session)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => setGridRect(data || null))
+      .catch(() => setGridRect(null));
+  }, [session]);
   const [frameSrc, setFrameSrc] = useState("");
   const [frameStep, setFrameStep] = useState(-2);
   const [ready, setReady] = useState(false);
@@ -372,6 +379,7 @@ export default function App() {
   const [notes, setNotes] = useState("");
   const [deleted, setDeleted] = useState(false);
   const [frameErrors, setFrameErrors] = useState(0);
+  const [gridRect, setGridRect] = useState(null);
   const [lang, setLang] = useState(detectLang);
   const [dark, setDark] = useState(() => {
     try { return localStorage.getItem("ysudoku.theme") === "dark"; } catch { return false; }
@@ -864,7 +872,13 @@ export default function App() {
               onLoad={() => setReady(true)} />
           )}
           {overlay && ready && !deleted && (
-            <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox={`0 0 ${analysis?.puzzle?.canvas_size || n} ${analysis?.puzzle?.canvas_size || n}`} preserveAspectRatio="none">
+            <svg className="pointer-events-none absolute" viewBox={`0 0 ${n} ${n}`} preserveAspectRatio="none"
+              style={gridRect ? {
+                left: `${(gridRect.x / gridRect.imageWidth) * 100}%`,
+                top: `${(gridRect.y / gridRect.imageHeight) * 100}%`,
+                width: `${(gridRect.width / gridRect.imageWidth) * 100}%`,
+                height: `${(gridRect.height / gridRect.imageHeight) * 100}%`,
+              } : { inset: 0, width: "100%", height: "100%" }}>
               {(overlay.visual.colours || []).map((item, i) => item.cells?.map((cell) => (
                 <rect key={`c-${i}-${cell}`} x={cell % n} y={Math.floor(cell / n)} width="1" height="1"
                   fill={item.hex || "#8ab4e8"} opacity="0.45" />

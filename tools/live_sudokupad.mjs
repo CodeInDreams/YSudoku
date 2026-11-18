@@ -140,7 +140,17 @@ async function open(url) {
     width: n * 64 * scale,
     height: n * 64 * scale,
   };
-  board = { box, grid, n };
+  const pad = 16 / units;
+  const fullGrid = {
+    x: box.x + box.width * pad,
+    y: box.y + box.height * pad,
+    width: box.width * (1 - 2 * pad),
+    height: box.height * (1 - 2 * pad),
+  };
+  const rect = { x: grid.x - fullGrid.x, y: grid.y - fullGrid.y,
+                 width: grid.width, height: grid.height,
+                 imageWidth: fullGrid.width, imageHeight: fullGrid.height };
+  board = { box, grid, fullGrid, rect, n };
   const initial = await readBoard();
   valueState = new Map();
   markState = new Map();
@@ -625,6 +635,9 @@ const server = http.createServer((req, res) => {
   if (req.method === "GET" && url.pathname === "/health") {
     return json(res, 200, { ok: true, ready: Boolean(page), browser: Boolean(browser),
                             n: board?.n || 0, idle_for: Math.round((Date.now() - lastUsed) / 1000) });
+  }
+  if (req.method === "GET" && url.pathname === "/grid") {
+    return json(res, 200, board?.rect || null);
   }
   if (req.method === "GET" && url.pathname === "/state") {
     return readBoard().then((state) => json(res, 200, state)).catch((err) => json(res, 500, { error: String(err?.message || err) }));
