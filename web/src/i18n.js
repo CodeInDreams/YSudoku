@@ -174,6 +174,7 @@ export const DICT = {
     "help.llm": "Compile SudokuPad rule text and visual elements into structured constraints with an LLM. An official answer, if present, is only used for verification. Turn off to use local heuristics.",
     "help.audit": "After solving, verify each conclusion independently by brute force: assume it is false and check whether the puzzle is still solvable. Slower; off by default.",
     "page.waiting": "No puzzle loaded",
+    "page.original": "Original puzzle",
     "page.givens": "{n} givens",
     "page.open": "Open in SudokuPad",
     "page.verified": "Verified",
