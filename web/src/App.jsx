@@ -42,6 +42,17 @@ function digitsOf(mask, n) {
   return out;
 }
 
+const PERSIST_KEY = "ysudoku.ui.v1";
+const DEFAULT_SETTINGS = { max_rules: 100, max_steps: 100, max_frames: 10, max_mb: 500 };
+
+function readPersisted() {
+  try {
+    return JSON.parse(localStorage.getItem(PERSIST_KEY) || "{}") || {};
+  } catch {
+    return {};
+  }
+}
+
 function candidateStateUpTo(analysis, idx) {
   const state = new Map();
   if (!analysis) return state;
@@ -341,14 +352,15 @@ export default function App() {
   const [audit, setAudit] = useState(false);
   const [idx, setIdx] = useState(-1);
   const [playing, setPlaying] = useState(false);
-  const [speed, setSpeed] = useState(1100);
+  const persisted = readPersisted();
+  const [speed, setSpeed] = useState(() => Number(persisted.speed) || 1100);
   const [session, setSession] = useState(null);
   const [frameSrc, setFrameSrc] = useState("");
   const [frameStep, setFrameStep] = useState(-2);
   const [ready, setReady] = useState(false);
   const [retry, setRetry] = useState(0);
-  const [view, setView] = useState("solve");
-  const [inspectorTab, setInspectorTab] = useState("explain");
+  const [view, setView] = useState(() => persisted.view || "solve");
+  const [inspectorTab, setInspectorTab] = useState(() => persisted.inspectorTab || "explain");
   const [store, setStore] = useState(null);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState("recent");
@@ -361,7 +373,20 @@ export default function App() {
   const [dark, setDark] = useState(() => {
     try { return localStorage.getItem("ysudoku.theme") === "dark"; } catch { return false; }
   });
-  const [settings, setSettings] = useState({ max_rules: 100, max_steps: 100, max_frames: 10, max_mb: 500 });
+  const [settings, setSettings] = useState(() => ({
+    ...DEFAULT_SETTINGS,
+    ...(persisted.settings || {}),
+  }));
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(PERSIST_KEY, JSON.stringify({
+        speed, settings, view, inspectorTab,
+      }));
+    } catch {
+      /* storage unavailable */
+    }
+  }, [speed, settings, view, inspectorTab]);
   const [stars, setStars] = useState(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [headerHidden, setHeaderHidden] = useState(false);
