@@ -261,6 +261,7 @@ class Solver:
         return step
 
     def _minimal_trace(self, child, trace, cause="", assumption_cell=None):
+        n = child.n
         dom = list(child.dom)
         for e in trace:
             if e.kind == "place":
@@ -272,41 +273,35 @@ class Solver:
             import re
             m = re.search(r"(\d+)行(\d+)列没有候选", cause)
             if m:
-                empty = (int(m.group(1)) - 1) * 9 + int(m.group(2)) - 1
+                empty = (int(m.group(1)) - 1) * n + int(m.group(2)) - 1
         if empty is None:
             return list(trace)
 
-        cells = {empty}
-        if assumption_cell is not None:
-            cells.add(assumption_cell)
-        changed = True
-        while changed:
-            changed = False
-            for e in trace:
-                data = e.reason.data or {}
-                involved = {e.cell}
-                for key in ("cells", "unit_cells", "arm"):
-                    for item in data.get(key) or []:
-                        if isinstance(item, int):
-                            involved.add(item)
-                for key in ("a", "b", "by", "circle", "cell"):
-                    item = data.get(key)
-                    if isinstance(item, int):
-                        involved.add(item)
-                if not (involved & cells):
-                    continue
-                for item in involved:
-                    if item not in cells:
-                        cells.add(item); changed = True
-                for key in ("cells", "unit_cells", "arm"):
-                    for item in data.get(key) or []:
-                        if isinstance(item, int) and item not in cells:
-                            cells.add(item); changed = True
-                for key in ("a", "b", "by", "circle", "cell"):
-                    item = data.get(key)
-                    if isinstance(item, int) and item not in cells:
-                        cells.add(item); changed = True
-        return [e for e in trace if e.cell in cells] or list(trace)
+        last_place = {}
+        last_elim = {}
+        for idx, e in enumerate(trace):
+            if e.kind == "place":
+                last_place[e.cell] = idx
+            else:
+                last_elim[(e.cell, e.value)] = idx
+
+        needed = set()
+        stack = [last_elim[(empty, v)] for v in range(1, n + 1) if (empty, v) in last_elim]
+        while stack:
+            idx = stack.pop()
+            if idx in needed:
+                continue
+            needed.add(idx)
+            e = trace[idx]
+            if e.kind == "elim" and e.reason.kind == "unit_peer":
+                by = e.reason.data.get("by")
+                if by in last_place:
+                    stack.append(last_place[by])
+            elif e.kind == "place" and e.reason.kind in ("probe_single", "naked_single"):
+                for v in range(1, n + 1):
+                    if v != e.value and (e.cell, v) in last_elim and last_elim[(e.cell, v)] < idx:
+                        stack.append(last_elim[(e.cell, v)])
+        return [trace[i] for i in sorted(needed)] or list(trace)
 
     def _group_events(self, events):
         groups = []
