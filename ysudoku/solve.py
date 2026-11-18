@@ -630,6 +630,33 @@ class Solver:
             except Exception: pass
         return step
 
+    def _intersection_step(self):
+        from .intersections import unsupported_candidates
+        if getattr(self, "_intersection_tried", 0) >= 20:
+            return None
+        self._intersection_tried = getattr(self, "_intersection_tried", 0) + 1
+        found = unsupported_candidates(self.state, self.constraints)
+        if not found:
+            return None
+        cell, value, rules = found[0]
+        pre_dom, pre_vals = self._pre()
+        self.state.begin()
+        try:
+            self.state.elim(cell, value, Reason("intersection", {
+                "cell": cell, "value": value, "rules": rules,
+            }))
+        except Contradiction:
+            self.state.rollback()
+            return None
+        events = self.state.end()
+        step = self._commit(events, pre_dom, pre_vals)
+        if step is None:
+            return None
+        step.title = "交集约束"
+        step.detail = ("联合相关规则检查该候选，发现没有任何一致赋值：\n"
+                       + "\n".join(f"参与规则：{rule}" for rule in rules))
+        return step
+
     def _candidate_map_step(self):
         if getattr(self, "_candidate_map_done", False):
             return None
