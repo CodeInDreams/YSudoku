@@ -10,6 +10,13 @@ import urllib.request
 from dataclasses import dataclass
 
 SYSTEM_PROMPT = """You are a precise rule compiler for variant sudoku puzzles.
+
+For outside X-Sums clues:
+- If the clue has arrows, do NOT invent a side, direction or cell sequence.
+- Emit only the rule type; the compiler derives arrow geometry.
+- Never emit duplicate X-Sums for the same clue.
+- Never drop an outside clue because its direction is unclear.
+
 You receive (1) the official rules text and (2) an inventory of every element
 drawn on the board, each with a stable id.  Translate the rules into the JSON
 spec below.  Reference elements only by id.  Never invent a constraint that the
