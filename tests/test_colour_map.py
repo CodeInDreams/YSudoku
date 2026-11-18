@@ -25,6 +25,14 @@ class ColourMapTest(unittest.TestCase):
         with self.assertRaises(ColourError):
             cm.add(0, 7)
 
+    def test_class_digits(self):
+        cm = ColourMap()
+        cm.add(0, p.BLUE)
+        cm.add(1, p.BLUE)
+        cm.set_class_digits(p.BLUE, {1, 4})
+        self.assertEqual(cm.allowed_digits(0), {1, 4})
+        self.assertEqual(cm.allowed_digits(1), {1, 4})
+
     def test_group(self):
         cm = ColourMap()
         cm.set_group([0, 1], p.pair_colours(0))

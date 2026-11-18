@@ -17,6 +17,7 @@ class ColourMap:
     def __init__(self, n: int = 9):
         self.n = n
         self._cells: dict[int, set[int]] = {}
+        self._class_digits: dict[int, set[int]] = {}
 
     def colours(self, cell: int) -> set[int]:
         return set(self._cells.get(cell, ()))
@@ -55,9 +56,33 @@ class ColourMap:
         left, right = self._cells.get(a, set()), self._cells.get(b, set())
         return bool(left) and bool(right) and not (left & right)
 
+    def set_class_digits(self, colour: int, digits: set[int]) -> None:
+        if not is_allowed(colour):
+            raise ColourError(f"colour {colour} is forbidden")
+        self._class_digits[colour] = {int(d) for d in digits}
+
+    def class_digits(self, colour: int) -> set[int]:
+        return set(self._class_digits.get(colour, ()))
+
+    def allowed_digits(self, cell: int) -> set[int] | None:
+        """Digits allowed by the cell's colour classes; None if unconstrained."""
+        colours = self._cells.get(cell, set())
+        if not colours:
+            return None
+        known = [self._class_digits[c] for c in colours if c in self._class_digits]
+        if not known:
+            return None
+        allowed = set(known[0])
+        for digits in known[1:]:
+            allowed &= digits
+        return allowed
+
     def validate(self) -> None:
         for cell, colours in self._cells.items():
             if len(colours) > MAX_COLOURS_PER_CELL:
                 raise ColourError(f"cell {cell} has too many colours")
             if any(c in FORBIDDEN for c in colours):
                 raise ColourError(f"cell {cell} uses a forbidden colour")
+        for colour, digits in self._class_digits.items():
+            if not digits or any(d < 1 or d > self.n for d in digits):
+                raise ColourError(f"colour {colour} has invalid class digits")
