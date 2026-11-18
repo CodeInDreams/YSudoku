@@ -263,7 +263,6 @@ class Solver:
     def contradiction_step(self, deadline: float, per_candidate: float = 1.2):
         import time
         from .search import refute_direct_with_trace
-
         pre_dom, pre_vals = self._pre()
         cells = sorted((c for c in range(self.state.n2) if not self.state.vals[c]),
                        key=lambda c: self.state.dom[c].bit_count())
@@ -285,14 +284,11 @@ class Solver:
                     continue
                 meaningful = [e for e in trace
                               if e.kind == "place" or e.reason.kind != "unit_peer"]
-                places = sum(1 for e in meaningful if e.kind == "place")
-                nonunit = sum(1 for e in meaningful if e.kind == "elim")
-                kinds = len({e.reason.kind for e in meaningful})
                 score = (
                     1 if len(values) == 2 else 0,
-                    places,
-                    nonunit,
-                    kinds,
+                    sum(1 for e in meaningful if e.kind == "place"),
+                    sum(1 for e in meaningful if e.kind == "elim"),
+                    len({e.reason.kind for e in meaningful}),
                     -len(meaningful),
                     -len(values),
                 )
@@ -302,15 +298,13 @@ class Solver:
                 break
         if best is None:
             return None
-
         _, cell, value, values, trace, cause = best
         name = cell_name(cell, self.state.n)
+
         intro = Step(
             index=len(self.steps), technique="contradiction", tier=4,
             title="反证开始",
-            detail=(f"反证开始：假设 {name} = {value}。\n"
-                    f"选择依据：候选 {len(values)} 个，分支可推出 "
-                    f"{sum(1 for e in trace if e.kind == 'place')} 个落子。"),
+            detail=f"反证开始：假设 {name} = {value}。",
             events=[Event("place", cell, value, Reason("contradiction", {
                 "cell": cell, "value": value, "phase": "start"}), pre_dom[cell])],
             visual={"focus": [], "premise": [],
@@ -326,40 +320,37 @@ class Solver:
             try: self.on_step(intro)
             except Exception: pass
 
-        meaningful = [e for e in trace
-                      if e.kind == "place" or e.reason.kind != "unit_peer"]
-        chunks = [meaningful[i:i + 6] for i in range(0, len(meaningful), 6)] or [[]]
-        for index, chunk in enumerate(chunks):
-            lines = [f"反证检查（{index + 1}/{len(chunks)}）：在假设 {name} = {value} 下："]
-            for event in chunk:
-                effect = (f"{cell_name(event.cell, self.state.n)} = {event.value}"
-                          if event.kind == "place"
-                          else f"{cell_name(event.cell, self.state.n)} ≠ {event.value}")
-                lines.append(f"→ {effect}（{event.reason.kind}）")
-            if index == len(chunks) - 1:
-                lines.append(f"出现矛盾：{cause}。")
-            else:
-                lines.append("继续正常推理…")
-            check = Step(
-                index=len(self.steps), technique="contradiction", tier=4,
-                title="反证检查", detail="\n".join(lines), events=[],
-                visual={"focus": [], "premise": [],
-                        "groups": [{"cells": [cell], "kind": "assumption"}],
-                        "links": [], "chips": [],
-                        "assumption": {"cells": [cell],
-                                       "label": f"反证检查：假设 {name}={value}"}},
-                branch=True)
-            check.pre_dom, check.pre_vals = pre_dom, pre_vals
-            check.candidates = []
-            self.steps.append(check)
-            if self.on_step:
-                try: self.on_step(check)
-                except Exception: pass
+        child = self.state.copy()
+        child.place(cell, value, Reason("contradiction", {
+            "cell": cell, "value": value, "phase": "start"}))
+        reasoning = Step(
+            index=len(self.steps), technique="contradiction", tier=4,
+            title="反证推理",
+            detail=(f"反证推理：在假设 {name} = {value} 下，按规则实际执行：\n"
+                    + "\n".join(
+                        (f"→ {cell_name(e.cell, self.state.n)} = {e.value}（{e.reason.kind}）"
+                         if e.kind == "place" else
+                         f"→ {cell_name(e.cell, self.state.n)} ≠ {e.value}（{e.reason.kind}）")
+                        for e in trace if e.kind == "place" or e.reason.kind != "unit_peer")),
+            events=list(trace),
+            visual={"focus": [], "premise": [],
+                    "groups": [{"cells": [cell], "kind": "assumption"}],
+                    "links": [], "chips": [],
+                    "assumption": {"cells": [cell],
+                                   "label": f"反证推理：假设 {name}={value}"}},
+            branch=True)
+        reasoning.pre_dom = list(child.dom)
+        reasoning.pre_vals = list(child.vals)
+        reasoning.candidates = self._candidates(list(trace), reasoning.pre_dom)
+        self.steps.append(reasoning)
+        if self.on_step:
+            try: self.on_step(reasoning)
+            except Exception: pass
 
         refuted = Step(
             index=len(self.steps), technique="contradiction", tier=4,
             title="反证推翻",
-            detail=f"反证推翻：假设 {name} = {value} 的所有直接推导都导致矛盾，假设不成立。",
+            detail=f"反证推翻：假设 {name} = {value} 的推导出现矛盾：{cause}。",
             events=[], visual={"focus": [], "premise": [],
                                "groups": [{"cells": [cell], "kind": "assumption"}],
                                "links": [], "chips": [],
@@ -372,6 +363,7 @@ class Solver:
         if self.on_step:
             try: self.on_step(refuted)
             except Exception: pass
+
         revert = Step(
             index=len(self.steps), technique="contradiction", tier=4,
             title="反证回退", detail=f"反证回退：撤销假设 {name} = {value}。",
@@ -388,9 +380,7 @@ class Solver:
             try: self.on_step(revert)
             except Exception: pass
 
-        forced = None
-        if len(values) == 2:
-            forced = values[0] if values[1] == value else values[1]
+        forced = values[0] if len(values) == 2 and values[1] == value else (values[1] if len(values) == 2 else None)
         reason = Reason("contradiction", {"cell": cell, "value": value,
                                           "forced": forced, "phase": "end",
                                           "cause": cause})
