@@ -96,8 +96,7 @@ function buildStepActions(analysis) {
       branchBase = { state: new Map(state), marked: new Set(marked), values: new Map(values) };
     }
     if (step.revert) {
-      actions.push({ op: "reload_base", url: analysis.source_url || analysis.puzzle?.source_url || "",
-                     actions: baseActions.slice() });
+      actions.push({ op: "undo_to_snapshot", cell: branchCell });
       if (branchBase) {
         state = new Map(branchBase.state);
         marked.clear();
@@ -168,6 +167,11 @@ function buildStepActions(analysis) {
       update(cell, desired, placeByCell.get(cell));
     }
     state = nextState;
+    const nextStep = analysis.steps[stepIndex + 1];
+    if (!inBranch && nextStep?.branch && !nextStep.revert) {
+      const nextCell = (nextStep.events || []).find((ev) => ev.kind === "place")?.cell ?? null;
+      actions.push({ op: "snapshot_start", cell: nextCell });
+    }
     if (!step.branch) baseActions.push(...actions);
     steps.push(actions);
   }
