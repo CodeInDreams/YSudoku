@@ -260,7 +260,7 @@ class Solver:
         step.candidates = []
         return step
 
-    def _minimal_trace(self, child, trace, cause=""):
+    def _minimal_trace(self, child, trace, cause="", assumption_cell=None):
         dom = list(child.dom)
         for e in trace:
             if e.kind == "place":
@@ -275,26 +275,38 @@ class Solver:
                 empty = (int(m.group(1)) - 1) * 9 + int(m.group(2)) - 1
         if empty is None:
             return list(trace)
-        last_place = {}
-        last_elim = {}
-        for idx, e in enumerate(trace):
-            if e.kind == "place":
-                last_place[e.cell] = idx
-            else:
-                last_elim[(e.cell, e.value)] = idx
-        needed = set()
-        stack = [last_elim[(empty, v)] for v in range(1, 10) if (empty, v) in last_elim]
-        while stack:
-            idx = stack.pop()
-            if idx in needed:
-                continue
-            needed.add(idx)
-            e = trace[idx]
-            if e.kind == "elim" and e.reason.kind == "unit_peer":
-                by = e.reason.data.get("by")
-                if by in last_place:
-                    stack.append(last_place[by])
-        return [trace[i] for i in sorted(needed)] or list(trace)
+
+        cells = {empty}
+        if assumption_cell is not None:
+            cells.add(assumption_cell)
+        changed = True
+        while changed:
+            changed = False
+            for e in trace:
+                data = e.reason.data or {}
+                involved = {e.cell}
+                for key in ("cells", "unit_cells", "arm"):
+                    for item in data.get(key) or []:
+                        if isinstance(item, int):
+                            involved.add(item)
+                for key in ("a", "b", "by", "circle", "cell"):
+                    item = data.get(key)
+                    if isinstance(item, int):
+                        involved.add(item)
+                if not (involved & cells):
+                    continue
+                for item in involved:
+                    if item not in cells:
+                        cells.add(item); changed = True
+                for key in ("cells", "unit_cells", "arm"):
+                    for item in data.get(key) or []:
+                        if isinstance(item, int) and item not in cells:
+                            cells.add(item); changed = True
+                for key in ("a", "b", "by", "circle", "cell"):
+                    item = data.get(key)
+                    if isinstance(item, int) and item not in cells:
+                        cells.add(item); changed = True
+        return [e for e in trace if e.cell in cells] or list(trace)
 
     def _group_events(self, events):
         groups = []
@@ -371,7 +383,7 @@ class Solver:
         child = self.state.copy()
         child.place(cell, value, Reason("contradiction", {
             "cell": cell, "value": value, "phase": "start"}))
-        minimal = self._minimal_trace(child, list(trace), cause)
+        minimal = self._minimal_trace(child, list(trace), cause, cell)
         chunks = self._group_events(minimal)
         run_state = child
         for index, chunk in enumerate(chunks):
