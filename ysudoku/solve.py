@@ -318,7 +318,20 @@ class Solver:
                 groups[-1][1].append(e)
             else:
                 groups.append((key, [e]))
-        return [g[1] for g in groups]
+        merged = []
+        for key, group in groups:
+            if (len(group) == 1 and group[0].kind == "place"
+                    and group[0].reason.kind in ("probe_single", "naked_single")):
+                cell = group[0].cell
+                for prev in reversed(merged):
+                    if any(e.cell == cell and e.kind == "elim" for e in prev):
+                        prev.append(group[0])
+                        break
+                else:
+                    merged.append(group)
+                continue
+            merged.append(group)
+        return merged
 
     def contradiction_step(self, deadline: float, per_candidate: float = 1.2):
         import time
