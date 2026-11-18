@@ -376,6 +376,7 @@ export default function App() {
   const [dark, setDark] = useState(() => {
     try { return localStorage.getItem("ysudoku.theme") === "dark"; } catch { return false; }
   });
+  const [rulePrompt, setRulePrompt] = useState(() => readPersisted().rulePrompt || "");
   const [settings, setSettings] = useState(() => ({
     ...DEFAULT_SETTINGS,
     ...(persisted.settings || {}),
@@ -384,12 +385,12 @@ export default function App() {
   useEffect(() => {
     try {
       localStorage.setItem(PERSIST_KEY, JSON.stringify({
-        speed, settings, view, inspectorTab,
+        speed, settings, view, inspectorTab, rulePrompt,
       }));
     } catch {
       /* storage unavailable */
     }
-  }, [speed, settings, view, inspectorTab]);
+  }, [speed, settings, view, inspectorTab, rulePrompt]);
   const [stars, setStars] = useState(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [headerHidden, setHeaderHidden] = useState(false);
@@ -672,11 +673,11 @@ export default function App() {
   }
 
   async function submit(payload) {
-    await streamSolve({ url: payload.url, llm, audit, chains: true, demo: false }, payload.url);
+    await streamSolve({ url: payload.url, llm, audit, chains: true, demo: false, rule_prompt: rulePrompt }, payload.url);
   }
 
   async function demo() {
-    await streamSolve({ demo: true, llm, audit, chains: true }, "");
+    await streamSolve({ demo: true, llm, audit, chains: true, rule_prompt: rulePrompt }, "");
   }
 
   async function refreshRules() {
@@ -1195,6 +1196,23 @@ export default function App() {
               ) : (phaseHint || t("empty.solve"))}
               badges={analysis ? <><Badge variant="outline">{n}×{n}</Badge><Badge variant={isSolved ? "success" : "outline"}>{statusLabel(analysis.status)}</Badge></> : (phase !== "idle" ? <Badge variant="outline">{phaseLabel}</Badge> : null)}
             />
+            {analysis?.conflicts?.length > 0 && (
+              <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs dark:border-amber-800 dark:bg-amber-950/30">
+                <p className="font-medium">{analysis.conflicts[0].question}</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {analysis.conflicts[0].options.map((option) => (
+                    <button key={option.id} type="button"
+                      onClick={() => streamSolve({ url: target, llm: option.id === "llm", audit, chains: true, demo: false, rule_prompt: rulePrompt }, target)}
+                      className="rounded-md border bg-background px-2.5 py-1.5 hover:border-primary">
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                <textarea value={rulePrompt} onChange={(e) => setRulePrompt(e.target.value)}
+                  placeholder="补充规则说明（可选）"
+                  className="mt-2 w-full resize-y rounded-md border bg-background px-2 py-1.5 outline-none" rows={2} />
+              </div>
+            )}
             {phase !== "idle" && phase !== "done" && (
               <div className="mb-5 rounded-lg border bg-card px-3 py-2.5">
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs">

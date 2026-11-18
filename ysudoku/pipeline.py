@@ -38,6 +38,7 @@ class Analysis:
     demo: bool = False
     provenance: str = ""
     source_url: str = ""
+    conflicts: list = field(default_factory=list)
 
     def to_json(self) -> dict:
         n = self.puzzle.size
@@ -68,6 +69,7 @@ class Analysis:
             "demo": self.demo,
             "provenance": self.provenance,
             "source_url": self.source_url,
+            "conflicts": self.conflicts,
             "constraints": [c.to_dict() for c in self.rules.constraints],
             "clue_types": self.clue_types,
             "rule_sheet": (
@@ -155,8 +157,20 @@ def _try_global(puzzle, rules, solver, source, warnings, time_limit, target, dem
         and "暂不自动映射" not in w
     ]
     rank_count = types.count("R")
+    text_low = (puzzle.rules_text or "").lower()
+    conflicts = []
+    if ("x-sum" in text_low or "x sum" in text_low) and (puzzle.raw or {}).get("arrows"):
+        conflicts = [{
+            "id": "xsum",
+            "question": "这题的盘外 X-Sums 采用哪种识别？",
+            "options": [
+                {"id": "compiler", "label": "编译器箭头识别（推荐）"},
+                {"id": "llm", "label": "LLM 规则识别"},
+            ],
+        }]
     return Analysis(
         puzzle=puzzle,
+        conflicts=conflicts,
         spec={"rules": [], "globals": [], "notes": "cp-sat"},
         rules=rules,
         result=SolveResult("solved", [], values),
@@ -202,6 +216,7 @@ def analyze(
     chaos_time_limit: float = 8.0,
     demo: bool = False,
     use_global: bool = False,
+    rule_prompt: str = "",
     global_time_limit: float = 60.0,
     notes: str = "",
     on_rules=None,
@@ -412,8 +427,20 @@ def analyze(
     if do_audit and result.steps:
         audit = audit_steps(puzzle, rules, result.steps)
 
+    text_low = (puzzle.rules_text or "").lower()
+    conflicts = []
+    if ("x-sum" in text_low or "x sum" in text_low) and (puzzle.raw or {}).get("arrows"):
+        conflicts = [{
+            "id": "xsum",
+            "question": "这题的盘外 X-Sums 采用哪种识别？",
+            "options": [
+                {"id": "compiler", "label": "编译器箭头识别（推荐）"},
+                {"id": "llm", "label": "LLM 规则识别"},
+            ],
+        }]
     return Analysis(
         puzzle=puzzle,
+        conflicts=conflicts,
         demo=demo,
         provenance=(
             f"真实题示例：{puzzle.title} — {puzzle.author}"

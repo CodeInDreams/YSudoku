@@ -69,6 +69,7 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
         use_global=False,
         global_time_limit=float(body.get("global_timeout", 60)),
         notes=notes,
+        rule_prompt=str(body.get("rule_prompt") or ""),
         on_rules=on_rules,
         on_step=on_step,
     )
