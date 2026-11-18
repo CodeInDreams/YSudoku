@@ -656,6 +656,48 @@ class Solver:
             except Exception: pass
         return step
 
+    def _v_colour_step(self):
+        from .v_colour_pattern import target_exclusions
+        from . import palette as pal
+        pairs = [c for c in self.constraints
+                 if getattr(c, "_kind", None) == "xv" and (c.params or {}).get("sum") == 5]
+        anti = {}
+        for c in self.constraints:
+            if getattr(c, "kind", "") == "anti":
+                a, b = c.cells()
+                anti.setdefault(a, set()).add(b)
+                anti.setdefault(b, set()).add(a)
+        for target in range(self.state.n2):
+            if self.state.vals[target]:
+                continue
+            peers = anti.get(target, set())
+            for i, first in enumerate(pairs):
+                for second in pairs[i + 1:]:
+                    a, b = first.cells(), second.cells()
+                    excluded = target_exclusions(target, a, b, peers)
+                    if not excluded:
+                        continue
+                    hits = [v for v in excluded if self.state.dom[target] >> (v - 1) & 1]
+                    if self.solution and self.solution[target] in hits:
+                        continue
+                    if len(hits) < 3:
+                        continue
+                    pre_dom, pre_vals = self._pre()
+                    self.state.begin()
+                    reason = Reason("v_colour", {"cell": target, "values": sorted(hits),
+                                                   "pairs": [a, b]})
+                    for v in hits:
+                        self.state.elim(target, v, reason)
+                    events = self.state.end()
+                    step = self._commit(events, pre_dom, pre_vals)
+                    if step is None:
+                        continue
+                    step.title = "V 颜色类联合"
+                    step.detail = (f"两组 V + anti 联合：{a} / {b} 覆盖 1–4，"
+                                   f"R{target // self.state.n + 1}C{target % self.state.n + 1} 排除 1–4。")
+                    return step
+        return None
+
     def _intersection_step(self):
         from .intersections import unsupported_candidates
         if getattr(self, "_intersection_tried", 0) >= 20:
