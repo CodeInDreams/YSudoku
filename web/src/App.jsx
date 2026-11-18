@@ -53,6 +53,43 @@ function readPersisted() {
   }
 }
 
+async function detectGridRect(img) {
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0);
+    const { width, height } = canvas;
+    const pixels = ctx.getImageData(0, 0, width, height).data;
+    const dark = (x, y) => {
+      const i = (y * width + x) * 4;
+      return pixels[i] + pixels[i + 1] + pixels[i + 2] < 240;
+    };
+    const cols = [];
+    const rows = [];
+    for (let x = 0; x < width; x++) {
+      let n = 0;
+      for (let y = 0; y < height; y++) if (dark(x, y)) n++;
+      if (n > height * 0.5) cols.push(x);
+    }
+    for (let y = 0; y < height; y++) {
+      let n = 0;
+      for (let x = 0; x < width; x++) if (dark(x, y)) n++;
+      if (n > width * 0.5) rows.push(y);
+    }
+    if (cols.length < 2 || rows.length < 2) return null;
+    return {
+      x: Math.min(...cols), y: Math.min(...rows),
+      width: Math.max(...cols) - Math.min(...cols),
+      height: Math.max(...rows) - Math.min(...rows),
+      imageWidth: width, imageHeight: height,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function candidateStateUpTo(analysis, idx) {
   const state = new Map();
   if (!analysis) return state;
@@ -882,7 +919,12 @@ export default function App() {
             <img src={frameSrc} alt="SudokuPad"
               className={`h-full w-full object-fill transition-opacity ${ready ? "opacity-100" : "opacity-0"}`}
               style={{ filter: dark ? "brightness(0.8) contrast(1.04)" : undefined }}
-              onLoad={() => setReady(true)} />
+              onLoad={(event) => {
+                setReady(true);
+                detectGridRect(event.currentTarget).then((detected) => {
+                  if (detected) setGridRect(detected);
+                });
+              }} />
           )}
           {overlay && ready && !deleted && (
             <svg className="pointer-events-none absolute" viewBox={`0 0 ${n} ${n}`} preserveAspectRatio="none"
