@@ -411,7 +411,7 @@ def analyze(
                     except OSError:
                         pass
 
-    if result.status == "stuck":
+    if result.status == "stuck" and allow_chains:
         import time as _time
         deadline = _time.time() + 25.0
         while result.status == "stuck" and _time.time() < deadline:

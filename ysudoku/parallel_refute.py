@@ -6,7 +6,7 @@ import multiprocessing as mp
 import time
 from dataclasses import dataclass
 
-from .search import refute_direct_with_trace
+from .search import proof_cost, refute_candidate_with_proof
 from .state import Contradiction, Reason, State
 
 def physical_cores() -> int:
@@ -52,14 +52,14 @@ def _worker(item):
         return None
     child = _STATE.copy()
     try:
-        refuted, trace, cause = refute_direct_with_trace(
-            child, _CONSTRAINTS, cell, value)
+        refuted, proof, cause = refute_candidate_with_proof(
+            child, _CONSTRAINTS, cell, value, time_limit=1.0)
     except Exception:
         return None
     if not refuted:
         return None
-    places = sum(1 for e in trace if e.kind == "place")
-    return (cell, value, trace, cause, places)
+    cost = proof_cost(proof)
+    return (cell, value, proof, cause, cost)
 
 
 def _process_main(item, conn):
@@ -246,8 +246,11 @@ def run_parallel_dynamic(state: State, constraints, candidates, timeout: float =
     pending = list(candidates)
     workers = []
     results = []
-    deadline = None
     import time as _time
+    # Bound the whole batch, including the no-refutation case. Previously the
+    # timeout started only after the first contradiction result, so a batch
+    # with no successful probes could drain all 80 candidates without a limit.
+    deadline = _time.monotonic() + max(0.0, timeout)
     for _ in range(min(default_workers(), len(pending))):
         parent, child = ctx.Pipe(duplex=True)
         proc = ctx.Process(target=_task_main, args=(child,), daemon=True)
@@ -277,8 +280,6 @@ def run_parallel_dynamic(state: State, constraints, candidates, timeout: float =
                     item = None
                 if item is not None:
                     results.append(item)
-                    if deadline is None:
-                        deadline = now + timeout
                 try:
                     if pending:
                         conn.send(pending.pop(0))

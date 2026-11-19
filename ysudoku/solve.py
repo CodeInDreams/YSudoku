@@ -461,7 +461,7 @@ class Solver:
 
     def contradiction_step(self, deadline: float, per_candidate: float = 1.2):
         import time
-        from .search import refute_direct_with_trace
+        from .search import proof_cost
         pre_dom, pre_vals = self._pre()
         focus_units = {u for c in self.focus if c < len(self.state.unit_of)
                        for u in self.state.unit_of[c]}
@@ -478,7 +478,6 @@ class Solver:
                        key=lambda c: (0 if self.state.dom[c].bit_count() == 2 else 1,
                                       near_focus(c), -weight[c],
                                       self.state.dom[c].bit_count()))
-        import os
         best = None
         candidates = []
         for cell in cells:
@@ -490,26 +489,41 @@ class Solver:
             candidates.extend((cell, v) for v in vals)
             if len(candidates) >= 80:
                 break
-        if best is None and candidates and os.environ.get("YS_PARALLEL", "1") == "1":
-            from .parallel_refute import run_parallel_dynamic
-            for cell, value, trace, cause, _places in run_parallel_dynamic(
-                    self.state, self.constraints, candidates, timeout=3.0,
-                    solution=self.solution):
-                meaningful = [e for e in trace
-                              if e.kind == "place" or e.reason.kind != "unit_peer"]
-                score = (
-                    1 if self.state.dom[cell].bit_count() == 2 else 0,
-                    sum(1 for e in meaningful if e.kind == "place"),
-                    sum(1 for e in meaningful if e.kind == "elim"),
-                    len({e.reason.kind for e in meaningful}),
-                    -len(meaningful),
-                    -self.state.dom[cell].bit_count(),
-                )
-                if best is None or score > best[0]:
-                    best = (score, cell, value, list(bits(self.state.dom[cell])), trace, cause)
+        # Probe a small, ordered window serially. This lets us compare complete
+        # proofs by support length instead of accepting whichever worker wins a
+        # race, while keeping every individual search bounded.
+        from .search import refute_candidate_with_proof
+        probe_deadline = time.monotonic() + min(
+            2.5, max(0.0, deadline - time.time()),
+        )
+        attempts = 0
+        for cell, value in candidates:
+            remaining = probe_deadline - time.monotonic()
+            if remaining <= 0 or attempts >= 16:
+                break
+            attempts += 1
+            refuted, proof, cause = refute_candidate_with_proof(
+                self.state, self.constraints, cell, value,
+                time_limit=min(per_candidate, remaining),
+            )
+            if not refuted or not proof:
+                continue
+            cost = proof_cost(proof)
+            score = (
+                cost[0], cost[1], cost[2],
+                0 if self.state.dom[cell].bit_count() == 2 else 1,
+                -self.state.dom[cell].bit_count(),
+            )
+            if best is None or score < best[0]:
+                best = (score, cell, value, list(bits(self.state.dom[cell])),
+                        proof, cause)
+            # A very short proof cannot be improved materially by further
+            # probes; retain time for applying it and propagating the result.
+            if cost[0] <= 2:
+                break
         if best is None:
             return None
-        _, cell, value, values, trace, cause = best
+        _, cell, value, values, proof, cause = best
         name = cell_name(cell, self.state.n)
 
         intro = Step(
@@ -531,73 +545,85 @@ class Solver:
             try: self.on_step(intro)
             except Exception: pass
 
-        child = self.state.copy()
-        child.place(cell, value, Reason("contradiction", {
-            "cell": cell, "value": value, "phase": "start"}))
-        minimal = self._minimal_trace(child, list(trace), cause, cell)
-        chunks = self._group_events(minimal)
-        run_state = child
-        for index, chunk in enumerate(chunks):
-            if not chunk:
-                continue
-            pre_dom = list(run_state.dom)
-            pre_vals = list(run_state.vals)
-            lines = [f"反证推理（{index + 1}/{len(chunks)}）：在假设 {name} = {value} 下："]
-            for event in chunk:
-                if event.kind == "place":
-                    lines.append(f"→ {cell_name(event.cell, self.state.n)} = {event.value}（{event.reason.kind}）")
-                else:
-                    lines.append(f"→ {cell_name(event.cell, self.state.n)} ≠ {event.value}（{event.reason.kind}）")
-            support_dom = list(pre_dom)
-            for event in chunk:
+        def proof_lines(node, indent=""):
+            lines = []
+            assumption = node.get("assumption")
+            if assumption and assumption != (cell, value):
+                branch_cell, branch_value = assumption
+                lines.append(
+                    f"{indent}再假设 {cell_name(branch_cell, self.state.n)} = {branch_value}："
+                )
+            support_dom = list(node.get("pre_dom") or self.state.dom)
+            prefix_len = node.get("prefix_len", 0)
+            reason_labels = {
+                "naked_single": "裸单", "hidden_single": "隐性单数",
+                "anti_knight": "反骑士", "anti_king": "反王",
+                "german_whisper": "德国耳语线", "dutch_whisper": "荷兰耳语线",
+                "xv": "XV 和数", "arrow": "箭头和数",
+                "ir_support": "通用约束支持", "x_sums": "X-Sums",
+                "subset": "数对/子集", "cage": "杀手数独宫格和",
+                "thermo": "温度计递增规则", "renban": "连续数集",
+            }
+            for event_index, event in enumerate(node.get("events", ())):
+                if event_index < prefix_len or event.reason.kind in ("unit_peer", "assumption"):
+                    continue
+                effect = (f"{cell_name(event.cell, self.state.n)} = {event.value}"
+                          if event.kind == "place" else
+                          f"{cell_name(event.cell, self.state.n)} ≠ {event.value}")
+                # Placement evidence can be reconstructed from its candidate
+                # mask. For eliminations, retain the exact event and rule name;
+                # some variant constraints need relation-wide support data that
+                # a single-cell snapshot cannot faithfully reproduce.
+                why = (self._why_placed(event, support_dom)
+                       if event.kind == "place" else "")
+                lines.append(
+                    f"{indent}→ {why or effect + '（' + reason_labels.get(event.reason.kind, event.reason.kind) + '）'}"
+                )
                 bit = 1 << (event.value - 1)
                 if event.kind == "place":
                     support_dom[event.cell] = bit
                 else:
                     support_dom[event.cell] &= ~bit
-            seen_reasons = set()
-            seen_why = set()
-            for event in chunk:
-                if event.kind == "place":
-                    why = self._why_placed(event, support_dom)
-                    if why and why not in seen_why:
-                        seen_why.add(why)
-                        lines.append(f"依据：{why}")
-                    continue
-                why = self._why_eliminated(event, support_dom)
-                key = (event.cell, event.value, event.reason.kind)
-                if why and why not in seen_why:
-                    seen_why.add(why)
-                    lines.append(f"依据：{why}")
-            note = self._scope_note(chunk)
-            if note:
-                lines.append(note)
-            if index == len(chunks) - 1:
-                lines.append(f"出现矛盾：{cause}。")
+            if node.get("cause"):
+                lines.append(f"{indent}出现矛盾：{node['cause']}。")
+            children = node.get("children", ())
+            branch_cell = node.get("branch_cell")
+            if children and branch_cell is not None:
+                options = "、".join(str(child["value"]) for child in children)
+                lines.append(
+                    f"{indent}继续分支：{cell_name(branch_cell, self.state.n)} "
+                    f"只能取 {options}。"
+                )
+                for child in children:
+                    lines.extend(proof_lines(child["proof"], indent + "  "))
+                lines.append(f"{indent}该格所有候选都导致矛盾。")
+            return lines
+
+        proof_text = proof_lines(proof)
+        if not proof_text:
+            proof_text = [f"假设 {name} = {value} 后立即矛盾：{cause}。"]
+        chunk_size = 8
+        chunks = [proof_text[i:i + chunk_size]
+                  for i in range(0, len(proof_text), chunk_size)]
+        pre_dom, pre_vals = self._pre()
+        for index, chunk in enumerate(chunks):
+            lines = [f"反证推理（{index + 1}/{len(chunks)}）："] + chunk
             reasoning = Step(
                 index=len(self.steps), technique="contradiction", tier=4,
                 title=f"反证推理 {index + 1}/{len(chunks)}",
-                detail="\n".join(lines), events=chunk,
+                detail="\n".join(lines), events=[],
                 visual={"focus": [], "premise": [],
                         "groups": [{"cells": [cell], "kind": "assumption"}],
                         "links": [], "chips": [],
                         "assumption": {"cells": [cell],
                                        "label": f"反证推理：假设 {name}={value}"}},
                 branch=True)
-            reasoning.pre_dom = pre_dom
-            reasoning.pre_vals = pre_vals
-            reasoning.candidates = self._candidates(chunk, pre_dom)
+            reasoning.pre_dom, reasoning.pre_vals = list(pre_dom), list(pre_vals)
+            reasoning.candidates = []
             self.steps.append(reasoning)
             if self.on_step:
                 try: self.on_step(reasoning)
                 except Exception: pass
-            for event in chunk:
-                bit = 1 << (event.value - 1)
-                if event.kind == "place":
-                    run_state.vals[event.cell] = event.value
-                    run_state.dom[event.cell] = bit
-                else:
-                    run_state.dom[event.cell] &= ~bit
 
         refuted = Step(
             index=len(self.steps), technique="contradiction", tier=4,
@@ -936,6 +962,11 @@ def audit_steps(puzzle, rules, steps: list[Step], node_limit: int = 12_000,
         pre.vals = step.pre_vals.copy()
         step_ok = True
         for event in step.events:
+            # Branch assumptions are deliberately temporary and are never
+            # claims that the assumed value is forced on the real board.
+            if (event.reason.kind == "contradiction"
+                    and (event.reason.data or {}).get("phase") == "start"):
+                continue
             if event.reason.kind == "unit_peer":
                 continue
             if checks >= max_checks:
