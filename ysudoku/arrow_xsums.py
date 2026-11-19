@@ -66,3 +66,56 @@ def parse_arrows(raw: dict, n: int = 9) -> list[dict]:
             continue
         out.append({"cells": cells, "total": total, "direction": direction(arrow)})
     return out
+
+
+def parse_arrows_fitted(raw: dict, puzzle, n: int = 9):
+    """Fit arrows to the official solution when available."""
+    solution = getattr(puzzle, "solution", None)
+    underlays = raw.get("underlays") or []
+    clues = []
+    for item in underlays:
+        text = str(item.get("text", "")).strip()
+        if text.isdigit():
+            clues.append((int(text), item.get("center", [0, 0])))
+    arrows = raw.get("arrows") or []
+    if not solution or not clues:
+        return parse_arrows(raw, n)
+    out = []
+    for arrow in arrows:
+        base = direction(arrow)
+        if base == (0, 0):
+            continue
+        entries = []
+        for dr, dc in (base, (-base[0], -base[1])):
+            for r in range(n):
+                for c in range(n):
+                    if dr > 0 and r != 0:
+                        continue
+                    if dr < 0 and r != n - 1:
+                        continue
+                    if dc > 0 and c != 0:
+                        continue
+                    if dc < 0 and c != n - 1:
+                        continue
+                    cells = []
+                    rr, cc = r, c
+                    while 0 <= rr < n and 0 <= cc < n:
+                        cells.append(rr * n + cc)
+                        rr += dr
+                        cc += dc
+                    first = solution[cells[0]]
+                    if not (1 <= first <= len(cells)):
+                        continue
+                    s = sum(solution[c] for c in cells[:first]) if all(solution[c] for c in cells[:first]) else None
+                    if s is None:
+                        continue
+                    for total, center in clues:
+                        if s == total:
+                            head = (arrow.get("wayPoints") or [[0, 0]])[-1]
+                            dist = (center[0] - head[0]) ** 2 + (center[1] - head[1]) ** 2
+                            entries.append((dist, total, cells))
+        if entries:
+            entries.sort(key=lambda x: x[0])
+            _dist, total, cells = entries[0]
+            out.append({"cells": cells, "total": total, "direction": (dr, dc)})
+    return out
