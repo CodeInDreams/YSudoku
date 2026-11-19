@@ -780,28 +780,23 @@ export default function App() {
     const cascade = layer === "rules" ? t("history.cascadeRules") : layer === "steps" ? t("history.cascadeSteps") : "";
     const message = isCurrent
       ? t("history.confirmDeleteCurrentLayer", { title: entry.title, layer: label })
-      : t("history.confirmDeleteRebuildLayer", { title: entry.title, layer: label });
+      : t("history.confirmDelete", { title: entry.title, layer: label });
     if (!window.confirm(`${message}\n\n${cascade}`.trim())) return;
     await postJson("/api/store/delete", { key: entry.key, layer });
-    if (isCurrent && layer === "frames") {
-      setReady(false);
-      setFrameSrc("");
-      setFrameStep(-2);
-    } else {
-      await rebuildEntry(entry);
-    }
+    if (isCurrent) await rebuildEntry(entry);
     refreshStore();
   }
 
   async function removeEntry(entry) {
     const isCurrent = entry.key === analysis?.storage?.key;
-    const message = isCurrent
-      ? t("history.deleteCurrentConfirm", { title: entry.title })
-      : t("history.deleteRebuildConfirm", { title: entry.title });
-    if (!window.confirm(message)) return;
-    await postJson("/api/store/delete", { key: entry.key, layer: "all" });
-    if (isCurrent) exitPuzzle();
-    else await rebuildEntry(entry);
+    if (isCurrent) {
+      if (!window.confirm(t("history.deleteCurrentConfirm", { title: entry.title }))) return;
+      await postJson("/api/store/delete", { key: entry.key, layer: "all" });
+      exitPuzzle();
+    } else {
+      if (!window.confirm(t("history.deletePuzzleConfirm", { title: entry.title }))) return;
+      await postJson("/api/store/delete", { key: entry.key, layer: "all" });
+    }
     refreshStore();
   }
 
