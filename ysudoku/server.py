@@ -16,7 +16,7 @@ import threading
 import time
 import uuid
 
-from . import history, live, store
+from . import history, live, store, sudokupad
 from .pipeline import analyze
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -24,6 +24,14 @@ DIST_DIR = Path(__file__).parent.parent / "web" / "dist"
 def _stored_analysis(target: str, body: dict, demo: bool = False,
                      force_rules: bool = False, force_steps: bool = False,
                      on_rules=None, on_step=None):
+    if "logic-masters.de" in target:
+        try:
+            data = sudokupad.load(target)
+            canonical = (data.get("metadata") or {}).get("source_url")
+            if canonical:
+                target = canonical
+        except Exception:
+            pass
     key = store.key_for(target)
     if force_rules:
         for layer in ("rules", "steps", "frames"):
