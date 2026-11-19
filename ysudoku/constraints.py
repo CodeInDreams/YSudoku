@@ -913,49 +913,20 @@ class XSums(Constraint):
             if not feasible(x):
                 changed |= st.elim(first, x, reason)
 
-        # If N is fixed, push the remaining sum into the other N-1 cells.
+        # If N is fixed, treat the first N cells as a sum group (killer-cage
+        # style): enumerate feasible digit combinations and keep only values
+        # that can appear in one of them.
         if st.dom[first].bit_count() == 1:
             x = st.dom[first].bit_length()
             if 1 <= x <= len(cells):
                 span = cells[:x]
-                groups = []
+                shared = None
                 for unit in st.units:
-                    members = [c for c in span if c in unit.cells]
-                    if len(members) >= 2:
-                        groups.append(members)
-                supports = {c: set() for c in span}
-                values = [x]
-                nodes = [0]
-                complete = [True]
-
-                def collect(index: int):
-                    if not complete[0]:
-                        return
-                    nodes[0] += 1
-                    if nodes[0] > 50000:
-                        complete[0] = False
-                        return
-                    if index == len(span):
-                        if sum(values) == self.total:
-                            for i, c in enumerate(span):
-                                supports[c].add(values[i])
-                        return
-                    cell = span[index]
-                    for v in bits(st.dom[cell]):
-                        if any(v in [values[span.index(c)] for c in group
-                                     if span.index(c) < index]
-                               for group in groups if cell in group):
-                            continue
-                        values.append(v)
-                        collect(index + 1)
-                        values.pop()
-
-                collect(1)
-                if complete[0] and supports[first]:
-                    for c in span[1:]:
-                        for v in bits(st.dom[c]):
-                            if v not in supports[c]:
-                                changed |= st.elim(c, v, reason)
+                    if all(c in unit.cells for c in span):
+                        shared = unit
+                        break
+                group = Cage(span, self.total, unique=shared is not None)
+                changed |= group.prune(st)
         return changed
 
 
