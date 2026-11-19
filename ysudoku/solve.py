@@ -459,9 +459,17 @@ class Solver:
             merged.append(group)
         return merged
 
-    def contradiction_step(self, deadline: float, per_candidate: float = 1.2):
+    def contradiction_step(self, deadline: float, per_candidate: float = 1.2,
+                           max_steps: int = 4000):
         import time
         from .search import proof_cost
+        self.refutation_limited = False
+        # Reserve the assumption, contradiction, rollback and conclusion.
+        chunk_size = 8
+        max_pages = min(32, max_steps - len(self.steps) - 4)
+        if max_pages < 1:
+            self.refutation_limited = True
+            return None
         pre_dom, pre_vals = self._pre()
         focus_units = {u for c in self.focus if c < len(self.state.unit_of)
                        for u in self.state.unit_of[c]}
@@ -509,6 +517,11 @@ class Solver:
             if not refuted or not proof:
                 continue
             cost = proof_cost(proof)
+            # Each node adds at most two lines beyond the counted deductions
+            # and sub-assumptions. Compare only proofs we can show in full.
+            if cost[0] + 2 * cost[2] > max_pages * chunk_size:
+                self.refutation_limited = True
+                continue
             score = (
                 cost[0], cost[1], cost[2],
                 0 if self.state.dom[cell].bit_count() == 2 else 1,
@@ -602,7 +615,6 @@ class Solver:
         proof_text = proof_lines(proof)
         if not proof_text:
             proof_text = [f"假设 {name} = {value} 后立即矛盾：{cause}。"]
-        chunk_size = 8
         chunks = [proof_text[i:i + chunk_size]
                   for i in range(0, len(proof_text), chunk_size)]
         pre_dom, pre_vals = self._pre()
@@ -876,7 +888,7 @@ class Solver:
         while not self.state.solved:
             if len(self.steps) >= max_steps:
                 return SolveResult("stuck", self.steps, self.state.vals,
-                                   f"超过 {max_steps} 步仍未解完")
+                                   f"达到 {max_steps} 步上限，仍未解完")
             step, error = self.next_step()
             if error:
                 return SolveResult("invalid", self.steps, self.state.vals, error)
@@ -892,7 +904,7 @@ class Solver:
                     continue
                 map_steps = self._candidate_map_steps()
                 if map_steps:
-                    for step in map_steps:
+                    for step in map_steps[:max_steps - len(self.steps)]:
                         self.steps.append(step)
                         if self.on_step is not None:
                             try:

@@ -18,7 +18,7 @@ from .narrate import Step
 
 
 # Invalidate results produced before the solver could prove deeper refutations.
-ANALYSIS_VERSION = 7
+ANALYSIS_VERSION = 8
 
 
 @dataclass
@@ -415,13 +415,19 @@ def analyze(
     if result.status == "stuck" and allow_chains:
         import time as _time
         deadline = _time.time() + 25.0
-        while result.status == "stuck" and _time.time() < deadline:
-            step = solver.contradiction_step(deadline)
+        while (result.status == "stuck" and len(solver.steps) < max_steps
+               and _time.time() < deadline):
+            step = solver.contradiction_step(deadline, max_steps=max_steps)
             if step is None:
+                if solver.refutation_limited:
+                    warnings.append("找到的反证过长，未能在步骤预算内展示完整证明")
+                    break
+                warnings.append("反证尝试未能在预算内找到可排除的候选")
                 break
             result = solver.run(max_steps=max_steps)
-        if result.status == "stuck":
-            warnings.append("反证尝试未能在预算内找到可排除的候选")
+        else:
+            if result.status == "stuck" and len(solver.steps) < max_steps:
+                warnings.append("反证尝试达到时间上限，题目仍未解完")
 
     for constraint in rules.constraints:
         support = getattr(constraint, "last_result", None)
