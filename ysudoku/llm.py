@@ -43,7 +43,7 @@ Schema:
      "note": "why this rule applies"}
   ],
   "globals": [
-    {"kind": "anti_knight" | "anti_king" | "diagonal" | "modular" | "entropy",
+    {"kind": "anti_knight" | "anti_king" | "non_consecutive" | "diagonal" | "modular" | "entropy",
      "direction": "main" | "anti" | "both"}
   ],
   "ignored": [{"element": "<element id>", "why": "decoration / already covered"}],

@@ -177,6 +177,7 @@ KINDS = {
     "between": "之间线",
     "consecutive": "连续线",
     "little_killer": "小杀手斜线求和",
+    "non_consecutive": "正交相邻格不能填连续数",
     "anti_knight": "反骑士",
     "anti_king": "反国王",
     "diagonal": "对角线数独",
@@ -364,11 +365,28 @@ def compile_spec(puzzle: Puzzle, elements: list[Element], spec: dict,
                 "count": built, "params": params, "note": raw.get("note", ""),
             })
 
-    for raw in spec.get("globals", []):
+    globals_ = list(spec.get("globals") or [])
+    # Older saved specs could express this board-wide rule for just one pair.
+    if _global_non_consecutive(text_low) and not any(
+            g.get("kind") == "non_consecutive" for g in globals_):
+        globals_.append({"kind": "non_consecutive"})
+    for raw in globals_:
         kind = str(raw.get("kind", "")).strip()
         if kind == "anti_knight":
             result.constraints.extend(_anti_pairs(puzzle, "anti_knight", "反骑士"))
             result.resolved.append({"kind": kind, "label": KINDS[kind], "elements": [], "count": 1})
+        elif kind == "non_consecutive":
+            adjacent = [(cell, other) for cell in range(n * n)
+                        for other in ([cell + 1] if cell % n < n - 1 else [])
+                        + ([cell + n] if cell // n < n - 1 else [])]
+            edges = set(adjacent)
+            for con in result.constraints:
+                if isinstance(con, Cage) and tuple(sorted(con.cells())) in edges:
+                    con.non_consecutive_pair = True
+            result.constraints.extend(PairRule(a, b, kind, lambda x, y: abs(x - y) > 1,
+                                               KINDS[kind]) for a, b in adjacent)
+            result.resolved.append({"kind": kind, "label": KINDS[kind],
+                                    "elements": [], "count": len(adjacent)})
         elif kind == "anti_king":
             result.constraints.extend(_anti_pairs(puzzle, "anti_king", "反国王"))
             result.resolved.append({"kind": kind, "label": KINDS[kind], "elements": [], "count": 1})
@@ -686,11 +704,18 @@ def _has(text: str, *words: str) -> bool:
     return any(w in low for w in words)
 
 
+def _global_non_consecutive(text):
+    sentences = {"orthogonally adjacent cells may not contain consecutive digits",
+                 "orthogonally adjacent cells cannot contain consecutive digits"}
+    return any(line.strip().lower().removeprefix("non-consecutive:").strip().rstrip(".")
+               in sentences for line in text.splitlines())
+
+
 def heuristic_spec(puzzle: Puzzle, elements: list[Element]) -> dict:
     """Colour/keyword based fallback when no LLM is available."""
     text = puzzle.rules_text or ""
     rules: list[dict] = []
-    globals_: list[dict] = []
+    globals_: list[dict] = [{"kind": "non_consecutive"}] if _global_non_consecutive(text) else []
     warnings: list[str] = []
 
     cage_ids = [e.id for e in elements if e.kind == "cage" and e.attrs.get("sum") is not None]

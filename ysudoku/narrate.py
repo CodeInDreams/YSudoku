@@ -45,6 +45,7 @@ TITLES = {
     "between": "之间线",
     "consecutive": "连续线",
     "little_killer": "小杀手",
+    "non_consecutive": "正交相邻格不能填连续数",
     "anti_knight": "反骑士",
     "anti_king": "反国王",
     "unit_peer": "同区排除",
@@ -723,11 +724,19 @@ def _explain_thermo(events, data, n):
     return detail, visual
 
 
+def _explain_non_consecutive(events, data, n):
+    detail = (f"{_names([data['a'], data['b']], n)} 共边，两数既不能相同，也不能相差 1。"
+              "\n以下候选在另一格没有可配的数字：" + "；".join(_effect_lines(events, n)))
+    return detail, _basic_visual(events, n)
+
+
 def _explain_cage(events, data, n):
     cells = data["cells"]
     total = data["sum"]
     combos = data.get("combos") or []
     detail = f"笼 {total}（{len(cells)} 格，数字互不重复）：{_names(cells, n)}。\n"
+    for a, b in data.get("consecutive_pairs", []):
+        detail += f"这两格共边，不能同时填相差 1 的 {a} 和 {b}。\n"
     if combos:
         detail += f"当前可行的数字组合共 {len(combos)} 组：\n"
         for combo in combos[:8]:

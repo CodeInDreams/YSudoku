@@ -106,6 +106,7 @@ class Cage(Constraint):
         self._cells = list(cells)
         self.total = total
         self.unique = unique
+        self.non_consecutive_pair = False
 
     def cells(self) -> list[int]:
         return self._cells
@@ -144,6 +145,9 @@ class Cage(Constraint):
             return changed
 
         combos = [c for c in digit_sets(k, self.total, st.n)]
+        if self.non_consecutive_pair:
+            reason.data["consecutive_pairs"] = [pair for pair in combos if pair[1] - pair[0] == 1]
+            combos = [pair for pair in combos if pair[1] - pair[0] != 1]
         feasible = []
         doms = [st.dom[c] for c in cells]
         for combo in combos:
