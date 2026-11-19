@@ -156,3 +156,19 @@ def bfs_unsupported(state: State, constraints, max_rules: int = 3):
                     if state.dom[target] >> (value - 1) & 1 and value not in supports[target]:
                         return [(target, value, rules)]
     return []
+
+
+def joint_refute(state: State, constraints, cell: int, value: int):
+    """Refute cell=value by a complete local component search."""
+    child = state.copy()
+    child.dom[cell] = 1 << (value - 1)
+    comp, cells = local_component(child, constraints, cell)
+    if not comp or len(cells) > MAX_COMPONENT_CELLS:
+        return None
+    supports, complete = _enumerate_supports(child, comp, cells)
+    if not complete:
+        return None
+    rules = [c.describe() for c in comp]
+    if not supports.get(cell):
+        return True, "联合规则无一致赋值：" + "；".join(rules[:6]), rules
+    return None

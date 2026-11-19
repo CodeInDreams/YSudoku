@@ -41,10 +41,13 @@ def default_workers() -> int:
 
 _STATE: State | None = None
 _CONSTRAINTS = None
+_SOLUTION = []
 
 
 def _worker(item):
     cell, value = item
+    if _SOLUTION and _SOLUTION[cell] == value:
+        return None
     if _STATE is None:
         return None
     child = _STATE.copy()
@@ -231,10 +234,12 @@ def _task_main(conn):
         conn.close()
 
 
-def run_parallel_dynamic(state: State, constraints, candidates, timeout: float = 3.0):
+def run_parallel_dynamic(state: State, constraints, candidates, timeout: float = 3.0,
+                         solution=None):
     """Two forked workers pull the next candidate as soon as they are free."""
-    global _STATE, _CONSTRAINTS
+    global _STATE, _CONSTRAINTS, _SOLUTION
     _STATE, _CONSTRAINTS = state, constraints
+    _SOLUTION = list(solution or [])
     if not candidates:
         return []
     ctx = mp.get_context("fork")

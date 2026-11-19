@@ -474,7 +474,8 @@ class Solver:
             for cell in constraint.cells():
                 weight[cell] += 1
         cells = sorted((c for c in range(self.state.n2) if not self.state.vals[c]),
-                       key=lambda c: (near_focus(c), -weight[c],
+                       key=lambda c: (0 if self.state.dom[c].bit_count() == 2 else 1,
+                                      near_focus(c), -weight[c],
                                       self.state.dom[c].bit_count()))
         import os
         best = None
@@ -488,7 +489,8 @@ class Solver:
         if best is None and candidates and os.environ.get("YS_PARALLEL", "1") == "1":
             from .parallel_refute import run_parallel_dynamic
             for cell, value, trace, cause, _places in run_parallel_dynamic(
-                    self.state, self.constraints, candidates, timeout=3.0):
+                    self.state, self.constraints, candidates, timeout=3.0,
+                    solution=self.solution):
                 meaningful = [e for e in trace
                               if e.kind == "place" or e.reason.kind != "unit_peer"]
                 score = (
