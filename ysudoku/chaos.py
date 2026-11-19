@@ -10,7 +10,39 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from itertools import product
+from functools import lru_cache
+
+
+@lru_cache(maxsize=65536)
+def _quad_supports(needs: tuple[int, ...], domains: tuple[int, ...]):
+    """Return GAC-supported values for a quadruple's required digit multiset."""
+    if not needs:
+        return domains
+    ordered = sorted(needs, key=lambda d: (
+        sum(bool(mask & (1 << (d - 1))) for mask in domains), d
+    ))
+    if any(not any(mask & (1 << (digit - 1)) for mask in domains)
+           for digit in ordered):
+        return None
+
+    support = [0] * len(domains)
+    placed = [0] * len(domains)
+
+    def visit(index: int, used: int) -> None:
+        if index == len(ordered):
+            for cell, mask in enumerate(domains):
+                support[cell] |= placed[cell] or mask
+            return
+        bit = 1 << (ordered[index] - 1)
+        for cell, mask in enumerate(domains):
+            cell_bit = 1 << cell
+            if not used & cell_bit and mask & bit:
+                placed[cell] = bit
+                visit(index + 1, used | cell_bit)
+                placed[cell] = 0
+
+    visit(0, 0)
+    return tuple(support) if any(support) else None
 
 
 class _Timeout(Exception):
@@ -44,16 +76,45 @@ def solve_chaos(puzzle, constraints, node_limit: int = 1_500_000,
     if n > 9:
         return ChaosResult("unsupported", [0] * (n * n), message="仅支持 9x9 及以下")
     total = n * n
+    neighbors = [tuple(_neighbors(cell, n)) for cell in range(total)]
+    neighbor_masks = [sum(1 << nb for nb in cells) for cells in neighbors]
     givens = dict(puzzle.givens)
     values = [0] * total
     region_of = [-1] * total
     region_cells: list[list[int]] = []
-    region_used: list[set[int]] = []
-    row_used = [set() for _ in range(n)]
-    col_used = [set() for _ in range(n)]
+    region_cell_masks: list[int] = []
+    unassigned_mask = (1 << total) - 1
+    region_used: list[int] = []
+    row_used = [0] * n
+    col_used = [0] * n
+    full = (1 << n) - 1
+    row_units = [[r * n + c for c in range(n)] for r in range(n)]
+    col_units = [[r * n + c for r in range(n)] for c in range(n)]
+    latin_units = [(cells, "row", r) for r, cells in enumerate(row_units)] + [
+        (cells, "col", c) for c, cells in enumerate(col_units)
+    ]
     nodes = [0]
-    started = time.time()
+    started = time.monotonic()
     region_rules = [con for con in constraints if con.kind == "region_count"]
+    quadruples = [con for con in constraints if con.kind == "quadruple"]
+    quad_needs = []
+    for con in quadruples:
+        counts = [0] * (n + 1)
+        for digit in con.digits:
+            if 1 <= digit <= n:
+                counts[digit] += 1
+        quad_needs.append(tuple((d, count) for d, count in enumerate(counts) if count))
+    quad_by_row = [set() for _ in range(n)]
+    quad_by_col = [set() for _ in range(n)]
+    for qi, con in enumerate(quadruples):
+        for cell in con.cells():
+            r, c = divmod(cell, n)
+            quad_by_row[r].add(qi)
+            quad_by_col[c].add(qi)
+    region_rules_by_cell = [[] for _ in range(total)]
+    for con in region_rules:
+        for cell in con.cells():
+            region_rules_by_cell[cell].append(con)
     cage_rules = []
     for con in constraints:
         con_total = getattr(con, "total", None)
@@ -75,18 +136,115 @@ def solve_chaos(puzzle, constraints, node_limit: int = 1_500_000,
         return True
 
     def region_can_grow(index: int) -> bool:
-        cells = region_cells[index]
-        if len(cells) >= n:
-            return True
-        seen = set(cells)
-        stack = list(cells)
-        while stack:
-            cell = stack.pop()
-            for nb in _neighbors(cell, n):
-                if region_of[nb] == -1 and nb not in seen:
-                    seen.add(nb)
-                    stack.append(nb)
-        return len(seen) >= n
+        """Whether all cells of a partial region can still form one connected region."""
+        if len(region_cells[index]) >= n:
+            return len(region_cells[index]) == n and _connected(region_cells[index], n)
+        owned = region_cell_masks[index]
+        seed = owned & -owned
+        reachable = seed
+        frontier = seed
+        allowed = unassigned_mask | owned
+        while frontier:
+            expanded = 0
+            pending = frontier
+            while pending:
+                bit = pending & -pending
+                pending ^= bit
+                expanded |= neighbor_masks[bit.bit_length() - 1]
+            frontier = expanded & allowed & ~reachable
+            reachable |= frontier
+        return (owned & ~reachable) == 0 and reachable.bit_count() >= n
+
+    def _connected(cells: list[int], size: int) -> bool:
+        wanted = sum(1 << cell for cell in cells)
+        if not wanted:
+            return False
+        seed = wanted & -wanted
+        reached = seed
+        frontier = seed
+        while frontier:
+            expanded = 0
+            pending = frontier
+            while pending:
+                bit = pending & -pending
+                pending ^= bit
+                expanded |= neighbor_masks[bit.bit_length() - 1]
+            frontier = expanded & wanted & ~reached
+            reached |= frontier
+        return reached.bit_count() == size
+
+    def candidate_mask(cell: int) -> int:
+        r, c = divmod(cell, n)
+        blocked = row_used[r] | col_used[c]
+        region = region_of[cell]
+        if region >= 0:
+            blocked |= region_used[region]
+        given = givens.get(cell)
+        if given:
+            bit = 1 << (given - 1)
+            return bit if not blocked & bit else 0
+        return full & ~blocked
+
+    def propagated_domains() -> list[int] | None:
+        """Forward-check Latin units and quadruples to a local fixed point."""
+        domains = [candidate_mask(cell) if not values[cell]
+                   else 1 << (values[cell] - 1) for cell in range(total)]
+        changed = True
+        while changed:
+            changed = False
+            for cells, kind, index in latin_units:
+                used_mask = row_used[index] if kind == "row" else col_used[index]
+                single_bits = 0
+                host_count = [0] * n
+                host_cell = [-1] * n
+                for cell in cells:
+                    if values[cell]:
+                        continue
+                    mask = domains[cell]
+                    if mask.bit_count() == 1:
+                        if single_bits & mask:
+                            return None
+                        single_bits |= mask
+                    while mask:
+                        bit = mask & -mask
+                        mask ^= bit
+                        digit_index = bit.bit_length() - 1
+                        host_count[digit_index] += 1
+                        host_cell[digit_index] = cell
+                if single_bits:
+                    for cell in cells:
+                        if (not values[cell] and domains[cell].bit_count() > 1
+                                and domains[cell] & single_bits):
+                            domains[cell] &= ~single_bits
+                            if not domains[cell]:
+                                return None
+                            changed = True
+                missing = full & ~used_mask
+                while missing:
+                    bit = missing & -missing
+                    missing ^= bit
+                    digit_index = bit.bit_length() - 1
+                    count = host_count[digit_index]
+                    if not count:
+                        return None
+                    if count == 1 and domains[host_cell[digit_index]] != bit:
+                        domains[host_cell[digit_index]] = bit
+                        changed = True
+            for qi, con in enumerate(quadruples):
+                cells = con.cells()
+                masks = tuple(domains[cell] for cell in cells)
+                required = tuple(digit for digit, count in quad_needs[qi]
+                                 for _ in range(count))
+                support = _quad_supports(required, masks)
+                if support is None:
+                    return None
+                for cell, allowed in zip(cells, support):
+                    if values[cell] and not (allowed & domains[cell]):
+                        return None
+                    if not values[cell] and allowed != domains[cell]:
+                        domains[cell] &= allowed
+                        changed = True
+        return domains
 
     def region_count_possible(con) -> bool:
         cells = con.cells()
@@ -95,18 +253,20 @@ def solve_chaos(puzzle, constraints, node_limit: int = 1_500_000,
         existing = sorted(set(assigned.values()))
         if not unassigned:
             return len(existing) in con.counts
-        usable = [r for r in existing if len(region_cells[r]) < n]
+        usable = [r for r, assigned_cells in enumerate(region_cells)
+                  if len(assigned_cells) < n]
         new_slots = max(0, n - len(region_cells))
         new_ids = [-(i + 1) for i in range(min(len(unassigned), new_slots))]
         options = usable + new_ids
         if not options:
             return False
-        for combo in product(options, repeat=len(unassigned)):
-            labels = set(existing)
-            labels.update(combo)
-            if len(labels) in con.counts:
-                return True
-        return False
+        # The clue observes only the number of distinct labels. Every
+        # unassigned cell may reuse a usable label or introduce a new region;
+        # the interval below is a safe relaxation and avoids a Cartesian
+        # product at every search node.
+        extra_labels = len(set(options) - set(existing))
+        max_distinct = len(existing) + min(len(unassigned), extra_labels)
+        return any(len(existing) <= count <= max_distinct for count in con.counts)
 
     def check_all() -> bool:
         region_map = {c: region_of[c] for c in range(total)}
@@ -119,28 +279,56 @@ def solve_chaos(puzzle, constraints, node_limit: int = 1_500_000,
         return True
 
     def region_rules_ok(cell: int) -> bool:
-        for con in region_rules:
-            if cell in con.cells() and not region_count_possible(con):
+        for con in region_rules_by_cell[cell]:
+            if not region_count_possible(con):
                 return False
         return True
 
-    def dfs(pos: int):
+    def dfs(assigned_count: int):
+        nonlocal unassigned_mask
         nodes[0] += 1
-        if nodes[0] % 2048 == 0 and time.time() - started > time_limit:
+        if nodes[0] % 256 == 0 and time.monotonic() - started > time_limit:
             raise _Timeout
         if nodes[0] > node_limit:
             raise _Timeout
-        if pos == total:
-            if all(len(cells) == n for cells in region_cells) and check_all():
+        if assigned_count == total:
+            if (all(len(cells) == n and _connected(cells, n) for cells in region_cells)
+                    and check_all()):
                 return list(values), [list(cells) for cells in region_cells]
             return None
 
-        cell = pos
+        domains = propagated_domains()
+        if domains is None:
+            return None
+
+        unassigned = [cell for cell in range(total) if region_of[cell] < 0]
+        if region_rules or quadruples:
+            # MRV over propagated domains; circle cells break ties first.
+            def pair_count(x: int) -> int:
+                mask = domains[x]
+                existing = sum(
+                    (mask & ~region_used[rr]).bit_count()
+                    for rr, cells in enumerate(region_cells) if len(cells) < n
+                )
+                if len(region_cells) < n:
+                    existing += mask.bit_count()
+                return existing
+
+            cell = min(unassigned, key=lambda x: (
+                pair_count(x), domains[x].bit_count(),
+                -len(quad_by_row[x // n] | quad_by_col[x % n]), x
+            ))
+        else:
+            # With no region-specific clues, a simple connected growth order
+            # avoids exploring equivalent arbitrary region labelings.
+            cell = unassigned[0]
         r, c = divmod(cell, n)
-        adjacent = {
-            region_of[nb] for nb in _neighbors(cell, n) if region_of[nb] >= 0
-        }
-        options = [rr for rr in adjacent if len(region_cells[rr]) < n]
+        adjacent = {region_of[nb] for nb in neighbors[cell] if region_of[nb] >= 0}
+        if region_rules or quadruples:
+            options = [rr for rr, cells in enumerate(region_cells) if len(cells) < n]
+        else:
+            options = [rr for rr in adjacent if len(region_cells[rr]) < n]
+        options.sort(key=lambda rr: (rr not in adjacent, -len(region_cells[rr]), rr))
         can_start = len(region_cells) < n
         if can_start:
             options.append(-1)
@@ -150,45 +338,57 @@ def solve_chaos(puzzle, constraints, node_limit: int = 1_500_000,
             if choice == -1:
                 choice = len(region_cells)
                 region_cells.append([])
-                region_used.append(set())
+                region_cell_masks.append(0)
+                region_used.append(0)
                 created = True
             region_cells[choice].append(cell)
+            cell_bit = 1 << cell
+            region_cell_masks[choice] |= cell_bit
+            unassigned_mask &= ~cell_bit
             region_of[cell] = choice
-            if not region_rules_ok(cell):
+            # Connectivity depends on region membership, not on the digit.
+            if not region_can_grow(choice) or not region_rules_ok(cell):
                 region_cells[choice].pop()
+                region_cell_masks[choice] &= ~cell_bit
+                unassigned_mask |= cell_bit
                 region_of[cell] = -1
                 if created:
                     region_cells.pop()
+                    region_cell_masks.pop()
                     region_used.pop()
                 continue
-            digits = [givens[cell]] if cell in givens else range(1, n + 1)
-            ok = False
-            for digit in digits:
-                if digit in row_used[r] or digit in col_used[c] or digit in region_used[choice]:
-                    continue
+            digit_mask = domains[cell] & candidate_mask(cell)
+            remaining_digits = digit_mask
+            while remaining_digits:
+                bit = remaining_digits & -remaining_digits
+                remaining_digits ^= bit
+                digit = bit.bit_length()
                 values[cell] = digit
-                row_used[r].add(digit)
-                col_used[c].add(digit)
-                region_used[choice].add(digit)
-                if not cages_ok() or not region_can_grow(choice):
-                    row_used[r].discard(digit)
-                    col_used[c].discard(digit)
-                    region_used[choice].discard(digit)
+                row_used[r] |= bit
+                col_used[c] |= bit
+                region_used[choice] |= bit
+                if not cages_ok():
+                    row_used[r] &= ~bit
+                    col_used[c] &= ~bit
+                    region_used[choice] &= ~bit
                     values[cell] = 0
                     continue
                 try:
-                    result = dfs(pos + 1)
+                    result = dfs(assigned_count + 1)
                 finally:
-                    row_used[r].discard(digit)
-                    col_used[c].discard(digit)
-                    region_used[choice].discard(digit)
+                    row_used[r] &= ~bit
+                    col_used[c] &= ~bit
+                    region_used[choice] &= ~bit
                 if result:
                     return result
                 values[cell] = 0
             region_cells[choice].pop()
+            region_cell_masks[choice] &= ~cell_bit
+            unassigned_mask |= cell_bit
             region_of[cell] = -1
             if created:
                 region_cells.pop()
+                region_cell_masks.pop()
                 region_used.pop()
         return None
 
@@ -207,8 +407,11 @@ def solve_chaos(puzzle, constraints, node_limit: int = 1_500_000,
 
 def check_chaos_solution(puzzle, constraints, values: list[int], regions: list[list[int]]) -> list[str]:
     n = puzzle.size
+    total = n * n
     want = set(range(1, n + 1))
     errors: list[str] = []
+    if len(values) != total:
+        return [f"盘面应有 {total} 格，实际为 {len(values)} 格"]
     for r in range(n):
         if set(values[r * n:(r + 1) * n]) != want:
             errors.append(f"第{r + 1}行不完整")
@@ -217,14 +420,39 @@ def check_chaos_solution(puzzle, constraints, values: list[int], regions: list[l
             errors.append(f"第{c + 1}列不完整")
     if len(regions) != n or any(len(reg) != n for reg in regions):
         errors.append("区域数量或大小不对")
-    for i, reg in enumerate(regions):
-        if {values[cell] for cell in reg} != want:
-            errors.append(f"区域{i + 1}不是 1..{n} 的排列")
-    region_of = {cell: i for i, reg in enumerate(regions) for cell in reg}
+    flat_regions = [cell for reg in regions for cell in reg]
+    valid_partition = (len(regions) == n and len(flat_regions) == total
+                       and set(flat_regions) == set(range(total)))
+    if not valid_partition:
+        errors.append("区域必须恰好覆盖每格一次")
+    region_of = {cell: i for i, reg in enumerate(regions) for cell in reg
+                 if 0 <= cell < total}
+    if valid_partition:
+        for i, reg in enumerate(regions):
+            if {values[cell] for cell in reg} != want:
+                errors.append(f"区域{i + 1}不是 1..{n} 的排列")
+            if not _cells_connected(reg, n):
+                errors.append(f"区域{i + 1}不连通")
     for con in constraints:
         if con.kind == "region_count":
-            if not con.check_regions(values, region_of):
+            if valid_partition and not con.check_regions(values, region_of):
                 errors.append(f"违反规则：{con.describe()}")
         elif not con.check(values):
             errors.append(f"违反规则：{con.describe()}")
     return errors
+
+
+def _cells_connected(cells: list[int], n: int) -> bool:
+    """Check orthogonal connectivity of a region's cell indices."""
+    wanted = set(cells)
+    if not wanted:
+        return False
+    seen = {next(iter(wanted))}
+    stack = list(seen)
+    while stack:
+        cell = stack.pop()
+        for neighbor in _neighbors(cell, n):
+            if neighbor in wanted and neighbor not in seen:
+                seen.add(neighbor)
+                stack.append(neighbor)
+    return seen == wanted
