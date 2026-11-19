@@ -33,6 +33,7 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
         except Exception:
             pass
     key = store.key_for(target)
+    lang = str(body.get("lang") or "zh").lower()[:2]
     if force_rules:
         for layer in ("rules", "steps", "frames"):
             store.delete_layer(key, layer)
@@ -46,7 +47,6 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
     if not force_rules and not force_steps and rules:
         cached = store.load_analysis(key)
         from .pipeline import ANALYSIS_VERSION
-        lang = str(body.get("lang") or "zh").lower()[:2]
         if (cached and cached.get("lang", "zh") == lang
                 and cached.get("algo_version") == ANALYSIS_VERSION
                 and meta.get("rules_hash") == rules.get("hash")):
