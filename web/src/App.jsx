@@ -963,6 +963,20 @@ export default function App() {
                 <rect key={`c-${i}-${cell}`} x={cell % n} y={Math.floor(cell / n)} width="1" height="1"
                   fill={item.hex || "#8ab4e8"} opacity="0.45" />
               )))}
+              {[...candidateStateUpTo(analysis, frameStep)].map(([cell, set]) => {
+                if (set.size <= 6) return null;
+                return (
+                  <g key={`wide-${cell}`}>
+                    {[...set].sort((a, b) => a - b).map((digit, i) => (
+                      <text key={digit}
+                        x={cell % n + 0.18 + (i % 3) * 0.24}
+                        y={Math.floor(cell / n) + 0.3 + Math.floor(i / 3) * 0.24}
+                        fontSize="0.15" fill="#b91c1c" textDecoration="line-through"
+                        style={{ textDecoration: "line-through" }}>{digit}</text>
+                    ))}
+                  </g>
+                );
+              })}
               {(overlay.visual.groups || []).map((group, i) => {
                 if (!group.cells?.length) return null;
                 const rows = group.cells.map((c) => Math.floor(c / n));
