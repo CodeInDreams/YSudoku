@@ -965,7 +965,8 @@ export default function App() {
               )))}
               {[...candidateStateUpTo(analysis, frameStep)].map(([cell, set]) => {
                 if (set.size <= 5) return null;
-                const extra = [...set].sort((a, b) => a - b).slice(5);
+                const extra = Array.from({ length: n }, (_, i) => i + 1)
+                  .filter((digit) => !set.has(digit));
                 return (
                   <g key={`wide-${cell}`}>
                     {extra.map((digit, i) => (
