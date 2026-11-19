@@ -110,3 +110,77 @@ def merge_result(state: State, constraints, result):
         return None
     events = state.end()
     return events, pre_dom, pre_vals
+
+
+def _batch_main(items, conn):
+    try:
+        for item in items:
+            result = _worker(item)
+            if result is not None:
+                conn.send(result)
+    except Exception:
+        pass
+    finally:
+        conn.close()
+
+
+class Refuter:
+    """Non-blocking dispatch of refutation candidates to two forked workers."""
+
+    def __init__(self, constraints, timeout: float = 3.0):
+        self.constraints = constraints
+        self.timeout = timeout
+        self.running = []
+        self.first_at = None
+        self.deadline = None
+        self.results = []
+
+    def dispatch(self, state: State, candidates):
+        global _STATE, _CONSTRAINTS
+        if not candidates:
+            return
+        _STATE, _CONSTRAINTS = state, self.constraints
+        ctx = mp.get_context("fork")
+        half = (len(candidates) + 1) // 2
+        for batch in (candidates[:half], candidates[half:]):
+            if not batch:
+                continue
+            recv, send = ctx.Pipe(duplex=False)
+            proc = ctx.Process(target=_batch_main, args=(batch, send), daemon=True)
+            proc.start()
+            send.close()
+            self.running.append((proc, recv))
+
+    def poll(self):
+        import time as _time
+        now = _time.monotonic()
+        fresh = []
+        if self.deadline is not None and now >= self.deadline:
+            self._stop()
+            return self.results
+        for entry in list(self.running):
+            proc, conn = entry
+            while conn.poll(0):
+                try:
+                    item = conn.recv()
+                except EOFError:
+                    break
+                if item is not None:
+                    fresh.append(item)
+                    self.results.append(item)
+                    if self.first_at is None:
+                        self.first_at = now
+                        self.deadline = now + self.timeout
+            if not conn.poll(0):
+                continue
+        return fresh
+
+    def _stop(self):
+        for proc, conn in self.running:
+            conn.close()
+            proc.terminate()
+            proc.join(timeout=0.2)
+        self.running = []
+
+    def busy(self):
+        return bool(self.running) and (self.deadline is None or __import__("time").monotonic() < self.deadline)

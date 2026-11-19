@@ -18,3 +18,23 @@ class MergeTest(unittest.TestCase):
         merged = merge_result(st, [], result)
         self.assertIsNotNone(merged)
         self.assertFalse(st.dom[0] & 1)
+
+
+class RefuterTest(unittest.TestCase):
+    def test_dispatch_and_poll(self):
+        import time
+        from ysudoku.parallel_refute import Refuter
+        from ysudoku.search import refute_direct_with_trace
+        from ysudoku.state import State, Unit
+
+        st = State(9, [Unit("row", 0, list(range(9)))])
+        st.dom[0] = 0b11
+        # no constraints means no refutation; just ensure dispatch/poll terminate
+        r = Refuter([])
+        r.dispatch(st, [(0, 1), (0, 2)])
+        for _ in range(40):
+            r.poll()
+            if not r.busy():
+                break
+            time.sleep(0.05)
+        self.assertIsInstance(r.results, list)

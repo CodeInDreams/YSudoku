@@ -33,6 +33,8 @@ class Solver:
         self.focus: set[int] = set()
         self.invalid: str | None = None
         self.solution = list(solution or [])
+        self._prefetched = []
+        self._refuter = None
         try:
             for cell, value in puzzle.givens.items():
                 self.state.place(cell, value)
@@ -478,7 +480,24 @@ class Solver:
                 candidates.extend((cell, v) for v in vals)
             if len(candidates) >= 80:
                 break
-        if candidates and os.environ.get("YS_PARALLEL", "1") == "1":
+        if self._prefetched:
+            for cell, value, trace, cause, _places in self._prefetched:
+                if self.state.vals[cell] or not (self.state.dom[cell] >> (value - 1) & 1):
+                    continue
+                meaningful = [e for e in trace
+                              if e.kind == "place" or e.reason.kind != "unit_peer"]
+                score = (
+                    1 if self.state.dom[cell].bit_count() == 2 else 0,
+                    sum(1 for e in meaningful if e.kind == "place"),
+                    sum(1 for e in meaningful if e.kind == "elim"),
+                    len({e.reason.kind for e in meaningful}),
+                    -len(meaningful),
+                    -self.state.dom[cell].bit_count(),
+                )
+                if best is None or score > best[0]:
+                    best = (score, cell, value, list(bits(self.state.dom[cell])), trace, cause)
+            self._prefetched = []
+        if best is None and candidates and os.environ.get("YS_PARALLEL", "1") == "1":
             from .parallel_refute import run_parallel
             for cell, value, trace, cause, _places in run_parallel(
                     self.state, self.constraints, candidates, timeout=3.0):
@@ -824,7 +843,22 @@ class Solver:
     def run(self, max_steps: int = 4000) -> SolveResult:
         if self.invalid:
             return SolveResult("invalid", [], self.state.vals, self.invalid)
+        try:
+            from .parallel_refute import Refuter
+            self._refuter = Refuter(self.constraints)
+            cands = []
+            for c in range(self.state.n2):
+                if not self.state.vals[c]:
+                    cands.extend((c, v) for v in range(1, self.state.n + 1)
+                                 if self.state.dom[c] >> (v - 1) & 1)
+                if len(cands) >= 80:
+                    break
+            self._refuter.dispatch(self.state, cands)
+        except Exception:
+            self._refuter = None
         while not self.state.solved:
+            if self._refuter is not None:
+                self._prefetched.extend(self._refuter.poll())
             if len(self.steps) >= max_steps:
                 return SolveResult("stuck", self.steps, self.state.vals,
                                    f"超过 {max_steps} 步仍未解完")
