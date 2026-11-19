@@ -844,7 +844,9 @@ class XSums(Constraint):
         return self._cells
 
     def ordered(self) -> list[int]:
-        return self._cells if self.side in ("top", "left") else list(reversed(self._cells))
+        if self.side in ("top", "left", "arrow"):
+            return list(self._cells)
+        return list(reversed(self._cells))
 
     def describe(self) -> str:
         return f"X-Sums {self.total}（{self.side}）"

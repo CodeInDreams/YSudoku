@@ -59,3 +59,9 @@ class DiagonalBoxGroupsTest(unittest.TestCase):
         st.dom[cells[1]] = 0b10  # only 2, duplicate -> impossible
         with self.assertRaises(Exception):
             XSums(cells, 4, "top").prune(st)
+
+
+class ArrowOrderTest(unittest.TestCase):
+    def test_arrow_keeps_entry_order(self):
+        cells = [4, 12, 20, 28, 36]
+        self.assertEqual(XSums(cells, 10, "arrow").ordered(), cells)
