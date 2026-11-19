@@ -17,15 +17,26 @@ def direction(arrow: dict) -> tuple[int, int]:
     return (_sign(dy), _sign(dx))
 
 
-def entry_cell(arrow: dict, n: int = 9) -> tuple[int, int] | None:
-    start = (arrow.get("wayPoints") or [[None, None]])[-1]
+def entry_cell(arrow: dict, n: int = 9):
+    start = (arrow.get("wayPoints") or [[None, None]])[0]
     x, y = start
     if x is None or y is None:
         return None
-    row = int(round(y - 0.5))
-    col = int(round(x - 0.5))
-    dr, dc = direction(arrow)
-    return row + dr, col + dc
+    if x < 0:
+        col = 0
+        row = max(0, min(n - 1, int(round(y - 0.5))))
+    elif x > n:
+        col = n - 1
+        row = max(0, min(n - 1, int(round(y - 0.5))))
+    elif y < 0:
+        row = 0
+        col = max(0, min(n - 1, int(round(x - 0.5))))
+    elif y > n:
+        row = n - 1
+        col = max(0, min(n - 1, int(round(x - 0.5))))
+    else:
+        return None
+    return row, col
 
 
 def cells_along(arrow: dict, n: int = 9) -> list[int]:
