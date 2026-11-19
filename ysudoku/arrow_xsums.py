@@ -79,6 +79,35 @@ def parse_arrows(raw: dict, n: int = 9) -> list[dict]:
     return out
 
 
+def arrow_edge(arrow: dict, n: int = 9):
+    head = (arrow.get("wayPoints") or [[0, 0]])[-1]
+    x, y = head
+    top, bottom = y < 0, y > n
+    left, right = x < 0, x > n
+    if top and left: return "top-left"
+    if top and right: return "top-right"
+    if bottom and left: return "bottom-left"
+    if bottom and right: return "bottom-right"
+    if top: return "top"
+    if bottom: return "bottom"
+    if left: return "left"
+    if right: return "right"
+    return None
+
+
+def allowed_directions(arrow: dict, n: int = 9):
+    edge = arrow_edge(arrow, n)
+    table = {
+        "top": [(1, 0), (1, -1), (1, 1)],
+        "bottom": [(-1, 0), (-1, -1), (-1, 1)],
+        "left": [(0, 1), (-1, 1), (1, 1)],
+        "right": [(0, -1), (-1, -1), (1, -1)],
+        "top-left": [(1, 1)], "top-right": [(1, -1)],
+        "bottom-left": [(-1, 1)], "bottom-right": [(-1, -1)],
+    }
+    return table.get(edge, [])
+
+
 def parse_arrows_fitted(raw: dict, puzzle, n: int = 9):
     """Fit arrows to the official solution when available."""
     solution = getattr(puzzle, "solution", None)
@@ -94,10 +123,10 @@ def parse_arrows_fitted(raw: dict, puzzle, n: int = 9):
     out = []
     for arrow in arrows:
         base = direction(arrow)
-        if base == (0, 0):
-            continue
+        dirs = [d for d in allowed_directions(arrow, n)
+                if d == base or d == (-base[0], -base[1])]
         entries = []
-        for dr, dc in (base, (-base[0], -base[1])):
+        for dr, dc in dirs:
             for r in range(n):
                 for c in range(n):
                     if dr > 0 and r != 0:
