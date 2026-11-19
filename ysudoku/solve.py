@@ -741,7 +741,7 @@ class Solver:
         if getattr(self, "_candidate_map_signature", None) == signature:
             return None
         cells = [c for c in range(self.state.n2)
-                 if not self.state.vals[c] and self.state.dom[c].bit_count() <= 6]
+                 if not self.state.vals[c] and self.state.dom[c].bit_count() <= 5]
         if not cells:
             return []
         self._candidate_map_signature = signature

@@ -120,7 +120,7 @@ function buildStepActions(analysis) {
   let branchBase = null;
   let branchCell = null;
   const baseActions = [];
-  const MAX_POSITIVE = 6;
+  const MAX_POSITIVE = 5;
   const digits = (mask) => digitsOf(mask || 0, n);
   const same = (a, b) => a.size === b.size && [...a].every((d) => b.has(d));
 
@@ -964,8 +964,8 @@ export default function App() {
                   fill={item.hex || "#8ab4e8"} opacity="0.45" />
               )))}
               {[...candidateStateUpTo(analysis, frameStep)].map(([cell, set]) => {
-                if (set.size <= 6) return null;
-                const extra = [...set].sort((a, b) => a - b).slice(6);
+                if (set.size <= 5) return null;
+                const extra = [...set].sort((a, b) => a - b).slice(5);
                 return (
                   <g key={`wide-${cell}`}>
                     {extra.map((digit, i) => (
