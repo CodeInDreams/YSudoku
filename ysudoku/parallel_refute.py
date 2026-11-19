@@ -29,38 +29,73 @@ def _worker(item):
     return (cell, value, trace, cause, places)
 
 
+def _process_main(item, conn):
+    try:
+        conn.send(_worker(item))
+    except Exception:
+        conn.send(None)
+    finally:
+        conn.close()
+
+
 def run_parallel(state: State, constraints, candidates, timeout: float = 3.0):
-    """Run candidates in forked workers; return results collected until timeout."""
+    """Fork two workers; the main thread polls their pipes at safe points."""
     global _STATE, _CONSTRAINTS
     _STATE, _CONSTRAINTS = state, constraints
     if not candidates:
         return []
     ctx = mp.get_context("fork")
+    pending = list(candidates)
+    running = []
     results = []
-    with ctx.Pool(processes=min(4, len(candidates))) as pool:
-        it = pool.imap_unordered(_worker, candidates)
-        first_at = None
-        deadline = None
-        while True:
-            now = time.monotonic()
-            if deadline is not None and now >= deadline:
-                break
-            wait = 30 if deadline is None else max(0.0, deadline - now)
-            try:
-                item = it.next(timeout=wait)
-            except (StopIteration, mp.TimeoutError):
-                break
-            if item is not None:
-                results.append(item)
-                if first_at is None:
-                    first_at = now
-                    deadline = now + timeout
-        pool.terminate()
+    first_at = None
+    deadline = None
+
+    def start_next():
+        if not pending:
+            return
+        item = pending.pop(0)
+        recv, send = ctx.Pipe(duplex=False)
+        proc = ctx.Process(target=_process_main, args=(item, send), daemon=True)
+        proc.start()
+        send.close()
+        running.append((proc, recv))
+
+    for _ in range(2):
+        start_next()
+
+    import time as _time
+    while running:
+        now = _time.monotonic()
+        if deadline is not None and now >= deadline:
+            break
+        for entry in list(running):
+            proc, conn = entry
+            if conn.poll(0):
+                try:
+                    item = conn.recv()
+                except EOFError:
+                    item = None
+                if item is not None:
+                    results.append(item)
+                    if first_at is None:
+                        first_at = now
+                        deadline = now + timeout
+                running.remove(entry)
+                proc.join(timeout=0.1)
+                start_next()
+        _time.sleep(0.05)
+    for proc, conn in running:
+        conn.close()
+        proc.terminate()
+        proc.join(timeout=0.2)
     return results
 
 
 def merge_result(state: State, constraints, result):
     """Apply one result only if its candidate is still valid; else discard."""
+    from .state import Contradiction, Reason
+
     cell, value, trace, cause, _places = result
     if state.vals[cell] or not (state.dom[cell] >> (value - 1) & 1):
         return None

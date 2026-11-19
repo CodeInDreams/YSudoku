@@ -469,36 +469,31 @@ class Solver:
 
         cells = sorted((c for c in range(self.state.n2) if not self.state.vals[c]),
                        key=lambda c: (near_focus(c), self.state.dom[c].bit_count()))
+        import os
         best = None
-        tested = 0
+        candidates = []
         for cell in cells:
-            if time.time() > deadline:
+            vals = list(bits(self.state.dom[cell]))
+            if len(vals) >= 2:
+                candidates.extend((cell, v) for v in vals)
+            if len(candidates) >= 80:
                 break
-            values = list(bits(self.state.dom[cell]))
-            if len(values) < 2:
-                continue
-            for value in values:
-                if time.time() > deadline or tested >= 80:
-                    break
-                refuted, trace, cause = refute_direct_with_trace(
-                    self.state, self.constraints, cell, value)
-                tested += 1
-                if refuted is not True:
-                    continue
+        if candidates and os.environ.get("YS_PARALLEL", "1") == "1":
+            from .parallel_refute import run_parallel
+            for cell, value, trace, cause, _places in run_parallel(
+                    self.state, self.constraints, candidates, timeout=3.0):
                 meaningful = [e for e in trace
                               if e.kind == "place" or e.reason.kind != "unit_peer"]
                 score = (
-                    1 if len(values) == 2 else 0,
+                    1 if self.state.dom[cell].bit_count() == 2 else 0,
                     sum(1 for e in meaningful if e.kind == "place"),
                     sum(1 for e in meaningful if e.kind == "elim"),
                     len({e.reason.kind for e in meaningful}),
                     -len(meaningful),
-                    -len(values),
+                    -self.state.dom[cell].bit_count(),
                 )
                 if best is None or score > best[0]:
-                    best = (score, cell, value, values, trace, cause)
-            if time.time() > deadline:
-                break
+                    best = (score, cell, value, list(bits(self.state.dom[cell])), trace, cause)
         if best is None:
             return None
         _, cell, value, values, trace, cause = best
