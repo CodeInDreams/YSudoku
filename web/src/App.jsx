@@ -965,13 +965,14 @@ export default function App() {
               )))}
               {[...candidateStateUpTo(analysis, frameStep)].map(([cell, set]) => {
                 if (set.size <= 6) return null;
+                const extra = [...set].sort((a, b) => a - b).slice(6);
                 return (
                   <g key={`wide-${cell}`}>
-                    {[...set].sort((a, b) => a - b).map((digit, i) => (
+                    {extra.map((digit, i) => (
                       <text key={digit}
-                        x={cell % n + 0.18 + (i % 3) * 0.24}
-                        y={Math.floor(cell / n) + 0.3 + Math.floor(i / 3) * 0.24}
-                        fontSize="0.15" fill="#b91c1c" textDecoration="line-through"
+                        x={cell % n + 0.5 + (i - (extra.length - 1) / 2) * 0.26}
+                        y={Math.floor(cell / n) + 0.9}
+                        textAnchor="middle" fontSize="0.16" fill="#b91c1c"
                         style={{ textDecoration: "line-through" }}>{digit}</text>
                     ))}
                   </g>
