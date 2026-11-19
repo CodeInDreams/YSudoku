@@ -887,7 +887,7 @@ export default function App() {
     const state = candidateStateUpTo(analysis, frameStep);
     const negatives = [];
     for (const [cell, set] of state) {
-      if (set.size <= 6) continue;
+      if (set.size <= 5) continue;
       const excluded = [];
       for (let v = 1; v <= n; v++) if (!set.has(v)) excluded.push(v);
       if (excluded.length && excluded.length <= 3) negatives.push({ cell, digits: excluded });
@@ -966,22 +966,6 @@ export default function App() {
                 <rect key={`c-${i}-${cell}`} x={cell % n} y={Math.floor(cell / n)} width="1" height="1"
                   fill={item.hex || "#8ab4e8"} opacity="0.45" />
               )))}
-              {[...candidateStateUpTo(analysis, frameStep)].map(([cell, set]) => {
-                if (set.size <= 5) return null;
-                const extra = Array.from({ length: n }, (_, i) => i + 1)
-                  .filter((digit) => !set.has(digit));
-                return (
-                  <g key={`wide-${cell}`}>
-                    {extra.map((digit, i) => (
-                      <text key={digit}
-                        x={cell % n + 0.5 + (i - (extra.length - 1) / 2) * 0.26}
-                        y={Math.floor(cell / n) + 0.9}
-                        textAnchor="middle" fontSize="0.16" fill="#b91c1c"
-                        style={{ textDecoration: "line-through" }}>{digit}</text>
-                    ))}
-                  </g>
-                );
-              })}
               {(overlay.visual.groups || []).map((group, i) => {
                 if (!group.cells?.length) return null;
                 const rows = group.cells.map((c) => Math.floor(c / n));
