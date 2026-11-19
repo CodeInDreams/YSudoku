@@ -251,8 +251,16 @@ def run_parallel_dynamic(state: State, constraints, candidates, timeout: float =
         item = pending.pop(0)
         parent.send(item)
         workers.append((proc, parent))
+    empty_since = None
     while workers:
         now = _time.monotonic()
+        if not pending:
+            if empty_since is None:
+                empty_since = now
+            elif now - empty_since > 0.5:
+                break
+        else:
+            empty_since = None
         if deadline is not None and now >= deadline:
             break
         alive = []
