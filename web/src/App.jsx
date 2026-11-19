@@ -756,19 +756,52 @@ export default function App() {
     refreshStore();
   }
 
+  function exitPuzzle() {
+    setPlaying(false);
+    setAnalysis(null);
+    setSession(null);
+    setFrameSrc("");
+    setFrameStep(-2);
+    setIdx(-1);
+    setDeleted(false);
+    setReady(false);
+    setPhase("idle");
+    setView("solve");
+  }
+
+  async function rebuildEntry(entry) {
+    if (entry.demo) await demo();
+    else await loadEntry(entry);
+  }
+
   async function removeLayer(entry, layer) {
-    if (entry.key === analysis?.storage?.key) return;
+    const isCurrent = entry.key === analysis?.storage?.key;
     const label = t(`layers.${layer}`);
     const cascade = layer === "rules" ? t("history.cascadeRules") : layer === "steps" ? t("history.cascadeSteps") : "";
-    if (!window.confirm(`${t("history.confirmDelete", { title: entry.title, layer: label })}\n\n${cascade}`.trim())) return;
+    const message = isCurrent
+      ? t("history.confirmDeleteCurrentLayer", { title: entry.title, layer: label })
+      : t("history.confirmDeleteRebuildLayer", { title: entry.title, layer: label });
+    if (!window.confirm(`${message}\n\n${cascade}`.trim())) return;
     await postJson("/api/store/delete", { key: entry.key, layer });
+    if (isCurrent && layer === "frames") {
+      setReady(false);
+      setFrameSrc("");
+      setFrameStep(-2);
+    } else {
+      await rebuildEntry(entry);
+    }
     refreshStore();
   }
 
   async function removeEntry(entry) {
-    if (entry.key === analysis?.storage?.key) return;
-    if (!window.confirm(t("history.deletePuzzleConfirm", { title: entry.title }))) return;
+    const isCurrent = entry.key === analysis?.storage?.key;
+    const message = isCurrent
+      ? t("history.deleteCurrentConfirm", { title: entry.title })
+      : t("history.deleteRebuildConfirm", { title: entry.title });
+    if (!window.confirm(message)) return;
     await postJson("/api/store/delete", { key: entry.key, layer: "all" });
+    if (isCurrent) exitPuzzle();
+    else await rebuildEntry(entry);
     refreshStore();
   }
 
