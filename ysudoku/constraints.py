@@ -904,6 +904,44 @@ class XSums(Constraint):
         reason = Reason("x_sums", {"cells": self._cells, "sum": self.total, "side": self.side})
         changed = False
 
+        # If all cells lie in one all-different unit, each feasible prefix is
+        # a matching against a distinct digit set. This also covers straight
+        # omnidirectional arrows within one row, column, or box. The tail is
+        # not part of the sum: a shorter feasible X supports its current
+        # candidates unchanged.
+        line_unit = next((unit for unit in st.units
+                          if len(cells) == len(set(cells))
+                          and set(cells).issubset(unit.cells)), None)
+        if line_unit is not None:
+            supports = [0] * len(cells)
+            feasible_x = set()
+            for x in bits(st.dom[first]):
+                if not 1 <= x <= len(cells):
+                    continue
+                span = cells[:x]
+                domains = [st.dom[cell] for cell in span]
+                domains[0] &= 1 << (x - 1)
+                if not domains[0]:
+                    continue
+                for combo in digit_sets(x, self.total, st.n):
+                    if not _matchable(combo, domains):
+                        continue
+                    feasible_x.add(x)
+                    for index, cell in enumerate(span):
+                        for value in bits(domains[index]):
+                            forced = list(domains)
+                            forced[index] = 1 << (value - 1)
+                            if _matchable(combo, forced):
+                                supports[index] |= 1 << (value - 1)
+                    # A shorter X leaves these cells unconstrained by this clue.
+                    for index in range(x, len(cells)):
+                        supports[index] |= st.dom[cells[index]]
+            if not feasible_x:
+                raise Contradiction("X-Sum prefix has no feasible digit set")
+            for cell, allowed in zip(cells, supports):
+                changed |= st.restrict(cell, allowed, reason)
+            return changed
+
         def feasible(x: int) -> bool:
             if x < 1 or x > len(cells):
                 return False

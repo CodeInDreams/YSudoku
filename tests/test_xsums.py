@@ -27,6 +27,19 @@ class XSumsTest(unittest.TestCase):
         XSums(cells, 10, "top").prune(st)
         self.assertFalse(st.dom[cells[0]] >> 0 & 1)
 
+    def test_shorter_feasible_prefix_preserves_tail_support(self):
+        cells = [0, 1, 2, 3]
+        st = State(4, [Unit("row", 0, cells)])
+        st.dom[0] = 0b0110  # X = 2 or 3
+        st.dom[1] = 0b1011
+        st.dom[2] = 0b1101
+        st.dom[3] = 0b0011
+
+        XSums(cells, 6, "arrow").prune(st)
+
+        # X=2, [2, 4] is a feasible prefix, so cell 2 remains unconstrained.
+        self.assertTrue(st.dom[2] & (1 << 2))
+
 
 if __name__ == "__main__":
     unittest.main()
