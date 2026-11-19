@@ -193,41 +193,117 @@ def refute_direct_with_trace(st: State, constraints, cell: int, value: int):
 
 
 def _propagate_with_cause(st: State, constraints, max_rounds: int = 200):
-    """Like propagate(), but preserve a useful terminal contradiction cause."""
+    """Return the terminal contradiction and the facts that establish it."""
     for _ in range(max_rounds):
         changed = False
         for con in constraints:
+            first = len(st.events)
             try:
                 changed |= bool(con.prune(st))
             except Contradiction as exc:
-                return False, str(exc)
+                empty = next((c for c, mask in enumerate(st.dom) if not mask), None)
+                cause = (str(exc), tuple(con.cells()) if empty is None else (empty,), None)
+            else:
+                cause = None
+            scope = None
+            for event in st.events[first:]:
+                if scope is None:
+                    scope = tuple(con.cells())
+                data = {**event.reason.data, "proof_scope": scope}
+                if getattr(con, "kind", "") == "pair":
+                    other = con.b if event.cell == con.a else con.a
+                    data["proof_partner"] = other
+                    data["proof_values"] = tuple(v for v in range(1, st.n + 1)
+                                                 if con.ok(event.value, v))
+                event.reason = Reason(event.reason.kind, data)
+            if cause:
+                return cause
         for cell in range(st.n2):
             if st.vals[cell] == 0 and st.dom[cell].bit_count() == 1:
                 value = st.dom[cell].bit_length()
                 try:
-                    st.place(cell, value, Reason("naked_single", {
-                        "cell": cell, "value": value,
-                    }) if st.record else None)
+                    st.place(cell, value, Reason("naked_single", {"cell": cell, "value": value}))
                 except Contradiction as exc:
-                    return False, str(exc)
+                    return str(exc), tuple(c for c, mask in enumerate(st.dom) if not mask), None
                 changed = True
         for unit in st.units:
             for digit in range(1, st.n + 1):
                 hosts = [c for c in unit.cells if st.has(c, digit)]
                 if not hosts:
-                    return False, f"{unit.label} 没有位置放 {digit}"
+                    return f"{unit.label} 没有位置放 {digit}", unit.cells, digit
                 if len(hosts) == 1 and st.vals[hosts[0]] == 0:
                     try:
                         st.place(hosts[0], digit, Reason("hidden_single", {
                             "cell": hosts[0], "value": digit,
                             "unit": unit.label, "unit_cells": list(unit.cells),
-                        }) if st.record else None)
+                        }))
                     except Contradiction as exc:
-                        return False, str(exc)
+                        return str(exc), tuple(c for c, mask in enumerate(st.dom) if not mask), None
                     changed = True
         if not changed:
-            return True, ""
-    return True, ""
+            break
+    return None
+
+
+def _slice_refutation(proof, full, budget):
+    """Keep deductions needed by a leaf contradiction or by a child proof."""
+    budget()
+    dom = list(proof["pre_dom"])
+    vals = list(proof["pre_vals"])
+    dependencies = []
+    for event in proof["events"]:
+        data = event.reason.data
+        cell, digit = event.cell, event.value
+        kind = event.reason.kind
+        removed = [(cell, digit, False)]
+        if event.kind == "place":
+            removed = [(cell, v, False) for v in bits(dom[cell]) if v != digit]
+            removed.append((cell, digit, True))
+
+        if kind == "assumption":
+            needs = []
+        elif kind == "unit_peer":
+            needs = [(data["by"], digit, True)]
+        elif kind == "hidden_single":
+            needs = [(c, digit, False) for c in data["unit_cells"] if c != cell]
+        elif "proof_partner" in data:
+            needs = [(data["proof_partner"], v, False) for v in data["proof_values"]]
+        elif kind in ("anti_knight", "anti_king"):
+            other = data["b"] if cell == data["a"] else data["a"]
+            needs = [(other, digit, True)]
+        else:
+            scope = data.get("proof_scope", (cell,))
+            needs = [(c, v, False) for c in scope for v in bits(full & ~dom[c])]
+            if kind != "naked_single":
+                needs.extend((c, vals[c], True) for c in scope if vals[c])
+        dependencies.append((event, removed, needs))
+        if event.kind == "place":
+            dom[cell] = 1 << (digit - 1)
+            vals[cell] = digit
+        else:
+            dom[cell] &= ~(1 << (digit - 1))
+
+    required = set()
+    if proof["cause"]:
+        for cell in proof.pop("conflict_cells"):
+            digit = proof["conflict_digit"]
+            required.update((cell, v, False) for v in ([digit] if digit else bits(full & ~dom[cell])))
+            if digit is None and vals[cell]:
+                required.add((cell, vals[cell], True))
+    else:
+        cell = proof["branch_cell"]
+        required.update((cell, v, False) for v in bits(full & ~dom[cell]))
+        for child in proof["children"]:
+            required.update(_slice_refutation(child["proof"], full, budget))
+
+    kept = []
+    for event, effects, needs in reversed(dependencies):
+        if event.reason.kind == "assumption" or required.intersection(effects):
+            required.difference_update(effects)
+            required.update(needs)
+            kept.append(event)
+    proof["events"] = list(reversed(kept))
+    return required
 
 
 class RefutationBudgetExceeded(Exception):
@@ -237,7 +313,7 @@ class RefutationBudgetExceeded(Exception):
 def proof_cost(proof: dict) -> tuple[int, int, int]:
     """Score a complete refutation by support events, branch depth and nodes."""
     own = sum(1 for e in proof.get("events", ())
-              if e.reason.kind != "unit_peer")
+              if e.reason.kind != "assumption")
     children = proof.get("children", ())
     if not children:
         return own, 0, 1
@@ -251,13 +327,13 @@ def proof_cost(proof: dict) -> tuple[int, int, int]:
 
 def refute_candidate_with_proof(st: State, constraints, cell: int, value: int,
                                 time_limit: float = 1.0,
-                                node_limit: int = 20_000):
+                                node_limit: int = 17):
     """Prove a candidate impossible and retain the full, explainable branch tree.
 
     A leaf is a contradiction reached by ordinary constraint propagation. An
     internal node is a branch on one cell whose every candidate has a proof of
-    contradiction. ``None`` means the assumption is possible or the budget ran
-    out; callers must never treat either case as a refutation.
+    contradiction. Only a complete proof permits exclusion. False means a
+    completion was found; None means the limited proof search was inconclusive.
     """
     import time
     if st.vals[cell]:
@@ -266,69 +342,71 @@ def refute_candidate_with_proof(st: State, constraints, cell: int, value: int,
         return (True, {"events": [], "cause": "该候选已经不存在"}, "该候选已经不存在")
 
     started = time.monotonic()
-    nodes = [0]
+    nodes = 0
 
-    def visit(state: State, assumption=None):
-        nodes[0] += 1
-        if nodes[0] > node_limit or time.monotonic() - started > time_limit:
+    def check_time():
+        if time.monotonic() - started > time_limit:
             raise RefutationBudgetExceeded
-        prefix = list(state.events) if state.record else []
-        pre_dom, pre_vals = list(state.dom), list(state.vals)
+
+    def visit(parent, target, digit, depth):
+        nonlocal nodes
+        nodes += 1
+        check_time()
+        if nodes > node_limit:
+            raise RefutationBudgetExceeded
+        state = parent.copy()
         state.record = True
-        state.events = []
-        ok, cause = _propagate_with_cause(state, constraints)
-        events = prefix + list(state.events)
-        if not ok:
-            return {"assumption": assumption, "pre_dom": pre_dom,
-                    "pre_vals": pre_vals, "prefix_len": len(prefix),
-                    "events": events,
-                    "cause": cause, "children": []}
+        proof = {
+            "assumption": (target, digit), "pre_dom": parent.dom.copy(),
+            "pre_vals": parent.vals.copy(), "events": state.events,
+            "cause": "", "children": [],
+        }
+        try:
+            state.place(target, digit, Reason("assumption", {"cell": target, "value": digit}))
+        except Contradiction as exc:
+            conflict = str(exc), tuple(c for c, mask in enumerate(state.dom) if not mask), None
+        else:
+            conflict = _propagate_with_cause(state, constraints)
+        check_time()
+        if conflict:
+            proof["cause"], proof["conflict_cells"], proof["conflict_digit"] = conflict
+            return proof
         if state.solved:
             return None
 
-        unfilled = [c for c in range(state.n2) if state.vals[c] == 0]
-        if not unfilled:
-            return None
-        pick = min(unfilled, key=lambda c: state.dom[c].bit_count())
-        children = []
-        for candidate in bits(state.dom[pick]):
-            branch = state.copy()
-            branch.record = True
-            branch.events = []
-            branch_pre_dom, branch_pre_vals = list(branch.dom), list(branch.vals)
-            try:
-                branch.place(pick, candidate, Reason("assumption", {
-                    "cell": pick, "value": candidate,
-                }))
-                subproof = visit(branch, (pick, candidate))
-            except Contradiction as exc:
-                subproof = {"assumption": (pick, candidate),
-                            "pre_dom": branch_pre_dom,
-                            "pre_vals": branch_pre_vals, "prefix_len": 0,
-                            "events": list(branch.events), "cause": str(exc),
-                            "children": []}
-            if subproof is None:
-                return None
-            children.append({"value": candidate, "proof": subproof})
-        return {"assumption": assumption, "pre_dom": pre_dom,
-                "pre_vals": pre_vals, "prefix_len": len(prefix),
-                "events": events, "cause": "",
-                "branch_cell": pick, "children": children}
+        # Only one additional split, on a bivalue cell linked to a change
+        # caused by the current assumption.
+        if depth >= 1:
+            raise RefutationBudgetExceeded
+        narrowed = {c for c in range(state.n2) if parent.dom[c] != state.dom[c]}
+        linked = set(narrowed)
+        for constraint in constraints:
+            cells = constraint.cells()
+            if narrowed.intersection(cells):
+                linked.update(cells)
+        options = sorted((c for c in linked if not state.vals[c]
+                          and state.dom[c].bit_count() == 2),
+                         key=lambda c: (c not in narrowed, c))
+        for pick in options[:8]:
+            children = []
+            for candidate in bits(state.dom[pick]):
+                try:
+                    subproof = visit(state, pick, candidate, depth + 1)
+                except RefutationBudgetExceeded:
+                    check_time()
+                    break
+                if subproof is None:
+                    return None
+                children.append({"value": candidate, "proof": subproof})
+            if len(children) == 2:
+                proof.update(branch_cell=pick, children=children)
+                return proof
+        raise RefutationBudgetExceeded
 
-    child = st.copy()
-    child.record = True
-    child.events = []
-    child_pre_dom, child_pre_vals = list(child.dom), list(child.vals)
     try:
-        child.place(cell, value, Reason("assumption", {
-            "cell": cell, "value": value,
-        }))
-        proof = visit(child, (cell, value))
-    except Contradiction as exc:
-        proof = {"assumption": (cell, value), "pre_dom": child_pre_dom,
-                 "pre_vals": child_pre_vals, "prefix_len": 0,
-                 "events": list(child.events),
-                 "cause": str(exc), "children": []}
+        proof = visit(st, cell, value, 0)
+        if proof:
+            _slice_refutation(proof, st.full, check_time)
     except RefutationBudgetExceeded:
         return (None, None, "")
     if proof is None:

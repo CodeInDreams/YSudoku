@@ -17,8 +17,8 @@ from .state import cell_name
 from .narrate import Step
 
 
-# Invalidate results produced before the solver could prove deeper refutations.
-ANALYSIS_VERSION = 8
+# Invalidate cached results when the solver's proof strategy changes.
+ANALYSIS_VERSION = 9
 
 
 @dataclass

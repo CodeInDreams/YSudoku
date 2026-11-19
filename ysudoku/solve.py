@@ -507,7 +507,7 @@ class Solver:
         attempts = 0
         for cell, value in candidates:
             remaining = probe_deadline - time.monotonic()
-            if remaining <= 0 or attempts >= 16:
+            if remaining <= 0 or attempts >= (16 if best else 64):
                 break
             attempts += 1
             refuted, proof, cause = refute_candidate_with_proof(
@@ -525,7 +525,7 @@ class Solver:
             score = (
                 cost[0], cost[1], cost[2],
                 0 if self.state.dom[cell].bit_count() == 2 else 1,
-                -self.state.dom[cell].bit_count(),
+                self.state.dom[cell].bit_count(),
             )
             if best is None or score < best[0]:
                 best = (score, cell, value, list(bits(self.state.dom[cell])),
@@ -567,7 +567,6 @@ class Solver:
                     f"{indent}再假设 {cell_name(branch_cell, self.state.n)} = {branch_value}："
                 )
             support_dom = list(node.get("pre_dom") or self.state.dom)
-            prefix_len = node.get("prefix_len", 0)
             reason_labels = {
                 "naked_single": "裸单", "hidden_single": "隐性单数",
                 "anti_knight": "反骑士", "anti_king": "反王",
@@ -577,9 +576,7 @@ class Solver:
                 "subset": "数对/子集", "cage": "杀手数独宫格和",
                 "thermo": "温度计递增规则", "renban": "连续数集",
             }
-            for event_index, event in enumerate(node.get("events", ())):
-                if event_index < prefix_len or event.reason.kind in ("unit_peer", "assumption"):
-                    continue
+            for event in node.get("events", ()):
                 effect = (f"{cell_name(event.cell, self.state.n)} = {event.value}"
                           if event.kind == "place" else
                           f"{cell_name(event.cell, self.state.n)} ≠ {event.value}")
@@ -589,9 +586,25 @@ class Solver:
                 # a single-cell snapshot cannot faithfully reproduce.
                 why = (self._why_placed(event, support_dom)
                        if event.kind == "place" else "")
-                lines.append(
-                    f"{indent}→ {why or effect + '（' + reason_labels.get(event.reason.kind, event.reason.kind) + '）'}"
-                )
+                if event.reason.kind == "unit_peer":
+                    by = cell_name(event.reason.data["by"], self.state.n)
+                    why = f"{effect}（与 {by} 同行、同列或同区）"
+                elif "proof_partner" in event.reason.data:
+                    data = event.reason.data
+                    partner = cell_name(data["proof_partner"], self.state.n)
+                    digits = "、".join(map(str, data["proof_values"]))
+                    rule = reason_labels.get(event.reason.kind, event.reason.kind)
+                    why = (f"{effect}（{rule}：{partner} 的兼容候选 {digits} 已排除）"
+                           if digits else f"{effect}（{rule}：{partner} 没有兼容数字）")
+                elif event.reason.kind in ("anti_knight", "anti_king"):
+                    data = event.reason.data
+                    other = data["b"] if event.cell == data["a"] else data["a"]
+                    why = (f"{effect}（{reason_labels[event.reason.kind]}："
+                           f"{cell_name(other, self.state.n)} 已填 {event.value}）")
+                if event.reason.kind != "assumption":
+                    lines.append(
+                        f"{indent}→ {why or effect + '（' + reason_labels.get(event.reason.kind, event.reason.kind) + '）'}"
+                    )
                 bit = 1 << (event.value - 1)
                 if event.kind == "place":
                     support_dom[event.cell] = bit
