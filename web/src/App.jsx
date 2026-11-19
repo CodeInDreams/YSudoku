@@ -1175,7 +1175,7 @@ export default function App() {
                     <div className="min-w-0"><div className="truncate font-medium">{entry.title}</div><div className="text-[10.5px] text-muted-foreground">{entry.author || entry.key}{isCurrent ? ` · ${t("history.current")}` : ""}</div></div>
                     <div className="ml-auto flex items-center gap-1.5">
                       <button className={`${entry.favorite ? "text-amber-500" : "text-muted-foreground"}`} title={t("history.favorite")} onClick={(e) => { e.stopPropagation(); toggleFavorite(entry); }}><Star className="h-3.5 w-3.5" fill={entry.favorite ? "currentColor" : "none"} /></button>
-                      <button className={`${isCurrent ? "cursor-not-allowed opacity-30" : "text-rose-500 hover:text-rose-600"}`} disabled={isCurrent} title={isCurrent ? t("history.currentProtected") : t("history.deletePuzzle")} onClick={(e) => { e.stopPropagation(); removeEntry(entry); }}><Trash2 className="h-3.5 w-3.5" /></button>
+                      <button className="text-rose-500 hover:text-rose-600" title={isCurrent ? t("history.deleteCurrentConfirm", { title: entry.title }) : t("history.deletePuzzle")} onClick={(e) => { e.stopPropagation(); removeEntry(entry); }}><Trash2 className="h-3.5 w-3.5" /></button>
                     </div>
                   </div>
                 </td>
@@ -1186,7 +1186,7 @@ export default function App() {
                     {["rules", "steps", "frames"].map((layer) => entry.layers?.[layer] && (
                       <span key={layer} className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground">
                         {t(`layers.${layer}`)} {fmtBytes(entry.sizes?.[layer])}
-                        <button className={`${isCurrent ? "cursor-not-allowed opacity-30" : "text-rose-500 hover:text-rose-600"}`} disabled={isCurrent} title={isCurrent ? t("history.currentProtected") : t("history.delete", { layer: t(`layers.${layer}`) })} onClick={(e) => { e.stopPropagation(); removeLayer(entry, layer); }}><X className="h-3 w-3" /></button>
+                        <button className="text-rose-500 hover:text-rose-600" title={isCurrent ? t("history.confirmDeleteCurrentLayer", { title: entry.title, layer: t(`layers.${layer}`) }) : t("history.delete", { layer: t(`layers.${layer}`) })} onClick={(e) => { e.stopPropagation(); removeLayer(entry, layer); }}><X className="h-3 w-3" /></button>
                       </span>
                     ))}
                   </div>
