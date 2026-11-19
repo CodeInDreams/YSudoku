@@ -236,6 +236,10 @@ def analyze(
 
     data = load(target)
     puzzle = parse_puzzle(data, puzzle_id=_puzzle_id(target))
+    if target.startswith("https://sudokupad.app/"):
+        puzzle.source_url = target
+    elif not puzzle.source_url and target.isalnum():
+        puzzle.source_url = "https://sudokupad.app/" + target
     inventory = build_inventory(puzzle)
 
     warnings: list[str] = []
@@ -505,7 +509,8 @@ def _llm_repair(puzzle, inventory, config, spec, diagnostics, warnings):
                                           raw.get("underlays") or []),
         })
     try:
-        new_spec = llm.repair_rules(config, puzzle.rules_text, inventory_json, spec, diagnostics)
+        new_spec = llm.repair_rules(config, puzzle.rules_text, inventory_json, spec, diagnostics,
+                                    image_uri=_rule_image(puzzle))
     except llm.LLMError as exc:
         warnings.append(f"LLM 规则修复失败：{exc}")
         return None
@@ -518,18 +523,25 @@ def _llm_repair(puzzle, inventory, config, spec, diagnostics, warnings):
     return new_spec, new_rules
 
 
-def _rule_image(puzzle, inventory, warnings: list[str]):
+def _rule_image(puzzle):
+    from urllib.parse import urlsplit
+    from . import live, store
+
+    url = puzzle.source_url
+    if urlsplit(url).hostname != "sudokupad.app" or urlsplit(url).scheme != "https":
+        raise llm.LLMError("缺少可用于截取初始盘面的 SudokuPad 链接")
+    frame = store.frame_path(store.key_for(url), -1)
     try:
-        from .rulesheet import legend_text, render
-        payload = [[e.id, e.kind, e.cells, e.attrs or {}] for e in inventory]
-        digest = hashlib.sha1(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16]
-        path = Path(".cache") / "rulesheets" / f"{puzzle.puzzle_id or 'puzzle'}-{digest}.png"
-        legend = render(puzzle, inventory, path)
-        uri = "data:image/png;base64," + base64.b64encode(path.read_bytes()).decode()
-        return uri, legend_text(puzzle, inventory, legend), path
-    except Exception as exc:  # noqa: BLE001 - the sheet is an optional aid
-        warnings.append(f"规则图生成失败，改用纯文本：{exc}")
-        return None, None, None
+        png = frame.read_bytes() if frame.is_file() else live.initial_frame(url, puzzle.size)
+        if not png.startswith(b"\x89PNG\r\n\x1a\n") or not png.endswith(b"IEND\xaeB`\x82"):
+            raise ValueError("初始帧 PNG 不完整")
+        path = Path(".cache/rulesheets") / (hashlib.sha256(png).hexdigest() + ".png")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(png)
+        puzzle.rule_sheet = str(path)
+        return "data:image/png;base64," + base64.b64encode(png).decode()
+    except (OSError, ValueError, live.LiveError) as exc:
+        raise llm.LLMError(f"无法取得 SudokuPad 初始盘面截图：{exc}") from exc
 
 
 def _apply_arrow_geometry(puzzle, spec, warnings):
@@ -562,28 +574,16 @@ def _llm_spec(puzzle, inventory, config, warnings: list[str]):
             "geometry": geometry_payload(puzzle, raw.get("arrows") or [],
                                           raw.get("underlays") or []),
         })
-    image_uri, legend, sheet_path = _rule_image(puzzle, inventory, warnings)
-    if sheet_path is not None:
-        puzzle.rule_sheet = str(sheet_path)
+    image_uri = _rule_image(puzzle)
     feedback: list[dict] = []
     spec: dict = {"rules": [], "globals": []}
     rules = None
     validated = False
     for attempt in range(2):
-        try:
-            spec = llm.compile_rules(
-                config, puzzle.rules_text, inventory_json, puzzle.size,
-                previous=feedback, image_uri=image_uri, legend=legend,
-            )
-        except llm.LLMError as exc:
-            if image_uri and "image" in str(exc).lower():
-                warnings.append("模型不支持视觉输入，退回文本规则表")
-                spec = llm.compile_rules(
-                    config, puzzle.rules_text, inventory_json, puzzle.size,
-                    previous=feedback,
-                )
-            else:
-                raise
+        spec = llm.compile_rules(
+            config, puzzle.rules_text, inventory_json, puzzle.size,
+            previous=feedback, image_uri=image_uri,
+        )
         _apply_arrow_geometry(puzzle, spec, warnings)
         rules = compile_spec(puzzle, inventory, spec, source="llm")
         if not puzzle.solution:

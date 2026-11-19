@@ -71,11 +71,8 @@ Rules:
   eq, ne, lt, le, gt, ge, and, or, not.
   Scope is 2-6 cells.  Only use "custom" when nothing else fits; always set
   "hypothesis": true unless the rule is completely explicit.
-- You may also receive a rendered RULE SHEET image.  The numbers drawn on it
-  identify elements; the accompanying legend maps each number to its element id,
-  kind, cells and attributes.  Use the image to resolve spatial relations
-  (which side a clue is on, arrow direction, which circle surrounds which
-  cells), and the legend for exact ids and coordinates.
+- The image shows the original SudokuPad board before step one. Read its
+  clues and geometry together with the official rules and element coordinates.
 - Output valid JSON only, no markdown fences, no commentary.
 """
 
@@ -163,7 +160,7 @@ def chat(config: LLMConfig, messages: list[dict], temperature: float = 0.0) -> s
 
 
 def repair_rules(config: LLMConfig, rules_text: str, inventory: list[dict],
-                 spec: dict, diagnostics: dict) -> dict:
+                 spec: dict, diagnostics: dict, image_uri: str | None = None) -> dict:
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "system", "content": REPAIR_PROMPT},
@@ -181,6 +178,11 @@ def repair_rules(config: LLMConfig, rules_text: str, inventory: list[dict],
             ),
         },
     ]
+    if image_uri:
+        messages[-1]["content"] = [
+            {"type": "text", "text": messages[-1]["content"]},
+            {"type": "image_url", "image_url": {"url": image_uri}},
+        ]
     last_error = ""
     for _ in range(2):
         reply = chat(config, messages)

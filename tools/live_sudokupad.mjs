@@ -678,6 +678,16 @@ const server = http.createServer((req, res) => {
     let body = {};
     try { body = raw ? JSON.parse(raw) : {}; } catch { return json(res, 400, { error: "bad json" }); }
     try {
+      if (url.pathname === "/initial-frame") {
+        const capture = async () => {
+          await open(body.url, Number(body.size) || 0);
+          return shot();
+        };
+        touch();
+        const png = await (work = work.then(capture, capture));
+        res.writeHead(200, { "Content-Type": "image/png", "Cache-Control": "no-store" });
+        return res.end(png);
+      }
       if (url.pathname === "/build") {
         if (!body.url) return json(res, 400, { error: "url required" });
         touch();

@@ -95,6 +95,11 @@ def ensure() -> None:
     raise LiveError("SudokuPad 镜像启动超时")
 
 
+def initial_frame(url: str, size: int) -> bytes:
+    ensure()
+    return _request("/initial-frame", {"url": url, "size": size})
+
+
 def start(url: str) -> dict:
     ensure()
     return json.loads(_request("/start", {"url": url}, timeout=120))
