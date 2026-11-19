@@ -395,24 +395,7 @@ export default function App() {
   const persisted = readPersisted();
   const [speed, setSpeed] = useState(() => Number(persisted.speed) || 1100);
   const [session, setSession] = useState(null);
-  useEffect(() => {
-    if (!session) { setGridRect(null); return; }
-    let cancelled = false;
-    let timer = null;
-    const load = async (attempt = 0) => {
-      if (cancelled) return;
-      try {
-        const r = await fetch(`/api/live/grid?session=${encodeURIComponent(session)}`);
-        if (r.ok) {
-          const data = await r.json();
-          if (data && !cancelled) { setGridRect(data); return; }
-        }
-      } catch { /* retry */ }
-      if (attempt < 120 && !cancelled) timer = setTimeout(() => load(attempt + 1), 500);
-    };
-    load();
-    return () => { cancelled = true; if (timer) clearTimeout(timer); };
-  }, [session, frameProgress.complete, frameStep]);
+
   const [frameSrc, setFrameSrc] = useState("");
   const [frameStep, setFrameStep] = useState(-2);
   const [ready, setReady] = useState(false);
@@ -459,6 +442,25 @@ export default function App() {
   const [streamTarget, setStreamTarget] = useState([]);
   const finalPayload = useRef(null);
   const [frameProgress, setFrameProgress] = useState({ frames: 0, total: 0, complete: false });
+
+  useEffect(() => {
+    if (!session) { setGridRect(null); return; }
+    let cancelled = false;
+    let timer = null;
+    const load = async (attempt = 0) => {
+      if (cancelled) return;
+      try {
+        const r = await fetch(`/api/live/grid?session=${encodeURIComponent(session)}`);
+        if (r.ok) {
+          const data = await r.json();
+          if (data && !cancelled) { setGridRect(data); return; }
+        }
+      } catch { /* retry */ }
+      if (attempt < 120 && !cancelled) timer = setTimeout(() => load(attempt + 1), 500);
+    };
+    load();
+    return () => { cancelled = true; if (timer) clearTimeout(timer); };
+  }, [session, frameProgress.complete, frameStep]);
   const frameTimer = useRef(null);
   const streamToken = useRef(0);
 
