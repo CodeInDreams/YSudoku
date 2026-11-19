@@ -48,3 +48,14 @@ class WorkersTest(unittest.TestCase):
 
         with mock.patch.dict(os.environ, {"YSUDOKU_REFUTE_WORKERS": "2"}):
             self.assertEqual(default_workers(), 2)
+
+
+class DynamicTest(unittest.TestCase):
+    def test_dynamic_returns_list(self):
+        from ysudoku.parallel_refute import run_parallel_dynamic
+        from ysudoku.state import State, Unit
+
+        st = State(9, [Unit("row", 0, list(range(9)))])
+        st.dom[0] = 0b11
+        out = run_parallel_dynamic(st, [], [(0, 1), (0, 2)], timeout=0.2)
+        self.assertIsInstance(out, list)

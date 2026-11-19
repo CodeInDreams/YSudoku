@@ -216,3 +216,71 @@ class Refuter:
 
     def busy(self):
         return bool(self.running) and (self.deadline is None or __import__("time").monotonic() < self.deadline)
+
+
+def _task_main(conn):
+    try:
+        while True:
+            item = conn.recv()
+            if item is None:
+                break
+            conn.send(_worker(item))
+    except (EOFError, OSError):
+        pass
+    finally:
+        conn.close()
+
+
+def run_parallel_dynamic(state: State, constraints, candidates, timeout: float = 3.0):
+    """Two forked workers pull the next candidate as soon as they are free."""
+    global _STATE, _CONSTRAINTS
+    _STATE, _CONSTRAINTS = state, constraints
+    if not candidates:
+        return []
+    ctx = mp.get_context("fork")
+    pending = list(candidates)
+    workers = []
+    results = []
+    deadline = None
+    import time as _time
+    for _ in range(min(default_workers(), len(pending))):
+        parent, child = ctx.Pipe(duplex=True)
+        proc = ctx.Process(target=_task_main, args=(child,), daemon=True)
+        proc.start()
+        child.close()
+        item = pending.pop(0)
+        parent.send(item)
+        workers.append((proc, parent))
+    while workers:
+        now = _time.monotonic()
+        if deadline is not None and now >= deadline:
+            break
+        alive = []
+        for proc, conn in workers:
+            if conn.poll(0):
+                try:
+                    item = conn.recv()
+                except EOFError:
+                    item = None
+                if item is not None:
+                    results.append(item)
+                    if deadline is None:
+                        deadline = now + timeout
+                try:
+                    if pending:
+                        conn.send(pending.pop(0))
+                    else:
+                        conn.send(None)
+                except (BrokenPipeError, OSError):
+                    pass
+            alive.append((proc, conn))
+        workers = alive
+        if not pending and all(not conn.poll(0) for _p, conn in workers):
+            # give already-running workers a chance to answer
+            pass
+        _time.sleep(0.05)
+    for proc, conn in workers:
+        conn.close()
+        proc.terminate()
+        proc.join(timeout=0.2)
+    return results

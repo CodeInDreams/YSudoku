@@ -481,8 +481,8 @@ class Solver:
             if len(candidates) >= 80:
                 break
         if best is None and candidates and os.environ.get("YS_PARALLEL", "1") == "1":
-            from .parallel_refute import run_parallel
-            for cell, value, trace, cause, _places in run_parallel(
+            from .parallel_refute import run_parallel_dynamic
+            for cell, value, trace, cause, _places in run_parallel_dynamic(
                     self.state, self.constraints, candidates, timeout=3.0):
                 meaningful = [e for e in trace
                               if e.kind == "place" or e.reason.kind != "unit_peer"]
