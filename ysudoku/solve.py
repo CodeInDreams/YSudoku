@@ -735,7 +735,7 @@ class Solver:
                        + "\n".join(f"参与规则：{rule}" for rule in rules))
         return step
 
-    def _candidate_map_step(self):
+    def _candidate_map_steps(self):
         pre_dom, pre_vals = self._pre()
         signature = tuple(pre_dom)
         if getattr(self, "_candidate_map_signature", None) == signature:
@@ -743,18 +743,27 @@ class Solver:
         cells = [c for c in range(self.state.n2)
                  if not self.state.vals[c] and self.state.dom[c].bit_count() <= 6]
         if not cells:
-            return None
+            return []
         self._candidate_map_signature = signature
-        step = Step(
-            index=len(self.steps), technique="candidate_map", tier=1,
-            title="候选标记",
-            detail="推不动时，把所有候选数不超过 6 的格子标出来。",
-            events=[], visual={"focus": [], "premise": [], "groups": [], "links": [], "chips": []})
-        step.pre_dom, step.pre_vals = pre_dom, pre_vals
-        step.candidates = [{"cell": c, "digits": [v for v in range(1, self.state.n + 1)
-                                                 if pre_dom[c] >> (v - 1) & 1]}
-                           for c in cells]
-        return step
+        groups = {}
+        for cell in cells:
+            region = (cell // 27) * 3 + (cell % 9) // 3
+            groups.setdefault(region, []).append(cell)
+        steps = []
+        ordered = sorted(groups)
+        for index, region in enumerate(ordered, 1):
+            group_cells = groups[region]
+            step = Step(
+                index=len(self.steps) + len(steps), technique="candidate_map", tier=1,
+                title=f"候选标记 {index}/{len(ordered)}",
+                detail=f"标出第 {region + 1} 宫候选数不超过 6 的格子。",
+                events=[], visual={"focus": group_cells, "premise": [], "groups": [], "links": [], "chips": []})
+            step.pre_dom, step.pre_vals = pre_dom, pre_vals
+            step.candidates = [{"cell": c, "digits": [v for v in range(1, self.state.n + 1)
+                                                     if pre_dom[c] >> (v - 1) & 1]}
+                               for c in group_cells]
+            steps.append(step)
+        return steps
 
     def _combo_step(self):
         for arrow in self.constraints:
@@ -855,14 +864,15 @@ class Solver:
                         except Exception:
                             pass
                     continue
-                step = self._candidate_map_step()
-                if step is not None:
-                    self.steps.append(step)
-                    if self.on_step is not None:
-                        try:
-                            self.on_step(step)
-                        except Exception:
-                            pass
+                map_steps = self._candidate_map_steps()
+                if map_steps:
+                    for step in map_steps:
+                        self.steps.append(step)
+                        if self.on_step is not None:
+                            try:
+                                self.on_step(step)
+                            except Exception:
+                                pass
                     continue
                 tried = sorted({s.technique for s in self.steps})
                 hint = "" if self.allow_chains else "；可开启「反证」(--allow-chains) 尝试高级试探"
