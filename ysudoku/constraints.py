@@ -870,6 +870,19 @@ class XSums(Constraint):
         def feasible(x: int) -> bool:
             if x < 1 or x > len(cells):
                 return False
+            # cheap group capacity: k cells sharing a unit need k distinct values
+            for unit in st.units:
+                members = [c for c in cells if c in unit.cells]
+                if len(members) < 2:
+                    continue
+                union = 0
+                for c in members:
+                    if c == first:
+                        union |= 1 << (x - 1)
+                    else:
+                        union |= st.dom[c]
+                if union.bit_count() < len(members):
+                    return False
             span = cells[:x]
             groups = []
             for unit in st.units:
