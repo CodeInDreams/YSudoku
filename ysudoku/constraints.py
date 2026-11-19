@@ -866,89 +866,57 @@ class XSums(Constraint):
     def prune(self, st: State) -> bool:
         cells = self.ordered()
         first = cells[0]
-        reason = Reason("x_sums", {
-            "cells": self._cells, "sum": self.total, "side": self.side,
-        })
+        reason = Reason("x_sums", {"cells": self._cells, "sum": self.total, "side": self.side})
         changed = False
-        feasible_sets = set()
 
-        # Outside clues point along one row or column. All cells in an X-Sum
-        # prefix therefore have to be distinct. Enumerating digit sets (at
-        # most C(9, 4) for a 9x9 sum) is both stronger and cheaper than trying
-        # every ordered tuple, and it gives direct support for each candidate.
-        line_unit = next((unit for unit in st.units
-                          if set(cells).issubset(unit.cells)), None)
-        if line_unit is not None:
-            supports = [0] * len(cells)
-            feasible_x = []
-            for x in bits(st.dom[first]):
-                if not 1 <= x <= len(cells):
+        def feasible(x: int) -> bool:
+            if x < 1 or x > len(cells):
+                return False
+            # cheap group capacity: k cells sharing a unit need k distinct values
+            for unit in st.units:
+                members = [c for c in cells if c in unit.cells]
+                if len(members) < 2:
                     continue
-                span = cells[:x]
-                doms = [st.dom[cell] for cell in span]
-                doms[0] &= 1 << (x - 1)
-                if not doms[0]:
-                    continue
-                possible_sets = digit_sets(x, self.total, st.n)
-                for combo in possible_sets:
-                    if not _matchable(combo, doms):
-                        continue
-                    feasible_x.append(x)
-                    feasible_sets.add((x, combo))
-                    # Keep only values that participate in at least one
-                    # matching of the required digits to the prefix cells.
-                    for i, cell in enumerate(span):
-                        for value in bits(doms[i]):
-                            forced = list(doms)
-                            forced[i] = 1 << (value - 1)
-                            if _matchable(combo, forced):
-                                supports[cells.index(cell)] |= 1 << (value - 1)
-            if not feasible_x:
-                raise Contradiction("X-Sum prefix has no feasible digit set")
-            reason.data["feasible_x"] = sorted(set(feasible_x))
-            reason.data["feasible_sets"] = [
-                {"x": x, "digits": list(combo)}
-                for x, combo in sorted(feasible_sets)
-            ]
-            for cell, allowed in zip(cells, supports):
-                if allowed:
-                    changed |= st.restrict(cell, allowed, reason)
-            return changed
-
-        # Generic fallback for non-row/column X-Sums such as a custom arrow.
-        # Respect only the actual all-different groups that cover cells in the
-        # prefix; unrelated prefix cells may repeat.
-        for x in bits(st.dom[first]):
-            if not 1 <= x <= len(cells):
-                changed |= st.elim(first, x, reason)
-                continue
+                union = 0
+                for c in members:
+                    if c == first:
+                        union |= 1 << (x - 1)
+                    else:
+                        union |= st.dom[c]
+                if union.bit_count() < len(members):
+                    return False
             span = cells[:x]
             groups = []
             for unit in st.units:
-                members = [i for i, cell in enumerate(span) if cell in unit.cells]
-                if len(members) > 1:
+                members = [c for c in span if c in unit.cells]
+                if len(members) >= 2:
                     groups.append(members)
             values = [x]
 
-            def feasible(index: int, remaining: int) -> bool:
+            def dfs(index: int) -> bool:
                 if index == len(span):
-                    return remaining == 0
+                    return sum(values) == self.total
                 cell = span[index]
-                for value in bits(st.dom[cell]):
-                    if any(value == values[j] for group in groups if index in group
-                           for j in group if j < index):
+                for v in bits(st.dom[cell]):
+                    if any(v in [values[span.index(c)] for c in group if span.index(c) < index]
+                           for group in groups if cell in group):
                         continue
-                    values.append(value)
-                    if feasible(index + 1, remaining - value):
+                    values.append(v)
+                    if dfs(index + 1):
                         return True
                     values.pop()
                 return False
 
-            if not feasible(1, self.total - x):
+            return dfs(1)
+
+        for x in bits(st.dom[first]):
+            if not feasible(x):
                 changed |= st.elim(first, x, reason)
 
-        # For non-linear scopes, if X is fixed, retain the general ordered
-        # assignment propagation used by arrows and custom X-Sums.
+        # If N is fixed, treat the first N cells as a sum group.  Distinctness
+        # comes from explicit unit groups plus every two-cell constraint that
+        # forbids equality (anti, whisper, consecutive), not from "all cells
+        # share one unit".
         if st.dom[first].bit_count() == 1:
             x = st.dom[first].bit_length()
             if 2 <= x <= len(cells) and x <= 6:
@@ -956,7 +924,8 @@ class XSums(Constraint):
                 span = cells[:x]
                 groups = []
                 for unit in st.units:
-                    members = [i for i, cell in enumerate(span) if cell in unit.cells]
+                    members = [i for i, c in enumerate(span)
+                               if c in unit.cells]
                     if len(members) >= 2:
                         groups.append(members)
                 for con in getattr(st, "constraints", []):
@@ -965,30 +934,27 @@ class XSums(Constraint):
                         continue
                     if getattr(con, "kind", "") in ("anti", "german_whisper",
                                                     "dutch_whisper", "consecutive"):
-                        groups.append([span.index(cell) for cell in cs])
-                feasible_assignments = []
+                        groups.append([span.index(c) for c in cs])
+                feasible = []
                 for combo in combinations_with_replacement(range(1, st.n + 1), x):
                     if sum(combo) != self.total:
                         continue
                     for perm in set(permutations(combo)):
-                        if any(not (st.dom[span[i]] >> (value - 1) & 1)
-                               for i, value in enumerate(perm)):
+                        if any(not (st.dom[span[i]] >> (v - 1) & 1)
+                               for i, v in enumerate(perm)):
                             continue
-                        if any(len({perm[i] for i in group}) != len(group)
-                               for group in groups):
+                        if any(len({perm[i] for i in g}) != len(g) for g in groups):
                             continue
-                        feasible_assignments.append(perm)
-                if not feasible_assignments:
+                        feasible.append(perm)
+                if not feasible:
                     raise Contradiction("X-Sum prefix has no feasible assignment")
                 for i, cell in enumerate(span):
                     allowed = 0
-                    for value in bits(st.dom[cell]):
-                        if any(perm[i] == value for perm in feasible_assignments):
-                            allowed |= 1 << (value - 1)
+                    for v in bits(st.dom[cell]):
+                        if any(perm[i] == v for perm in feasible):
+                            allowed |= 1 << (v - 1)
                     changed |= st.restrict(cell, allowed, reason)
         return changed
-
-
 
 
 class ClassCover(Constraint):
