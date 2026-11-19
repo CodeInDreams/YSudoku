@@ -17,6 +17,12 @@ For outside X-Sums clues:
 - Never emit duplicate X-Sums for the same clue.
 - Never drop an outside clue because its direction is unclear.
 
+When arrows are present, also return:
+"arrows": [{"direction": "down-left", "entry": [row,col],
+            "cells": [[row,col], ...], "clue": 10}]
+Rows/cols are 1-based from the canvas top-left. Cells must follow the
+direction exactly.
+
 You receive (1) the official rules text and (2) an inventory of every element
 drawn on the board, each with a stable id.  Translate the rules into the JSON
 spec below.  Reference elements only by id.  Never invent a constraint that the

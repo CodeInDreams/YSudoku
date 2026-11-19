@@ -476,6 +476,14 @@ def analyze(
 
 def _llm_repair(puzzle, inventory, config, spec, diagnostics, warnings):
     inventory_json = [element.to_json(puzzle.size) for element in inventory]
+    raw = puzzle.raw or {}
+    if raw.get("arrows"):
+        from .arrow_geometry import geometry_payload
+        inventory_json.append({
+            "id": "_arrow_geometry", "kind": "arrow_geometry",
+            "geometry": geometry_payload(puzzle, raw.get("arrows") or [],
+                                          raw.get("underlays") or []),
+        })
     try:
         new_spec = llm.repair_rules(config, puzzle.rules_text, inventory_json, spec, diagnostics)
     except llm.LLMError as exc:
@@ -504,8 +512,36 @@ def _rule_image(puzzle, inventory, warnings: list[str]):
         return None, None, None
 
 
+def _apply_arrow_geometry(puzzle, spec, warnings):
+    items = spec.get("arrows")
+    if not items:
+        return
+    from .arrow_geometry import validate_all
+    try:
+        rules = validate_all(items, puzzle.size)
+    except Exception as exc:  # noqa: BLE001
+        warnings.append(f"LLM 箭头几何无效，已忽略：{exc}")
+        return
+    for index, rule in enumerate(rules):
+        spec.setdefault("rules", []).append({
+            "kind": "x_sums",
+            "elements": [f"clue:{min(index, max(0, len(puzzle.clues) - 1))}"],
+            "sum": rule["total"],
+            "cells": rule["cells"],
+            "side": "arrow",
+        })
+
+
 def _llm_spec(puzzle, inventory, config, warnings: list[str]):
     inventory_json = [element.to_json(puzzle.size) for element in inventory]
+    raw = puzzle.raw or {}
+    if raw.get("arrows"):
+        from .arrow_geometry import geometry_payload
+        inventory_json.append({
+            "id": "_arrow_geometry", "kind": "arrow_geometry",
+            "geometry": geometry_payload(puzzle, raw.get("arrows") or [],
+                                          raw.get("underlays") or []),
+        })
     image_uri, legend, sheet_path = _rule_image(puzzle, inventory, warnings)
     if sheet_path is not None:
         puzzle.rule_sheet = str(sheet_path)
@@ -528,6 +564,7 @@ def _llm_spec(puzzle, inventory, config, warnings: list[str]):
                 )
             else:
                 raise
+        _apply_arrow_geometry(puzzle, spec, warnings)
         rules = compile_spec(puzzle, inventory, spec, source="llm")
         if not puzzle.solution:
             return spec, "llm", True
