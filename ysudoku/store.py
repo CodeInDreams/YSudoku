@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import time
 from pathlib import Path
@@ -20,8 +21,22 @@ def _settings_path() -> Path:
     return _root() / "settings.json"
 
 
+_KEY_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
+
+
+def _safe_key(key: str) -> str:
+    key = str(key or "")
+    if not key or key in (".", "..") or not _KEY_RE.fullmatch(key):
+        raise ValueError("invalid cache key")
+    return key
+
+
 def _entry_dir(key: str) -> Path:
-    return _root() / key
+    root = _root().resolve()
+    candidate = (root / _safe_key(key)).resolve()
+    if candidate.parent != root:
+        raise ValueError("cache path escapes the store")
+    return candidate
 
 
 def _meta_path(key: str) -> Path:
@@ -131,6 +146,8 @@ def set_frames_hash(key: str, digest: str) -> None:
 
 
 def delete_layer(key: str, layer: str) -> None:
+    if layer not in (*LAYERS, "all"):
+        raise ValueError("invalid cache layer")
     if layer == "all":
         delete_entry(key)
     elif layer == "rules":
@@ -234,7 +251,8 @@ def prune() -> None:
     settings = load_settings()
     entries = list_entries()
 
-    for layer, limit_name in (("frames", "max_frames"), ("steps", "max_steps")):
+    for layer, limit_name in (("frames", "max_frames"), ("steps", "max_steps"),
+                              ("rules", "max_rules")):
         limit = settings.get(limit_name, 0)
         carrying = _prunable(entries, layer)
         while len(carrying) > limit:
@@ -252,7 +270,7 @@ def prune() -> None:
 
         while total() > max_bytes:
             victim = None
-            for layer in ("frames", "steps"):
+            for layer in ("frames", "steps", "rules"):
                 pool = _prunable(entries, layer)
                 if pool:
                     victim = (pool[0], layer)

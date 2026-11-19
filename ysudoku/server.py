@@ -171,6 +171,16 @@ _CONTENT_TYPES = {
 }
 
 
+def _safe_static(base, relative: str):
+    base = Path(base).resolve()
+    candidate = (base / relative).resolve()
+    try:
+        candidate.relative_to(base)
+    except ValueError:
+        return None
+    return candidate
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "YSudoku/0.1"
     last_analysis = None
@@ -289,21 +299,21 @@ class Handler(BaseHTTPRequestHandler):
         if path in ("/", "/index.html") and (DIST_DIR / "index.html").exists():
             file = DIST_DIR / "index.html"
         elif path.startswith("/assets/") and DIST_DIR.exists():
-            file = DIST_DIR / path.lstrip("/")
-        elif path in ("/favicon.svg", "/favicon.ico") and (DIST_DIR / path.lstrip("/")).exists():
-            file = DIST_DIR / path.lstrip("/")
+            file = _safe_static(DIST_DIR, path.lstrip("/"))
+        elif path in ("/favicon.svg", "/favicon.ico"):
+            file = _safe_static(DIST_DIR, path.lstrip("/"))
         elif path.startswith("/mockups/") and DIST_DIR.exists():
-            file = DIST_DIR / path.lstrip("/")
+            file = _safe_static(DIST_DIR, path.lstrip("/"))
             if file.is_dir():
                 file = file / "index.html"
         elif path in ("/", "/index.html"):
             file = STATIC_DIR / "index.html"
         elif path.startswith("/static/"):
-            file = STATIC_DIR / path[len("/static/"):]
+            file = _safe_static(STATIC_DIR, path[len("/static/"):])
         else:
             self._send(404, b"not found", "text/plain")
             return
-        if not file.exists() or not file.is_file():
+        if file is None or not file.exists() or not file.is_file():
             self._send(404, b"not found", "text/plain")
             return
         self._send(200, file.read_bytes(), _CONTENT_TYPES.get(file.suffix, "application/octet-stream"))
