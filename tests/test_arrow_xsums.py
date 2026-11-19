@@ -10,20 +10,20 @@ def arrow(points):
 class ArrowXsumTest(unittest.TestCase):
     def test_left_right(self):
         a = arrow([[-0.2, 5.5], [0.2, 5.5]])
-        self.assertEqual(direction(a), (0, 1))
-        self.assertEqual(entry_cell(a), (5, 0))
-        self.assertEqual(cells_along(a)[:3], [45, 46, 47])
+        self.assertEqual(direction(a), (1, 0))
+        self.assertEqual(entry_cell(a), (0, 5))
+        self.assertEqual(cells_along(a)[:3], [5, 14, 23])
 
     def test_top_down(self):
         a = arrow([[3.5, -0.2], [3.5, 0.2]])
-        self.assertEqual(direction(a), (1, 0))
-        self.assertEqual(entry_cell(a), (0, 3))
-        self.assertEqual(cells_along(a)[:3], [3, 12, 21])
+        self.assertEqual(direction(a), (0, 1))
+        self.assertEqual(entry_cell(a), (3, 0))
+        self.assertEqual(cells_along(a)[:3], [27, 28, 29])
 
     def test_diagonal(self):
         a = arrow([[-0.2, 5.5], [0.2, 5.1]])
-        self.assertEqual(direction(a), (-1, 1))
-        self.assertEqual(cells_along(a)[:3], [45, 37, 29])
+        self.assertEqual(direction(a), (1, -1))
+        self.assertEqual(cells_along(a)[:3], [4, 12, 20])
 
     def test_clue_association_and_nine_rules(self):
         underlays = [

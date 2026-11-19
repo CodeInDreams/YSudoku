@@ -217,9 +217,9 @@ def compile_spec(puzzle: Puzzle, elements: list[Element], spec: dict,
             })
     text_low = (puzzle.rules_text or "").lower()
     if "x-sum" in text_low or "x sum" in text_low or "xsum" in text_low:
-        from .arrow_xsums import parse_arrows
+        from .arrow_xsums import parse_arrows_fitted
         existing = {tuple(r.get("cells") or []) for r in raw_rules}
-        for index, item in enumerate(parse_arrows(puzzle.raw or {}, n)):
+        for index, item in enumerate(parse_arrows_fitted(puzzle.raw or {}, puzzle, n)):
             cells = tuple(item["cells"])
             if cells in existing:
                 continue
@@ -243,6 +243,9 @@ def compile_spec(puzzle: Puzzle, elements: list[Element], spec: dict,
         kind = str(raw.get("kind", "")).strip()
         ids = [str(x) for x in raw.get("elements", [])]
         params = {k: v for k, v in raw.items() if k not in ("kind", "elements", "note")}
+        if (kind == "x_sums" and not raw.get("cells")
+                and (puzzle.raw or {}).get("arrows")):
+            continue
         if kind not in KINDS:
             result.warnings.append(f"未知规则类型 {kind}（已忽略）")
             continue

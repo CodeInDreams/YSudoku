@@ -9,34 +9,23 @@ def _sign(v: float) -> int:
     return (v > 0.05) - (v < -0.05)
 
 
+def _edge_for_arrow(arrow: dict, n: int = 9):
+    for row, col in (arrow.get("wayPoints") or [])[-2:]:
+        if row < 0: return "top"
+        if row >= n: return "bottom"
+        if col < 0: return "left"
+        if col >= n: return "right"
+    return None
+
+
 def direction(arrow: dict) -> tuple[int, int]:
-    p = arrow.get("wayPoints") or []
-    if len(p) < 2:
-        return (0, 0)
-    dx, dy = p[-1][0] - p[-2][0], p[-1][1] - p[-2][1]
-    return (_sign(dy), _sign(dx))
+    """Return the ordered waypoints' direction in [row, col] order."""
+    return _point_direction(arrow)
 
 
 def entry_cell(arrow: dict, n: int = 9):
-    start = (arrow.get("wayPoints") or [[None, None]])[0]
-    x, y = start
-    if x is None or y is None:
-        return None
-    if x < 0:
-        col = 0
-        row = max(0, min(n - 1, int(round(y - 0.5))))
-    elif x > n:
-        col = n - 1
-        row = max(0, min(n - 1, int(round(y - 0.5))))
-    elif y < 0:
-        row = 0
-        col = max(0, min(n - 1, int(round(x - 0.5))))
-    elif y > n:
-        row = n - 1
-        col = max(0, min(n - 1, int(round(x - 0.5))))
-    else:
-        return None
-    return row, col
+    entry = _edge_entry(arrow, _edge_for_arrow(arrow, n), direction(arrow), n)
+    return (entry[0] - 1, entry[1] - 1) if entry else None
 
 
 def cells_along(arrow: dict, n: int = 9) -> list[int]:
@@ -68,31 +57,18 @@ def _nearest_clue(arrow: dict, underlays: list[dict]) -> int | None:
 
 
 def parse_arrows(raw: dict, n: int = 9) -> list[dict]:
-    underlays = raw.get("underlays") or []
-    out = []
-    for arrow in raw.get("arrows") or []:
-        total = _nearest_clue(arrow, underlays)
-        cells = cells_along(arrow, n)
-        if total is None or len(cells) < 2:
-            continue
-        out.append({"cells": cells, "total": total, "direction": direction(arrow)})
-    return out
+    # Keep the historical rule shape while using SudokuPad's [row,col]
+    # geometry and the virtual off-grid arrowhead to find the entry cell.
+    decoded = parse_arrows_geometry(raw, n=n)
+    return [{
+        "cells": [(r - 1) * n + (c - 1) for r, c in item["cells"]],
+        "total": item["clue"],
+        "direction": DIRECTIONS_BY_NAME[item["direction"]],
+    } for item in decoded]
 
 
 def arrow_edge(arrow: dict, n: int = 9):
-    head = (arrow.get("wayPoints") or [[0, 0]])[-1]
-    x, y = head
-    top, bottom = y < 0, y > n
-    left, right = x < 0, x > n
-    if top and left: return "top-left"
-    if top and right: return "top-right"
-    if bottom and left: return "bottom-left"
-    if bottom and right: return "bottom-right"
-    if top: return "top"
-    if bottom: return "bottom"
-    if left: return "left"
-    if right: return "right"
-    return None
+    return _edge_for_arrow(arrow, n)
 
 
 def allowed_directions(arrow: dict, n: int = 9):
@@ -108,54 +84,122 @@ def allowed_directions(arrow: dict, n: int = 9):
     return table.get(edge, [])
 
 
-def parse_arrows_fitted(raw: dict, puzzle, n: int = 9):
-    """Fit arrows to the official solution when available."""
-    solution = getattr(puzzle, "solution", None)
-    underlays = raw.get("underlays") or []
+def clue_edge(center, n: int = 9):
+    # SudokuPad stores these coordinates in [row, col] order.
+    row, col = center
+    if row < 0: return "top"
+    if row >= n: return "bottom"
+    if col < 0: return "left"
+    if col >= n: return "right"
+    return None
+
+
+_DIRECTION_NAMES = {
+    (-1, 0): "up", (1, 0): "down", (0, -1): "left", (0, 1): "right",
+    (-1, -1): "up-left", (-1, 1): "up-right",
+    (1, -1): "down-left", (1, 1): "down-right",
+}
+DIRECTIONS_BY_NAME = {name: delta for delta, name in _DIRECTION_NAMES.items()}
+
+
+def _point_direction(arrow: dict) -> tuple[int, int]:
+    """Return row/column direction from the ordered SudokuPad waypoints."""
+    points = arrow.get("wayPoints") or []
+    if len(points) < 2:
+        return (0, 0)
+    a, b = points[-2:]
+    return (_sign(b[0] - a[0]), _sign(b[1] - a[1]))
+
+
+def _edge_entry(arrow: dict, edge: str, direction: tuple[int, int], n: int) -> tuple[int, int] | None:
+    """Step from the virtual off-grid cell into the first playable cell.
+
+    SudokuPad points are [row, col]. Cell centers are [r+0.5,c+0.5]. The
+    glyph midpoint selects the virtual boundary cell; the arrow direction
+    then advances once into the grid. Returned row/col are one-based, matching
+    the geometry payload format (so top-left playable is [1,1]).
+    """
+    points = arrow.get("wayPoints") or []
+    if len(points) < 2:
+        return None
+    row = sum(p[0] for p in points[-2:]) / 2
+    col = sum(p[1] for p in points[-2:]) / 2
+    # Waypoint coordinates are measured from grid boundaries (0..n), so
+    # floor(coord)+1 is the one-based cell lane containing that point.
+    lane_row = max(1, min(n, int(math.floor(row)) + 1))
+    lane_col = max(1, min(n, int(math.floor(col)) + 1))
+    dr, dc = direction
+    if edge == "top": outside = (0, lane_col)
+    elif edge == "bottom": outside = (n + 1, lane_col)
+    elif edge == "left": outside = (lane_row, 0)
+    elif edge == "right": outside = (lane_row, n + 1)
+    else: return None
+    entry = (outside[0] + dr, outside[1] + dc)
+    if not (1 <= entry[0] <= n and 1 <= entry[1] <= n):
+        return None
+    return entry
+
+
+def parse_arrows_geometry(raw: dict, solution=None, n: int = 9) -> list[dict]:
+    """Decode all arrow glyphs geometrically and report official-solution checks.
+
+    Coordinates and entries are one-based [row, col]. This deliberately
+    returns mismatches too: the geometry is unambiguous even when a supplied
+    solution does not satisfy the clue along that arrow.
+    """
+    if isinstance(solution, str):
+        solution = [int(ch) for ch in solution if ch.isdigit()]
+    solution = list(solution) if solution is not None else None
+    if solution is not None and len(solution) != n * n:
+        raise ValueError(f"solution must contain {n*n} digits")
     clues = []
-    for item in underlays:
+    for item in raw.get("underlays") or []:
         text = str(item.get("text", "")).strip()
-        if text.isdigit():
-            clues.append((int(text), item.get("center", [0, 0])))
-    arrows = raw.get("arrows") or []
-    if not solution or not clues:
-        return parse_arrows(raw, n)
+        center = item.get("center")
+        if text.isdigit() and center and len(center) == 2:
+            clues.append((int(text), center, clue_edge(center, n)))
+
     out = []
-    for arrow in arrows:
-        base = direction(arrow)
-        dirs = [d for d in allowed_directions(arrow, n)
-                if d == base or d == (-base[0], -base[1])]
-        entries = []
-        for dr, dc in dirs:
-            for r in range(n):
-                for c in range(n):
-                    if dr > 0 and r != 0:
-                        continue
-                    if dr < 0 and r != n - 1:
-                        continue
-                    if dc > 0 and c != 0:
-                        continue
-                    if dc < 0 and c != n - 1:
-                        continue
-                    cells = []
-                    rr, cc = r, c
-                    while 0 <= rr < n and 0 <= cc < n:
-                        cells.append(rr * n + cc)
-                        rr += dr
-                        cc += dc
-                    first = solution[cells[0]]
-                    if not (1 <= first <= len(cells)):
-                        continue
-                    s = sum(solution[c] for c in cells[:first]) if all(solution[c] for c in cells[:first]) else None
-                    if s is None:
-                        continue
-                    for total, center in clues:
-                        if s == total:
-                            head = (arrow.get("wayPoints") or [[0, 0]])[-1]
-                            dist = (center[0] - head[0]) ** 2 + (center[1] - head[1]) ** 2
-                            entries.append((dist, total, cells))
-        if entries:
-            entries.sort(key=lambda x: x[0])
-            _dist, total, cells = entries[0]
-            out.append({"cells": cells, "total": total, "direction": (dr, dc)})
+    for arrow in raw.get("arrows") or []:
+        edge = _edge_for_arrow(arrow, n)
+        dr, dc = _point_direction(arrow)
+        entry = _edge_entry(arrow, edge, (dr, dc), n) if edge else None
+        matching_clues = [clue for clue, _center, clue_side in clues if clue_side == edge]
+        if entry is None or (dr, dc) not in _DIRECTION_NAMES:
+            raise ValueError("arrow has no valid edge entry or direction")
+        if len(matching_clues) != 1:
+            raise ValueError(f"expected one clue on {edge} edge, found {len(matching_clues)}")
+        cells = []
+        r, c = entry
+        while 1 <= r <= n and 1 <= c <= n:
+            cells.append([r, c])
+            r += dr
+            c += dc
+        actual = None
+        if solution is not None:
+            values = [solution[(r - 1) * n + (c - 1)] for r, c in cells]
+            count = values[0]
+            actual = sum(values[:count]) if 1 <= count <= len(values) else None
+        clue = matching_clues[0]
+        out.append({
+            "direction": _DIRECTION_NAMES[(dr, dc)],
+            "entry": list(entry),
+            "cells": cells,
+            "clue": clue,
+            "xsum": actual,
+            "matches_solution": actual == clue if solution is not None else None,
+        })
     return out
+
+
+def parse_arrows_fitted(raw: dict, puzzle, n: int = 9):
+    """Decode arrows and retain only those verified by the official solution."""
+    solution = getattr(puzzle, "solution", None)
+    if not solution:
+        return parse_arrows(raw, n)
+    decoded = parse_arrows_geometry(raw, solution, n)
+    return [{
+        "cells": [(r - 1) * n + (c - 1) for r, c in item["cells"]],
+        "total": item["clue"],
+        "direction": DIRECTIONS_BY_NAME[item["direction"]],
+    } for item in decoded if item["matches_solution"]]
