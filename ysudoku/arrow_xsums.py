@@ -166,9 +166,12 @@ def parse_arrows_geometry(raw: dict, solution=None, n: int = 9) -> list[dict]:
         entry = _edge_entry(arrow, edge, (dr, dc), n) if edge else None
         matching_clues = [clue for clue, _center, clue_side in clues if clue_side == edge]
         if entry is None or (dr, dc) not in _DIRECTION_NAMES:
-            raise ValueError("arrow has no valid edge entry or direction")
-        if len(matching_clues) != 1:
-            raise ValueError(f"expected one clue on {edge} edge, found {len(matching_clues)}")
+            continue
+        if not matching_clues:
+            continue
+        matching_clues.sort(key=lambda item: abs(item[1][0] - arrow["wayPoints"][0][0])
+                            + abs(item[1][1] - arrow["wayPoints"][0][1]))
+        matching_clues = matching_clues[:1]
         cells = []
         r, c = entry
         while 1 <= r <= n and 1 <= c <= n:
