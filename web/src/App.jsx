@@ -426,6 +426,37 @@ export default function App() {
   }));
 
   useEffect(() => {
+    if (!analysis || (analysis.lang || "zh") === lang) return undefined;
+    let cancelled = false;
+    let timer = null;
+    (async () => {
+      try {
+        const data = await postJson("/api/solve", {
+          url: analysis.source_url || target,
+          demo: !!analysis.demo,
+          llm, audit, chains: true, lang,
+        });
+        if (cancelled) return;
+        const next = data.steps || [];
+        let count = Math.min(5, next.length);
+        const apply = () => {
+          if (cancelled) return;
+          setAnalysis((prev) => prev ? {
+            ...prev, steps: next.slice(0, count), rules: data.rules || prev.rules,
+            status: data.status || prev.status, message: data.message || "",
+            conflicts: data.conflicts || [], lang,
+          } : prev);
+          count = Math.min(next.length, count + 5);
+          if (count >= next.length && timer) { clearInterval(timer); timer = null; }
+        };
+        apply();
+        if (next.length > 5) timer = setInterval(apply, 40);
+      } catch { /* keep current text */ }
+    })();
+    return () => { cancelled = true; if (timer) clearInterval(timer); };
+  }, [lang, analysis?.storage?.key]);
+
+  useEffect(() => {
     try {
       localStorage.setItem(PERSIST_KEY, JSON.stringify({
         speed, settings, view, inspectorTab, rulePrompt, conflictChoice,
@@ -736,11 +767,11 @@ export default function App() {
   }
 
   async function submit(payload) {
-    await streamSolve({ url: payload.url, llm, audit, chains: true, demo: false, rule_prompt: rulePrompt }, payload.url);
+    await streamSolve({ url: payload.url, llm, audit, chains: true, demo: false, rule_prompt: rulePrompt, lang }, payload.url);
   }
 
   async function demo() {
-    await streamSolve({ demo: true, llm, audit, chains: true, rule_prompt: rulePrompt }, "");
+    await streamSolve({ demo: true, llm, audit, chains: true, rule_prompt: rulePrompt, lang }, "");
   }
 
   async function refreshRules() {
@@ -823,7 +854,7 @@ export default function App() {
     await streamSolve(
       entry.demo
         ? { demo: true, llm, audit, chains: true }
-        : { url: entry.target, llm, audit, chains: true, demo: false },
+        : { url: entry.target, llm, audit, chains: true, demo: false, lang },
       targetUrl,
     );
   }
@@ -1312,7 +1343,7 @@ export default function App() {
                       <button key={option.id} type="button"
                         onClick={() => {
                           setConflictChoice(option.id);
-                          streamSolve({ url: target, llm: option.id === "llm", audit, chains: true, demo: false, rule_prompt: rulePrompt, rule_mode: option.id }, target);
+                          streamSolve({ url: target, llm: option.id === "llm", audit, chains: true, demo: false, rule_prompt: rulePrompt, rule_mode: option.id, lang }, target);
                         }}
                         className={`rounded-lg border px-3 py-2.5 text-left text-sm transition-colors hover:border-primary ${index === 0 ? "border-primary bg-primary/5" : "bg-background"}`}>
                         <span className="font-medium">{option.label}</span>

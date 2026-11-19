@@ -39,11 +39,13 @@ class Analysis:
     provenance: str = ""
     source_url: str = ""
     conflicts: list = field(default_factory=list)
+    lang: str = "zh"
 
     def to_json(self) -> dict:
         n = self.puzzle.size
         return {
             "algo_version": ANALYSIS_VERSION,
+            "lang": self.lang,
             "puzzle": {
                 "id": self.puzzle.puzzle_id,
                 "title": self.puzzle.title,
@@ -175,6 +177,7 @@ def _try_global(puzzle, rules, solver, source, warnings, time_limit, target, dem
     return Analysis(
         puzzle=puzzle,
         conflicts=conflicts,
+        lang=(lang or "zh").lower()[:2],
         spec={"rules": [], "globals": [], "notes": "cp-sat"},
         rules=rules,
         result=SolveResult("solved", [], values),
@@ -222,6 +225,7 @@ def analyze(
     use_global: bool = False,
     rule_prompt: str = "",
     rule_mode: str = "auto",
+    lang: str = "zh",
     global_time_limit: float = 60.0,
     notes: str = "",
     on_rules=None,
@@ -452,6 +456,7 @@ def analyze(
     return Analysis(
         puzzle=puzzle,
         conflicts=conflicts,
+        lang=(lang or "zh").lower()[:2],
         demo=demo,
         provenance=(
             f"真实题示例：{puzzle.title} — {puzzle.author}"
