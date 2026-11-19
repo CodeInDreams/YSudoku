@@ -391,6 +391,42 @@ def _explain_skyscraper(events, data, n):
     return detail, visual
 
 
+def _explain_x_sums(events, data, n):
+    cells = list(data.get("cells") or [])
+    side = data.get("side", "top")
+    if side in ("right", "bottom"):
+        cells.reverse()
+    clue = data.get("sum")
+    candidates = data.get("feasible_x") or []
+    patterns = data.get("feasible_sets") or []
+    line = "、".join(cell_name(cell, n) for cell in cells)
+    if len(patterns) <= 6:
+        options = "; ".join(
+            f"X={item['x']} 时前缀数字为 {{{_values(item['digits'])}}}"
+            for item in patterns
+        )
+    else:
+        by_x = {}
+        for item in patterns:
+            by_x.setdefault(item["x"], 0)
+            by_x[item["x"]] += 1
+        options = "；".join(f"X={x} 有 {count} 组数字集合" for x, count in sorted(by_x.items()))
+    direction = {"left": "从左向右", "right": "从右向左",
+                 "top": "从上向下", "bottom": "从下向上"}.get(side, "按箭头方向")
+    detail = (
+        f"盘外 X-Sums 提示为 {clue}，{direction}读取：{line}。\n"
+        f"首格数字 X 决定求和前缀长度；前 X 格的数字和必须为 {clue}，且同行/同列数字不能重复。\n"
+        f"可行的 X 为 {_values(candidates)}。{options}。"
+    )
+    return detail, {
+        "focus": cells[:max(candidates, default=1)],
+        "premise": [],
+        "groups": [{"cells": cells[:max(candidates, default=1)], "kind": "unit"}],
+        "links": [], "chips": [],
+    }
+
+
+
 def _explain_region_sum(events, data, n):
     cells = data.get("cells", [])
     segs = data.get("segments") or []
