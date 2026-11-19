@@ -22,6 +22,7 @@ from .constraints import (
     RegionSum,
     Sandwich,
     XSums,
+    IRSupport,
     Skyscraper,
     Arrow,
     Between,
@@ -35,6 +36,7 @@ from .constraints import (
     Thermo,
 )
 from .model import Puzzle
+from .constraints_ir import relation_from_spec
 from . import predicate as predicate_mod
 from .state import cell_name
 
@@ -189,6 +191,7 @@ KINDS = {
     "region_count": "区域计数",
     "x_sums": "X-Sums（盘外提示）",
     "full_rank": "Full Rank（全局排名）",
+    "ir": "通用约束关系",
     "modular": "模块 2×2（每宫含 1/4/7、2/5/8、3/6/9）",
     "entropy": "熵 2×2（每宫含低/中/高）",
 }
@@ -248,6 +251,21 @@ def compile_spec(puzzle: Puzzle, elements: list[Element], spec: dict,
             continue
         if kind not in KINDS:
             result.warnings.append(f"未知规则类型 {kind}（已忽略）")
+            continue
+        if kind == "ir":
+            try:
+                relations = [relation_from_spec(item)
+                             for item in raw.get("relations", [])]
+                if not relations:
+                    raise ValueError("IR rule requires at least one relation")
+                constraint = IRSupport(relations)
+            except (TypeError, ValueError, KeyError) as exc:
+                result.warnings.append(f"IR 规则无效：{exc}")
+                continue
+            result.constraints.append(constraint)
+            result.resolved.append({"kind": kind, "label": KINDS[kind],
+                                    "elements": ids, "count": len(relations)})
+            used.update(ids)
             continue
         if kind == "x_sums" and raw.get("cells"):
             total = params.get("sum")

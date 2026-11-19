@@ -422,6 +422,14 @@ def analyze(
         if result.status == "stuck":
             warnings.append("反证尝试未能在预算内找到可排除的候选")
 
+    for constraint in rules.constraints:
+        support = getattr(constraint, "last_result", None)
+        if support is not None and support.unresolved:
+            warnings.append(
+                f"通用局部支持有 {len(support.unresolved)} 个候选未能完整检查"
+            )
+            break
+
     status = result.status
     message = result.message
     solution_check = ""

@@ -64,6 +64,41 @@ class Constraint:
         return True
 
 
+class IRSupport(Constraint):
+    """Constraint adapter that exposes generic IR deductions as solver events."""
+
+    kind = "ir_support"
+
+    def __init__(self, relations):
+        self.relations = list(relations)
+        self.last_result = None
+        self._cells = sorted({cell for relation in self.relations
+                              for cell in relation.cells})
+
+    def cells(self):
+        return self._cells
+
+    def describe(self):
+        return f"通用局部支持（{len(self.relations)} 条关系）"
+
+    def check(self, values):
+        return all(relation.check(values) for relation in self.relations)
+
+    def prune(self, st: State) -> bool:
+        from .support_engine import analyze_support
+        result = analyze_support(st, self.relations)
+        self.last_result = result
+        if result.contradictions:
+            raise Contradiction("generic relation violated: "
+                                + ", ".join(result.contradictions))
+        changed = False
+        for cell, value, descriptions in result.eliminations:
+            changed |= st.elim(cell, value, Reason("ir_support", {
+                "cell": cell, "value": value, "relations": descriptions,
+            }))
+        return changed
+
+
 class Cage(Constraint):
     kind = "cage"
 

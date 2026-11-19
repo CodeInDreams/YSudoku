@@ -23,6 +23,7 @@ TITLES = {
     "forcing_chain": "反证（试探）",
     "contradiction": "反证",
     "custom": "自定义规则（L2）",
+    "ir_support": "通用约束支持",
     "parity": "奇偶",
     "odd": "奇数",
     "even": "偶数",
@@ -389,6 +390,18 @@ def _explain_skyscraper(events, data, n):
     visual["groups"].append({"cells": cells, "kind": "line"})
     visual["chips"].append({"cell": cells[0], "text": f"见{clue}", "kind": "sum"})
     return detail, visual
+
+
+def _explain_ir_support(events, data, n):
+    rules = data.get("relations") or []
+    details = "；".join(rules) if rules else "相关关系的联合约束"
+    effects = _effect_lines(events, n)
+    detail = (
+        f"检查以下关系的所有局部可行赋值：{details}。\n"
+        f"没有任何满足这些关系的赋值支持被排除的候选：\n"
+        + ("\n".join(effects) if effects else "（无候选变化）")
+    )
+    return detail, _basic_visual(events, n)
 
 
 def _explain_region_sum(events, data, n):
