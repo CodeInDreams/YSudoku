@@ -27,6 +27,7 @@ class Solver:
                                  chaos=puzzle.is_chaos)
         self.state = State(puzzle.size, self.units)
         self.constraints = list(rules.constraints)
+        self.state.constraints = self.constraints
         self.allow_chains = allow_chains
         self.on_step = on_step
         self.steps: list[Step] = []

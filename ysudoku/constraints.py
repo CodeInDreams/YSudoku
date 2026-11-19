@@ -913,20 +913,47 @@ class XSums(Constraint):
             if not feasible(x):
                 changed |= st.elim(first, x, reason)
 
-        # If N is fixed, treat the first N cells as a sum group (killer-cage
-        # style): enumerate feasible digit combinations and keep only values
-        # that can appear in one of them.
+        # If N is fixed, treat the first N cells as a sum group.  Distinctness
+        # comes from explicit unit groups plus every two-cell constraint that
+        # forbids equality (anti, whisper, consecutive), not from "all cells
+        # share one unit".
         if st.dom[first].bit_count() == 1:
             x = st.dom[first].bit_length()
-            if 1 <= x <= len(cells):
+            if 2 <= x <= len(cells) and x <= 6:
+                from itertools import combinations_with_replacement, permutations
                 span = cells[:x]
-                shared = None
+                groups = []
                 for unit in st.units:
-                    if all(c in unit.cells for c in span):
-                        shared = unit
-                        break
-                group = Cage(span, self.total, unique=shared is not None)
-                changed |= group.prune(st)
+                    members = [i for i, c in enumerate(span)
+                               if c in unit.cells]
+                    if len(members) >= 2:
+                        groups.append(members)
+                for con in getattr(st, "constraints", []):
+                    cs = con.cells()
+                    if len(cs) != 2 or not set(cs) <= set(span):
+                        continue
+                    if getattr(con, "kind", "") in ("anti", "german_whisper",
+                                                    "dutch_whisper", "consecutive"):
+                        groups.append([span.index(c) for c in cs])
+                feasible = []
+                for combo in combinations_with_replacement(range(1, st.n + 1), x):
+                    if sum(combo) != self.total:
+                        continue
+                    for perm in set(permutations(combo)):
+                        if any(not (st.dom[span[i]] >> (v - 1) & 1)
+                               for i, v in enumerate(perm)):
+                            continue
+                        if any(len({perm[i] for i in g}) != len(g) for g in groups):
+                            continue
+                        feasible.append(perm)
+                if not feasible:
+                    raise Contradiction("X-Sum prefix has no feasible assignment")
+                for i, cell in enumerate(span):
+                    allowed = 0
+                    for v in bits(st.dom[cell]):
+                        if any(perm[i] == v for perm in feasible):
+                            allowed |= 1 << (v - 1)
+                    changed |= st.restrict(cell, allowed, reason)
         return changed
 
 
