@@ -65,3 +65,13 @@ class ArrowOrderTest(unittest.TestCase):
     def test_arrow_keeps_entry_order(self):
         cells = [4, 12, 20, 28, 36]
         self.assertEqual(XSums(cells, 10, "arrow").ordered(), cells)
+
+
+class FixedFirstInternalTest(unittest.TestCase):
+    def test_remaining_sum_restricts_pair(self):
+        st = State(9, [Unit("region", 8, [60, 61, 62, 69, 70, 71, 78, 79, 80])])
+        cells = [62, 70, 78]  # R7C9, R8C8, R9C7
+        st.dom[62] = 0b100  # 3
+        XSums(cells, 19, "arrow").prune(st)
+        self.assertEqual([v for v in range(1, 10) if st.dom[70] >> (v - 1) & 1], [7, 9])
+        self.assertEqual([v for v in range(1, 10) if st.dom[78] >> (v - 1) & 1], [7, 9])
