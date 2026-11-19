@@ -195,7 +195,10 @@ function buildStepActions(analysis) {
       nextState.set(cell, desired);
     };
 
-    for (const [cell] of state) {
+    const refreshCells = step.technique === "candidate_map"
+      ? Array.from({ length: n * n }, (_, i) => i)
+      : [...state.keys()];
+    for (const cell of refreshCells) {
       if (!affected.has(cell)) update(cell, new Set(digits(pre[cell])));
     }
     for (const cell of affected) {
