@@ -698,11 +698,11 @@ class Solver:
         return None
 
     def _intersection_step(self):
-        from .intersections import unsupported_candidates
+        from .intersections import bfs_unsupported
         if getattr(self, "_intersection_tried", 0) >= 20:
             return None
         self._intersection_tried = getattr(self, "_intersection_tried", 0) + 1
-        found = unsupported_candidates(self.state, self.constraints)
+        found = bfs_unsupported(self.state, self.constraints, max_rules=3)
         if not found:
             return None
         cell, value, rules = found[0]

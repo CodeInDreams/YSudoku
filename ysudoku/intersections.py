@@ -117,3 +117,42 @@ def unsupported_candidates(state: State, constraints) -> list[tuple[int, int, li
             if state.dom[target] >> (value - 1) & 1 and value not in supports[target]:
                 out.append((target, value, rules))
     return out
+
+
+def bfs_unsupported(state: State, constraints, max_rules: int = 3):
+    """Breadth-first by rule count: single rules, then pairs, then triples."""
+    from itertools import combinations
+
+    cache = {}
+    for target in range(state.n2):
+        if state.vals[target]:
+            continue
+        direct = [c for c in constraints if target in c.cells()]
+        if not direct:
+            continue
+        active = set().union(*(set(c.cells()) for c in direct))
+        pool = list(direct)
+        for c in constraints:
+            if c in pool:
+                continue
+            if set(c.cells()) & active:
+                pool.append(c)
+            if len(pool) >= 10:
+                break
+        for size in range(1, max_rules + 1):
+            for combo in combinations(pool, size):
+                combo = list(combo)
+                cells = set().union(*(set(c.cells()) for c in combo))
+                if target not in cells or len(cells) > MAX_COMPONENT_CELLS:
+                    continue
+                key = tuple(id(c) for c in combo)
+                if key not in cache:
+                    cache[key] = _enumerate_supports(state, combo, cells)
+                supports, complete = cache[key]
+                if not complete:
+                    continue
+                rules = [c.describe() for c in combo]
+                for value in range(1, state.n + 1):
+                    if state.dom[target] >> (value - 1) & 1 and value not in supports[target]:
+                        return [(target, value, rules)]
+    return []
