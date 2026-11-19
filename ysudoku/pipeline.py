@@ -17,7 +17,8 @@ from .state import cell_name
 from .narrate import Step
 
 
-ANALYSIS_VERSION = 6
+# Invalidate results produced before the solver could prove deeper refutations.
+ANALYSIS_VERSION = 7
 
 
 @dataclass
