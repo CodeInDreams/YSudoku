@@ -164,7 +164,8 @@ def parse_arrows_geometry(raw: dict, solution=None, n: int = 9) -> list[dict]:
         edge = _edge_for_arrow(arrow, n)
         dr, dc = _point_direction(arrow)
         entry = _edge_entry(arrow, edge, (dr, dc), n) if edge else None
-        matching_clues = [clue for clue, _center, clue_side in clues if clue_side == edge]
+        matching_clues = [(clue, center) for clue, center, clue_side in clues
+                          if clue_side == edge]
         if entry is None or (dr, dc) not in _DIRECTION_NAMES:
             continue
         if not matching_clues:
@@ -183,7 +184,7 @@ def parse_arrows_geometry(raw: dict, solution=None, n: int = 9) -> list[dict]:
             values = [solution[(r - 1) * n + (c - 1)] for r, c in cells]
             count = values[0]
             actual = sum(values[:count]) if 1 <= count <= len(values) else None
-        clue = matching_clues[0]
+        clue = matching_clues[0][0]
         out.append({
             "direction": _DIRECTION_NAMES[(dr, dc)],
             "entry": list(entry),
