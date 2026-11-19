@@ -483,8 +483,11 @@ class Solver:
         candidates = []
         for cell in cells:
             vals = list(bits(self.state.dom[cell]))
-            if len(vals) >= 2:
-                candidates.extend((cell, v) for v in vals)
+            if len(vals) < 2:
+                continue
+            if len(vals) > 7 and near_focus(cell) != 0 and weight[cell] < 4:
+                continue
+            candidates.extend((cell, v) for v in vals)
             if len(candidates) >= 80:
                 break
         if best is None and candidates and os.environ.get("YS_PARALLEL", "1") == "1":
