@@ -737,18 +737,15 @@ class Solver:
         signature = tuple(pre_dom)
         if getattr(self, "_candidate_map_signature", None) == signature:
             return None
-        cells = sorted(c for c in self.focus
-                       if c < self.state.n2 and not self.state.vals[c])
-        if not cells:
-            cells = [next((c for c in range(self.state.n2) if not self.state.vals[c]), -1)]
-            cells = [c for c in cells if c >= 0]
+        cells = [c for c in range(self.state.n2)
+                 if not self.state.vals[c] and self.state.dom[c].bit_count() <= 6]
         if not cells:
             return None
         self._candidate_map_signature = signature
         step = Step(
             index=len(self.steps), technique="candidate_map", tier=1,
             title="候选标记",
-            detail="标出当前关注区域内的候选，不标全盘。",
+            detail="推不动时，把所有候选数不超过 6 的格子标出来。",
             events=[], visual={"focus": [], "premise": [], "groups": [], "links": [], "chips": []})
         step.pre_dom, step.pre_vals = pre_dom, pre_vals
         step.candidates = [{"cell": c, "digits": [v for v in range(1, self.state.n + 1)
