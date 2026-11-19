@@ -17,7 +17,7 @@ from .state import cell_name
 from .narrate import Step
 
 
-ANALYSIS_VERSION = 3
+ANALYSIS_VERSION = 4
 
 
 @dataclass
