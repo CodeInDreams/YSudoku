@@ -394,15 +394,50 @@ def _explain_skyscraper(events, data, n):
 
 
 def _explain_sum_link(events, data, n):
-    domains = "，".join(f"{cell_name(c, n)}∈{{{','.join(map(str, values))}}}"
-                       for c, values in data["domains"])
-    lines = [*data["premises"], f"两式消去 {_names(data['shared'], n)}，得到 {data['equation']}。",
-             f"代入当前候选 {domains}：", *_effect_lines(events, n)]
-    visual = _basic_visual(events, n)
+    lines = list(data["premises"])
+    shared = _names(data["shared"], n)
+    lines.append(f"两条线索都算了 {shared}。减去相同的部分，剩下 {data['equation']}。")
+    domains = dict(data["domains"])
+    terms = data["terms"]
+    total = data["total"]
     if data["pairs"]:
-        names = ", ".join(cell_name(c, n) for c, _ in data["domains"])
-        pairs = "、".join(f"({a}, {b})" for a, b in data["pairs"])
-        lines.append(f"({names}) 的可行组合为 {pairs}。")
+        # Read from the cell with fewer possibilities, like a player would.
+        source = min(range(2), key=lambda i: len(domains[terms[i][0]]))
+        dest = 1 - source
+        a, x = terms[source]
+        b, y = terms[dest]
+        an, bn = cell_name(a, n), cell_name(b, n)
+        if x == -y and abs(y) == 1:
+            offset = total * y
+            if offset:
+                word = "大" if offset > 0 else "小"
+                lines.append(f"也就是说，{bn} 比 {an} {word} {abs(offset)}。")
+        options = "、".join(map(str, domains[a]))
+        lines.append(f"从 {an} 看，它只能填 {options}。")
+        partners = {pair[source]: pair[dest] for pair in data["pairs"]}
+        for value in domains[a]:
+            if value in partners:
+                lines.append(f"若 {an} 填 {value}，按上式，{bn} 就要填 {partners[value]}。")
+            else:
+                lines.append(f"若 {an} 填 {value}，{bn} 的候选中没有一个能满足上式。")
+    else:
+        for cell, removed in _group_elims(events).items():
+            other = {0}
+            coeff = dict(terms)[cell]
+            for c, k in terms:
+                if c != cell:
+                    other = {s + k * v for s in other for v in domains[c]}
+            needed = sorted({total - coeff * v for v in removed})
+            if len(terms) > 1:
+                expr = " ".join(f"{k:+d}×{cell_name(c, n)}" for c, k in terms if c != cell)
+                available = (_values(sorted(other)) if len(other) <= 8
+                             else f"{min(other)} 到 {max(other)} 之间的 {len(other)} 个数")
+                lines.append(f"若 {cell_name(cell, n)} 填 {_values(removed)}，{expr} 就要取 "
+                             f"{_values(needed)}。用这些格的当前候选只能得到 {available}，两边没有相同的数。")
+    for cell, removed in _group_elims(events).items():
+        kept = [v for v in domains[cell] if v not in removed]
+        lines.append(f"所以 {cell_name(cell, n)} 只剩 {_values(kept)}。")
+    visual = _basic_visual(events, n)
     visual["premise"] = list(data["shared"])
     return "\n".join(lines), visual
 

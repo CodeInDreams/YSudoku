@@ -19,6 +19,17 @@ def _equation(terms, total, n):
     return " + ".join(positive or ["0"]) + " = " + " + ".join(negative or ["0"])
 
 
+def _premise(name, terms, total, n):
+    cells = "、".join(cell_name(c, n) for c in terms)
+    if name == "箭头":
+        arm = "、".join(cell_name(c, n) for c, sign in terms.items() if sign > 0)
+        circle = next(c for c, sign in terms.items() if sign < 0)
+        return f"箭头圆格 {cell_name(circle, n)} 的数字等于箭身 {arm} 的数字之和。"
+    if name in ("V", "X"):
+        return f"{name} 连接的两格 {cells} 加起来是 {total}。"
+    return f"{name}线索给出 {cells} 的数字之和是 {total}。"
+
+
 def _sources(constraints):
     for con in constraints:
         if con.kind == "arrow":
@@ -68,7 +79,7 @@ class SumLink:
             pairs = [(x, y) for x, left in contributions[0] for y, right in contributions[1]
                      if left + right == self.total]
         reason = Reason("sum_link", {
-            "pairs": pairs,
+            "pairs": pairs, "terms": self.terms, "total": self.total,
             "premises": self.premises, "shared": self.shared,
             "equation": _equation(self.terms, self.total, state.n),
             "domains": [(c, list(bits(mask))) for (c, _), mask in zip(self.terms, masks)],
@@ -92,8 +103,8 @@ def compile_links(constraints, n):
         sign = 1 if terms[0][1] > 0 else -1
         terms = tuple((c, coeff * sign) for c, coeff in terms)
         total = (a - b) * sign
-        premises = (name + " " + _equation(left.items(), a, n),
-                    other + " " + _equation(right.items(), b, n))
+        premises = (_premise(name, left, a, n),
+                    _premise(other, right, b, n))
         key = terms, total
         if key not in links or len(shared) < len(links[key].shared):
             links[key] = SumLink(terms, total, premises, tuple(shared))

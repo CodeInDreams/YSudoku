@@ -23,6 +23,9 @@ class SumLinksTest(unittest.TestCase):
         self.assertEqual(len(steps), 1)
         self.assertIn("箭头", steps[0].detail)
         self.assertIn("V ", steps[0].detail)
+        self.assertIn("R3C9 比 R4C4 小 5", steps[0].detail)
+        self.assertIn("若 R4C4 填 8，按上式，R3C9 就要填 3", steps[0].detail)
+        self.assertIn("所以 R3C9 只剩 3、4", steps[0].detail)
         self.assertFalse(any(s.branch for s in result.steps))
         solver.state.dom[d] = 1 << 8
         solver.run()
