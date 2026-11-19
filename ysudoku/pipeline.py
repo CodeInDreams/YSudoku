@@ -133,7 +133,7 @@ def _chaos_pattern_steps(puzzle, rules, state) -> list:
     return steps
 
 
-def _try_global(puzzle, rules, solver, source, warnings, time_limit, target, demo):
+def _try_global(puzzle, rules, solver, source, warnings, time_limit, target, demo, lang="zh"):
     from . import global_clues
     if not global_clues.available():
         warnings.append("检测到盘外全局线索；安装可选依赖 ortools 后可启用 CP-SAT 全局求解")
@@ -313,7 +313,7 @@ def analyze(
     if clue_ids and not mapped_clues:
         if use_global:
             attempted = _try_global(puzzle, rules, solver, source, warnings,
-                                    global_time_limit, target, demo)
+                                    global_time_limit, target, demo, lang=lang)
             if attempted is not None:
                 return attempted
         return Analysis(
@@ -377,7 +377,7 @@ def analyze(
 
     if result.status == "stuck" and puzzle.clues and use_global:
         attempted = _try_global(puzzle, rules, solver, source, warnings,
-                                global_time_limit, target, demo)
+                                global_time_limit, target, demo, lang=lang)
         if attempted is not None:
             return attempted
 
