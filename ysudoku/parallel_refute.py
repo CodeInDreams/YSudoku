@@ -9,6 +9,36 @@ from dataclasses import dataclass
 from .search import refute_direct_with_trace
 from .state import Contradiction, Reason, State
 
+def physical_cores() -> int:
+    try:
+        pairs = set()
+        phys = core = None
+        for line in open("/proc/cpuinfo", encoding="utf-8"):
+            if line.startswith("physical id"):
+                phys = line.split(":")[1].strip()
+            elif line.startswith("core id"):
+                core = line.split(":")[1].strip()
+                if phys is not None and core is not None:
+                    pairs.add((phys, core))
+        if pairs:
+            return len(pairs)
+    except OSError:
+        pass
+    import os
+    return os.cpu_count() or 1
+
+
+def default_workers() -> int:
+    import os
+    override = os.environ.get("YSUDOKU_REFUTE_WORKERS")
+    if override:
+        try:
+            return max(1, int(override))
+        except ValueError:
+            pass
+    return max(1, physical_cores() - 1)
+
+
 _STATE: State | None = None
 _CONSTRAINTS = None
 
@@ -127,9 +157,10 @@ def _batch_main(items, conn):
 class Refuter:
     """Non-blocking dispatch of refutation candidates to two forked workers."""
 
-    def __init__(self, constraints, timeout: float = 3.0):
+    def __init__(self, constraints, timeout: float = 3.0, workers: int | None = None):
         self.constraints = constraints
         self.timeout = timeout
+        self.workers = max(1, workers or default_workers())
         self.running = []
         self.first_at = None
         self.deadline = None
@@ -141,8 +172,9 @@ class Refuter:
             return
         _STATE, _CONSTRAINTS = state, self.constraints
         ctx = mp.get_context("fork")
-        half = (len(candidates) + 1) // 2
-        for batch in (candidates[:half], candidates[half:]):
+        size = (len(candidates) + self.workers - 1) // self.workers
+        for offset in range(0, len(candidates), size):
+            batch = candidates[offset:offset + size]
             if not batch:
                 continue
             recv, send = ctx.Pipe(duplex=False)

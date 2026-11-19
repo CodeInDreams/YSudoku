@@ -38,3 +38,13 @@ class RefuterTest(unittest.TestCase):
                 break
             time.sleep(0.05)
         self.assertIsInstance(r.results, list)
+
+
+class WorkersTest(unittest.TestCase):
+    def test_env_override(self):
+        import os
+        from unittest import mock
+        from ysudoku.parallel_refute import default_workers
+
+        with mock.patch.dict(os.environ, {"YSUDOKU_REFUTE_WORKERS": "2"}):
+            self.assertEqual(default_workers(), 2)
