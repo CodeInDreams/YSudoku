@@ -469,8 +469,13 @@ class Solver:
             units = set(self.state.unit_of[cell])
             return 0 if cell in self.focus or (units & focus_units) else 1
 
+        weight = [0] * self.state.n2
+        for constraint in self.constraints:
+            for cell in constraint.cells():
+                weight[cell] += 1
         cells = sorted((c for c in range(self.state.n2) if not self.state.vals[c]),
-                       key=lambda c: (near_focus(c), self.state.dom[c].bit_count()))
+                       key=lambda c: (near_focus(c), -weight[c],
+                                      self.state.dom[c].bit_count()))
         import os
         best = None
         candidates = []
