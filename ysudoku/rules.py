@@ -719,7 +719,7 @@ def heuristic_spec(puzzle: Puzzle, elements: list[Element]) -> dict:
         if ids:
             rules.append({"kind": "between", "elements": ids})
     if _has(text, "consecutive") and not _has(text, "kropki"):
-        ids = lines_with(ORANGE + GREEN) or [e.id for e in lines]
+        ids = lines_with(ORANGE | GREEN) or [e.id for e in lines]
         if ids:
             rules.append({"kind": "consecutive", "elements": ids})
 
