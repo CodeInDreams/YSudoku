@@ -23,6 +23,7 @@ TITLES = {
     "forcing_chain": "反证（试探）",
     "contradiction": "反证",
     "custom": "自定义规则（L2）",
+    "sum_link": "共享格组和数",
     "ir_support": "通用约束支持",
     "parity": "奇偶",
     "odd": "奇数",
@@ -390,6 +391,20 @@ def _explain_skyscraper(events, data, n):
     visual["groups"].append({"cells": cells, "kind": "line"})
     visual["chips"].append({"cell": cells[0], "text": f"见{clue}", "kind": "sum"})
     return detail, visual
+
+
+def _explain_sum_link(events, data, n):
+    domains = "，".join(f"{cell_name(c, n)}∈{{{','.join(map(str, values))}}}"
+                       for c, values in data["domains"])
+    lines = [*data["premises"], f"两式消去 {_names(data['shared'], n)}，得到 {data['equation']}。",
+             f"代入当前候选 {domains}：", *_effect_lines(events, n)]
+    visual = _basic_visual(events, n)
+    if data["pairs"]:
+        names = ", ".join(cell_name(c, n) for c, _ in data["domains"])
+        pairs = "、".join(f"({a}, {b})" for a, b in data["pairs"])
+        lines.append(f"({names}) 的可行组合为 {pairs}。")
+    visual["premise"] = list(data["shared"])
+    return "\n".join(lines), visual
 
 
 def _explain_ir_support(events, data, n):
