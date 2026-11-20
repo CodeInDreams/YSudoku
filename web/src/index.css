@@ -82,11 +82,20 @@
 .rules-markdown th, .rules-markdown td { border: 1px solid hsl(var(--border)); padding: 4px 8px; }
 
 @layer base {
-  html,
+  html {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    overscroll-behavior-x: none;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
   body,
   #root {
+    width: 100%;
     max-width: 100%;
-    overflow-x: clip;
+    overflow-x: hidden;
     overscroll-behavior-x: none;
+    position: relative;
   }
 }
