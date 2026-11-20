@@ -155,7 +155,7 @@ function StepGroups({ groups = [], n }) {
   return groups.map((group, index) => {
     const cells = new Set(group.cells);
     if (!cells.size) return null;
-    const color = colours[index % colours.length];
+    const color = group.kind === "conflict" ? "#dc2626" : colours[index % colours.length];
     const edges = [];
     for (const cell of cells) {
       const x = cell % n;
@@ -1198,6 +1198,9 @@ export default function App() {
               }}>
               <CellColours visual={overlay.visual} n={n} />
               <StepGroups groups={overlay.visual.groups} n={n} />
+              <StepGroups groups={(overlay.visual.conflicts || []).map(({ scope }) => (
+                { cells: scope, kind: "conflict" }
+              ))} n={n} />
               {(overlay.visual.region_edges || []).map(({ cells: [a, b], fixed }) => {
                 const vertical = Math.abs(a - b) === 1;
                 const cell = Math.max(a, b);
@@ -1239,6 +1242,11 @@ export default function App() {
                   <text key={`n${cell}-${v}`} x={startX + i * stepX + stepX / 2} y={r + 0.88} textAnchor="middle" fontSize="0.26" fontWeight="600" fill="#b91c1c" textDecoration="line-through" style={{ fontFamily: "ui-sans-serif, system-ui" }}>{v}</text>
                 ));
               })}
+              {[...new Set((overlay.visual.conflicts || []).flatMap(({ cells }) => cells))].map(cell => (
+                <text key={cell} data-conflict-cell={cell} x={cell % n + 0.5} y={Math.floor(cell / n) + 0.5}
+                  textAnchor="middle" dominantBaseline="central" fontSize="0.72" fontWeight="600"
+                  fill="#dc2626" stroke="white" strokeWidth="0.035" paintOrder="stroke">?</text>
+              ))}
             </svg>
           )}
           <span className="pointer-events-none absolute right-0.5 top-0.5 rounded-sm bg-white/35 px-1 py-px text-[8px] font-normal text-slate-400/75 dark:bg-black/20 dark:text-neutral-600">{t("board.liveFrame", { i: idx + 1, n: steps.length })}</span>

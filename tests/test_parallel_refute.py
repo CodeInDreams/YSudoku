@@ -78,6 +78,34 @@ class RefuterTest(unittest.TestCase):
         self.assertEqual([child["value"] for child in proof["children"]], [1, 2])
         self.assertTrue(all(child["proof"]["cause"] for child in proof["children"]))
 
+    def test_terminal_conflict_retains_rule_scope_and_exact_cell(self):
+        from ysudoku.search import refute_candidate_with_proof
+        from ysudoku.state import Reason
+
+        class RejectPair:
+            def cells(self):
+                return [0, 1]
+
+            def prune(self, state):
+                if state.vals[0] == 1:
+                    return state.elim(1, 2, Reason("test_rule"))
+                return False
+
+        state = State(3, [])
+        state.dom[1] = 0b010
+        refuted, proof, _ = refute_candidate_with_proof(state, [RejectPair()], 0, 1)
+        self.assertTrue(refuted)
+        self.assertEqual(proof["visual_conflict"], {"scope": (0, 1), "cells": (1,)})
+
+    def test_missing_digit_highlights_unit_without_inventing_a_cell(self):
+        from ysudoku.search import refute_candidate_with_proof
+
+        state = State(4, [Unit("row", 0, [0, 1, 2, 3])])
+        state.dom[:4] = [0b1111, 0b1110, 0b1110, 0b1110]
+        refuted, proof, _ = refute_candidate_with_proof(state, [], 0, 2)
+        self.assertTrue(refuted)
+        self.assertEqual(proof["visual_conflict"], {"scope": (0, 1, 2, 3), "cells": ()})
+
     def test_incomplete_deep_search_is_not_reported_as_a_refutation(self):
         from ysudoku.search import refute_candidate_with_proof
         from ysudoku.state import State

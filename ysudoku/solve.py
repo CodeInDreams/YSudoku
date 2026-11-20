@@ -612,7 +612,7 @@ class Solver:
             if assumption and assumption != (cell, value):
                 branch_cell, branch_value = assumption
                 lines.append(
-                    f"{indent}再假设 {cell_name(branch_cell, self.state.n)} = {branch_value}："
+                    (f"{indent}再假设 {cell_name(branch_cell, self.state.n)} = {branch_value}：", None)
                 )
             support_dom = list(node.get("pre_dom") or self.state.dom)
             reason_labels = {
@@ -651,7 +651,7 @@ class Solver:
                            f"{cell_name(other, self.state.n)} 已填 {event.value}）")
                 if event.reason.kind != "assumption":
                     lines.append(
-                        f"{indent}→ {why or effect + '（' + reason_labels.get(event.reason.kind, event.reason.kind) + '）'}"
+                        (f"{indent}→ {why or effect + '（' + reason_labels.get(event.reason.kind, event.reason.kind) + '）'}", None)
                     )
                 bit = 1 << (event.value - 1)
                 if event.kind == "place":
@@ -659,35 +659,36 @@ class Solver:
                 else:
                     support_dom[event.cell] &= ~bit
             if node.get("cause"):
-                lines.append(f"{indent}出现矛盾：{node['cause']}。")
+                lines.append((f"{indent}出现矛盾：{node['cause']}。", node.get("visual_conflict")))
             children = node.get("children", ())
             branch_cell = node.get("branch_cell")
             if children and branch_cell is not None:
                 options = "、".join(str(child["value"]) for child in children)
                 lines.append(
-                    f"{indent}继续分支：{cell_name(branch_cell, self.state.n)} "
-                    f"只能取 {options}。"
+                    (f"{indent}继续分支：{cell_name(branch_cell, self.state.n)} "
+                     f"只能取 {options}。", None)
                 )
                 for child in children:
                     lines.extend(proof_lines(child["proof"], indent + "  "))
-                lines.append(f"{indent}该格所有候选都导致矛盾。")
+                lines.append((f"{indent}该格所有候选都导致矛盾。", None))
             return lines
 
         proof_text = proof_lines(proof)
         if not proof_text:
-            proof_text = [f"假设 {name} = {value} 后立即矛盾：{cause}。"]
+            proof_text = [(f"假设 {name} = {value} 后立即矛盾：{cause}。", None)]
         chunks = [proof_text[i:i + chunk_size]
                   for i in range(0, len(proof_text), chunk_size)]
         pre_dom, pre_vals = self._pre()
         for index, chunk in enumerate(chunks):
-            lines = [f"反证推理（{index + 1}/{len(chunks)}）："] + chunk
+            lines = [f"反证推理（{index + 1}/{len(chunks)}）："] + [text for text, _ in chunk]
+            conflicts = [conflict for _, conflict in chunk if conflict]
             reasoning = Step(
                 index=len(self.steps), technique="contradiction", tier=4,
                 title=f"反证推理 {index + 1}/{len(chunks)}",
                 detail="\n".join(lines), events=[],
                 visual={"focus": [], "premise": [],
                         "groups": [{"cells": [cell], "kind": "assumption"}],
-                        "links": [], "chips": [],
+                        "links": [], "chips": [], "conflicts": conflicts,
                         "assumption": {"cells": [cell],
                                        "label": f"反证推理：假设 {name}={value}"}},
                 branch=True)
@@ -705,6 +706,7 @@ class Solver:
             events=[], visual={"focus": [], "premise": [],
                                "groups": [{"cells": [cell], "kind": "assumption"}],
                                "links": [], "chips": [],
+                               "conflicts": [proof["visual_conflict"]] if proof.get("visual_conflict") else [],
                                "assumption": {"cells": [cell],
                                               "label": f"反证推翻：假设 {name}={value}"}},
             branch=True)

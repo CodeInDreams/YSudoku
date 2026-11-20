@@ -192,6 +192,19 @@ def refute_direct_with_trace(st: State, constraints, cell: int, value: int):
     return (True, trace, cause)
 
 
+def _placement_conflict(st, exc):
+    cells = tuple(c for c, mask in enumerate(st.dom) if not mask)
+    scope = cells
+    if cells and st.events:
+        last = st.events[-1]
+        by = last.reason.data.get("by")
+        if last.reason.kind == "unit_peer" and by is not None:
+            shared = set(st.unit_of[cells[0]]) & set(st.unit_of[by])
+            if shared:
+                scope = tuple(st.units[min(shared)].cells)
+    return str(exc), cells, None, {"scope": scope, "cells": cells}
+
+
 def _propagate_with_cause(st: State, constraints, max_rounds: int = 200):
     """Return the terminal contradiction and the facts that establish it."""
     for _ in range(max_rounds):
@@ -202,7 +215,11 @@ def _propagate_with_cause(st: State, constraints, max_rounds: int = 200):
                 changed |= bool(con.prune(st))
             except Contradiction as exc:
                 empty = next((c for c, mask in enumerate(st.dom) if not mask), None)
-                cause = (str(exc), tuple(con.cells()) if empty is None else (empty,), None)
+                scope = tuple(con.cells())
+                cells = (empty,) if empty is not None else ()
+                cause = str(exc), cells or scope, None, {
+                    "scope": scope or cells, "cells": cells or (scope if len(scope) == 1 else ()),
+                }
             else:
                 cause = None
             scope = None
@@ -224,13 +241,15 @@ def _propagate_with_cause(st: State, constraints, max_rounds: int = 200):
                 try:
                     st.place(cell, value, Reason("naked_single", {"cell": cell, "value": value}))
                 except Contradiction as exc:
-                    return str(exc), tuple(c for c, mask in enumerate(st.dom) if not mask), None
+                    return _placement_conflict(st, exc)
                 changed = True
         for unit in st.units:
             for digit in range(1, st.n + 1):
                 hosts = [c for c in unit.cells if st.has(c, digit)]
                 if not hosts:
-                    return f"{unit.label} 没有位置放 {digit}", unit.cells, digit
+                    return f"{unit.label} 没有位置放 {digit}", unit.cells, digit, {
+                        "scope": tuple(unit.cells), "cells": (),
+                    }
                 if len(hosts) == 1 and st.vals[hosts[0]] == 0:
                     try:
                         st.place(hosts[0], digit, Reason("hidden_single", {
@@ -238,7 +257,7 @@ def _propagate_with_cause(st: State, constraints, max_rounds: int = 200):
                             "unit": unit.label, "unit_cells": list(unit.cells),
                         }))
                     except Contradiction as exc:
-                        return str(exc), tuple(c for c, mask in enumerate(st.dom) if not mask), None
+                        return _placement_conflict(st, exc)
                     changed = True
         if not changed:
             break
@@ -364,12 +383,12 @@ def refute_candidate_with_proof(st: State, constraints, cell: int, value: int,
         try:
             state.place(target, digit, Reason("assumption", {"cell": target, "value": digit}))
         except Contradiction as exc:
-            conflict = str(exc), tuple(c for c, mask in enumerate(state.dom) if not mask), None
+            conflict = _placement_conflict(state, exc)
         else:
             conflict = _propagate_with_cause(state, constraints)
         check_time()
         if conflict:
-            proof["cause"], proof["conflict_cells"], proof["conflict_digit"] = conflict
+            proof["cause"], proof["conflict_cells"], proof["conflict_digit"], proof["visual_conflict"] = conflict
             return proof
         if state.solved:
             return None
