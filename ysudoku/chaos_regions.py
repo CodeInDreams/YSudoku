@@ -22,6 +22,7 @@ class RegionFragments:
         self.groups = {i: {i} for i in range(n*n)}
         self.owner = list(self.groups)
         self.separate = set()
+        self.corner_choices = {}
         self.colours = {}
         self.geometry = {}
         self.board = (1 << (n*n)) - 1
@@ -129,12 +130,68 @@ class RegionFragments:
                     return a, b, detail + "两个片区必须同区。"
         return None
 
+    def replace_corner_clue(self, rule):
+        cells = rule.cells()
+        if rule.counts != [3] or len(set(cells)) != 4 or self.n < 2:
+            return None
+        for corner in (0, self.n - 1, self.n * (self.n - 1), self.n**2 - 1):
+            if corner not in cells:
+                continue
+            neighbours = self.expand(1 << corner)
+            exits = tuple(c for c in cells if neighbours & (1 << c))
+            if len(exits) != 2:
+                continue
+            diagonal = next(c for c in cells if c != corner and c not in exits)
+            if not all(self.expand(1 << c) & (1 << diagonal) for c in exits):
+                continue
+            # Connectivity supplies the disjunction. Exactly three regions
+            # then makes the other three cells pairwise different.
+            anchors = (*exits, diagonal)
+            for a, b in combinations(anchors, 2):
+                self.apart(self.owner[a], self.owner[b])
+            self.apart(self.owner[corner], self.owner[diagonal])
+            for c in anchors:
+                self.mark(self.owner[c])
+            self.corner_choices[corner] = anchors
+            left, right = (cell_name(c, self.n) for c in exits)
+            return (f"{cell_name(corner, self.n)} 在盘角，要连成 {self.n} 格区域，必须与 {left} 或 {right} 同区。"
+                    f"四格跨三区，只能有一对同区，所以 {left}、{right}、{cell_name(diagonal, self.n)} 两两异区。"
+                    "角格的两种颜色表示二选一。实线是已确定的边界，两条虚线中恰有一条是边界。")
+        return None
+
+    def propagate_choices(self):
+        for cell, (left, right, _) in self.corner_choices.items():
+            root = self.owner[cell]
+            targets = [self.owner[left], self.owner[right]]
+            if root in targets:
+                continue
+            viable = [b for b in targets if not self.blocked(root, b)]
+            if not viable:
+                raise Contradiction(f"{cell_name(cell, self.n)} 的两个同区出口都被排除")
+            if len(viable) == 1:
+                other, = viable
+                self.merge(root, other)
+                return [cell, left, right], (f"{cell_name(cell, self.n)} 的两个出口只剩"
+                                             f" {cell_name(other, self.n)} 所在片区，因此必须同区。")
+        return None
+
     def snapshot(self):
         groups = [{"region": True, "colour": colour, "hex": SWATCHES[colour], "cells": sorted(self.groups[root])}
                   for root, colour in self.colours.items()]
         pairs = [{"a": ca, "b": cb, "possible": not self.blocked(a, b)}
                  for (a, ca), (b, cb) in combinations(self.colours.items(), 2)]
-        return {"colours": groups, "region_pairs": pairs}
+        options, edges = {}, []
+        for cell, (a, b, diagonal) in self.corner_choices.items():
+            owned = self.owner[cell]
+            targets = [self.owner[a], self.owner[b]]
+            if owned not in targets and all(r in self.colours for r in targets):
+                options.setdefault(owned, {"cells": sorted(self.groups[owned]),
+                                           "colours": [self.colours[r] for r in targets]})
+            for anchor in (a, b):
+                edges.append({"cells": [anchor, diagonal], "fixed": True})
+                if self.owner[anchor] != owned:
+                    edges.append({"cells": [cell, anchor], "fixed": owned in targets})
+        return {"colours": groups, "region_pairs": pairs, "region_options": list(options.values()), "region_edges": edges}
 
     def clue(self, rule):
         cells = rule.cells()
@@ -204,8 +261,13 @@ def region_steps(solver, rules, steps):
     solver.allow_chains = False  # Construct regions from deductions before the separate search fallback.
     clues = [copy(c) for c in rules.constraints if c.kind == "region_count"]
     fragments.count_clues = clues
-    for clue, step in zip(clues, steps):
-        observation = fragments.clue(clue)
+    for clue, step in zip(clues.copy(), steps):
+        detail = fragments.replace_corner_clue(clue)
+        if detail:
+            clues.remove(clue)
+            step.title = "角格的两个同区出口"
+            step.detail = detail
+        observation = None if detail else fragments.clue(clue)
         if observation:
             step.detail += "\n" + observation[1]
         step.visual.update(fragments.snapshot())
@@ -213,7 +275,17 @@ def region_steps(solver, rules, steps):
             solver.on_step(step)
     while True:
         pre_dom, pre_vals = state.dom.copy(), state.vals.copy()
-        observation = next((r for clue in clues if (r := fragments.clue(clue))), None)
+        observation = fragments.propagate_choices()
+        if not observation:
+            for clue in clues:
+                detail = fragments.replace_corner_clue(clue)
+                if detail:
+                    clues.remove(clue)
+                    observation = clue.cells(), detail
+                    break
+                observation = fragments.clue(clue)
+                if observation:
+                    break
         events = []
         if not observation:
             relation = fragments.capacity()
@@ -277,6 +349,11 @@ def region_steps(solver, rules, steps):
         for item in snapshot["colours"]:
             for cell in item["cells"]:
                 marks.add(cell, item["colour"])
+        for option in snapshot["region_options"]:
+            for cell in option["cells"]:
+                for colour in option["colours"]:
+                    if len(marks.colours(cell)) < MAX_COLOURS_PER_CELL:
+                        marks.add(cell, colour)
         for item in step.visual.get("colours", []):
             cells = []
             for cell in item["cells"]:

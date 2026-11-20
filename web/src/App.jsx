@@ -109,6 +109,32 @@ function candidateStateUpTo(analysis, idx) {
   return state;
 }
 
+function CellColours({ visual, n }) {
+  const cells = new Map();
+  const hex = new Map();
+  const choices = new Map();
+  for (const option of visual.region_options || []) {
+    for (const cell of option.cells) choices.set(cell, option.colours);
+  }
+  function add(cell, colour) {
+    if (!cells.has(cell)) cells.set(cell, new Set());
+    cells.get(cell).add(colour);
+  }
+  for (const group of visual.colours || []) {
+    hex.set(group.colour, group.hex);
+    for (const cell of group.cells) {
+      if (!(group.region && choices.has(cell))) add(cell, group.colour);
+    }
+  }
+  for (const [cell, colours] of choices) {
+    for (const colour of colours) add(cell, colour);
+  }
+  return [...cells].map(([cell, colours]) => [...colours].map((colour, i) => (
+    <rect key={cell + "/" + colour} x={cell % n + i / colours.size} y={Math.floor(cell / n)}
+      width={1 / colours.size} height="1" fill={hex.get(colour) || "#8ab4e8"} opacity="0.45" />
+  )));
+}
+
 function buildStepActions(analysis) {
   const n = analysis.puzzle.size;
   const steps = [];
@@ -1006,10 +1032,15 @@ export default function App() {
                 width: `${(gridRect.width / gridRect.imageWidth) * 100}%`,
                 height: `${(gridRect.height / gridRect.imageHeight) * 100}%`,
               } : { inset: 0, width: "100%", height: "100%" }}>
-              {(overlay.visual.colours || []).map((item, i) => item.cells?.map((cell) => (
-                <rect key={`c-${i}-${cell}`} x={cell % n} y={Math.floor(cell / n)} width="1" height="1"
-                  fill={item.hex || "#8ab4e8"} opacity="0.45" />
-              )))}
+              <CellColours visual={overlay.visual} n={n} />
+              {(overlay.visual.region_edges || []).map(({ cells: [a, b], fixed }) => {
+                const vertical = Math.abs(a - b) === 1;
+                const cell = Math.max(a, b);
+                const x = cell % n, y = Math.floor(cell / n);
+                return <line key={a + "/" + b} x1={x} y1={y} x2={x + (vertical ? 0 : 1)}
+                  y2={y + (vertical ? 1 : 0)} stroke="#155e75" strokeWidth="0.065"
+                  strokeDasharray={fixed ? undefined : "0.12 0.10"} />;
+              })}
               {(overlay.visual.groups || []).map((group, i) => {
                 if (!group.cells?.length) return null;
                 const rows = group.cells.map((c) => Math.floor(c / n));

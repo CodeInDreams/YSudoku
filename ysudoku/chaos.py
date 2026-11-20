@@ -289,7 +289,16 @@ def solve_chaos(puzzle, constraints, node_limit: int = 1_500_000,
                 return False
         return True
 
+    choices_by_cell = {}
+    for corner, (a, b, _) in getattr(fragments, "corner_choices", {}).items():
+        for cell in (corner, a, b):
+            choices_by_cell.setdefault(cell, []).append((corner, a, b))
+
     def region_rules_ok(cell: int) -> bool:
+        for corner, a, b in choices_by_cell.get(cell, ()):
+            labels = [region_of[a], region_of[b]]
+            if region_of[corner] >= 0 and -1 not in labels and region_of[corner] not in labels:
+                return False
         for con in region_rules_by_cell[cell]:
             if not region_count_possible(con):
                 return False
@@ -313,7 +322,7 @@ def solve_chaos(puzzle, constraints, node_limit: int = 1_500_000,
             return None
 
         unassigned = [cell for cell in range(total) if region_of[cell] < 0]
-        if region_rules or quadruples:
+        if region_rules or choices_by_cell or quadruples:
             # MRV over propagated domains; circle cells break ties first.
             def pair_count(x: int) -> int:
                 mask = domains[x]
@@ -335,7 +344,7 @@ def solve_chaos(puzzle, constraints, node_limit: int = 1_500_000,
             cell = unassigned[0]
         r, c = divmod(cell, n)
         adjacent = {region_of[nb] for nb in neighbors[cell] if region_of[nb] >= 0}
-        if region_rules or quadruples:
+        if region_rules or choices_by_cell or quadruples:
             options = [rr for rr, cells in enumerate(region_cells) if len(cells) < n]
         else:
             options = [rr for rr in adjacent if len(region_cells[rr]) < n]

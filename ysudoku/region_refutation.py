@@ -86,6 +86,10 @@ def _trial(base, clues, actions=None):
     try:
         for i in range((MAX_FORCED_MERGES if actions is None else len(actions)) + 1):
             while True:
+                choice = f.propagate_choices()
+                if choice:
+                    reasons.append(choice[1])
+                    continue
                 change = next(((clue, v) for clue in clues if (v := f.clue(clue))), None)
                 if not change:
                     break
