@@ -62,22 +62,6 @@ function detectGridRect(img, size) {
     ctx.drawImage(img, 0, 0);
     const { width, height } = canvas;
     const pixels = ctx.getImageData(0, 0, width, height).data;
-    const dark = (x, y) => {
-      const i = (y * width + x) * 4;
-      return pixels[i] + pixels[i + 1] + pixels[i + 2] < 240;
-    };
-    const cols = [];
-    const rows = [];
-    for (let x = 0; x < width; x++) {
-      let n = 0;
-      for (let y = 0; y < height; y++) if (dark(x, y)) n++;
-      if (n > height * 0.5) cols.push(x);
-    }
-    for (let y = 0; y < height; y++) {
-      let n = 0;
-      for (let x = 0; x < width; x++) if (dark(x, y)) n++;
-      if (n > width * 0.5) rows.push(y);
-    }
     function axis(lines) {
       const centers = [];
       for (let i = 0; i < lines.length; i++) {
@@ -114,14 +98,34 @@ function detectGridRect(img, size) {
       }
       return best;
     }
-    const x = axis(cols);
-    const y = axis(rows);
-    if (!x || !y || Math.abs(x.span - y.span) > 3) return null;
-    return {
-      x: x.start, y: y.start,
-      width: x.span, height: y.span,
-      imageWidth: width, imageHeight: height,
-    };
+    // Thin grid lines can be entirely antialiased. Retry with a lighter
+    // threshold if the dark pixels do not establish a regular grid.
+    for (const threshold of [240, 360, 480]) {
+      const rowInk = new Uint32Array(height);
+      const colInk = new Uint32Array(width);
+      for (let y = 0, i = 0; y < height; y++) {
+        for (let x = 0; x < width; x++, i += 4) {
+          if (pixels[i] + pixels[i + 1] + pixels[i + 2] < threshold) {
+            rowInk[y]++;
+            colInk[x]++;
+          }
+        }
+      }
+      const cols = [];
+      const rows = [];
+      colInk.forEach((count, x) => { if (count > height / 2) cols.push(x); });
+      rowInk.forEach((count, y) => { if (count > width / 2) rows.push(y); });
+      const x = axis(cols);
+      const y = axis(rows);
+      if (x && y && Math.abs(x.span - y.span) <= 3) {
+        return {
+          x: x.start, y: y.start,
+          width: x.span, height: y.span,
+          imageWidth: width, imageHeight: height,
+        };
+      }
+    }
+    return null;
   } catch {
     return null;
   }
@@ -144,6 +148,34 @@ function candidateStateUpTo(analysis, idx) {
     }
   }
   return state;
+}
+
+function StepGroups({ groups = [], n }) {
+  const colours = ["#2563eb", "#059669", "#7c3aed", "#0e7490"];
+  return groups.map((group, index) => {
+    const cells = new Set(group.cells);
+    if (!cells.size) return null;
+    const color = colours[index % colours.length];
+    const edges = [];
+    for (const cell of cells) {
+      const x = cell % n;
+      const y = Math.floor(cell / n);
+      if (!cells.has(cell - n)) edges.push(`M${x},${y}h1`);
+      if (!cells.has(cell + n)) edges.push(`M${x},${y+1}h1`);
+      if (x === 0 || !cells.has(cell - 1)) edges.push(`M${x},${y}v1`);
+      if (x === n - 1 || !cells.has(cell + 1)) edges.push(`M${x+1},${y}v1`);
+    }
+    return (
+      <g key={index} data-overlay-group={group.kind || "region"}>
+        {[...cells].map(cell => (
+          <rect key={cell} x={cell % n} y={Math.floor(cell / n)} width="1" height="1"
+            fill={color} fillOpacity="0.1" />
+        ))}
+        <path d={edges.join(" ")} fill="none" stroke={color} strokeOpacity="0.75"
+          strokeWidth="0.045" strokeDasharray="0.13 0.07" />
+      </g>
+    );
+  });
 }
 
 function CellColours({ visual, n }) {
@@ -1148,6 +1180,7 @@ export default function App() {
                 height: `${(gridRect.height / gridRect.imageHeight) * 100}%`,
               }}>
               <CellColours visual={overlay.visual} n={n} />
+              <StepGroups groups={overlay.visual.groups} n={n} />
               {(overlay.visual.region_edges || []).map(({ cells: [a, b], fixed }) => {
                 const vertical = Math.abs(a - b) === 1;
                 const cell = Math.max(a, b);
