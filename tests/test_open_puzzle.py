@@ -32,11 +32,22 @@ class OpenPuzzleTest(unittest.TestCase):
                 entry, = store.list_entries()
                 self.assertEqual(entry["opened_at"], 200)
                 self.assertEqual(entry["at"], saved_at)
+                seen.clear()
+                _, result = server._stored_analysis(
+                    fixture, {"llm": False}, on_preview=seen.append,
+                    on_preview_start=lambda: seen.append("preview"),
+                    on_rules=lambda rules: seen.append("rules"),
+                    on_step=lambda *args: seen.append("solve"),
+                )
+                self.assertTrue(result["cached"])
+                self.assertEqual(seen, [])
+
 
     def test_browser_job_waits_for_initial_preview(self):
         reached_rules = Event()
 
-        def analyze(*_args, on_preview, **_kwargs):
+        def analyze(*_args, on_preview, on_preview_start, **_kwargs):
+            on_preview_start()
             on_preview("/api/rulesheet/preview.png")
             reached_rules.set()
             return "key", {}

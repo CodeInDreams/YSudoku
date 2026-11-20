@@ -24,7 +24,7 @@ STATIC_DIR = Path(__file__).parent / "static"
 DIST_DIR = Path(__file__).parent.parent / "web" / "dist"
 def _stored_analysis(target: str, body: dict, demo: bool = False,
                      force_rules: bool = False, force_steps: bool = False,
-                     on_rules=None, on_step=None, on_preview=None, opened_at=None):
+                     on_rules=None, on_step=None, on_preview=None, on_preview_start=None, opened_at=None):
     if "logic-masters.de" in target:
         try:
             data = sudokupad.load(target)
@@ -65,7 +65,7 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
         if (cached and cached.get("lang", "zh") == lang
                 and cached.get("algo_version") == ANALYSIS_VERSION
                 and meta.get("rules_hash") == rules.get("hash")):
-            if on_preview:
+            if on_preview and not on_preview_start:
                 preview(cached.get("source_url", ""), cached["puzzle"]["size"], cached.get("rule_sheet", ""))
             cached["notes"] = meta.get("notes", "")
             if isinstance(cached.get("rules"), dict):
@@ -75,12 +75,12 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
                 "key": key, "location": store.storage_info()["location"],
                 "settings": store.load_settings(),
             }
-            if on_rules is not None:
+            if on_rules is not None and not on_preview_start:
                 try:
                     on_rules(cached.get("rules", {}).get("resolved", []))
                 except Exception:
                     pass
-            if on_step is not None:
+            if on_step is not None and not on_preview_start:
                 for index, step in enumerate(cached.get("steps", [])):
                     try:
                         on_step(index, step)
@@ -88,6 +88,8 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
                         pass
             return key, cached
 
+    if on_preview_start:
+        on_preview_start()
     analysis = analyze(
         target,
         demo=demo,
@@ -146,7 +148,7 @@ def _start_job(target: str, body: dict, demo: bool) -> str:
     preview_ready = threading.Event()
     job = {
         "preview_ready": preview_ready,
-        "id": job_id, "phase": "preview", "status": "running",
+        "id": job_id, "phase": "opening", "status": "running",
         "rules": [], "steps": [], "error": None, "payload": None,
         "key": None, "started": time.time(),
     }
@@ -183,7 +185,9 @@ def _start_job(target: str, body: dict, demo: bool) -> str:
         try:
             key, payload = _stored_analysis(
                 target, body, demo=demo, on_rules=on_rules, on_step=on_step,
-                on_preview=on_preview, opened_at=job["started"],
+                on_preview=on_preview,
+                on_preview_start=lambda: _job_update(job_id, phase="preview"),
+                opened_at=job["started"],
             )
             _job_update(
                 job_id, phase="done", status="done", key=key, payload=payload,
@@ -291,7 +295,15 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/live/grid":
             try:
                 query = parse_qs(urlparse(self.path).query)
-                self._send(200, json.dumps(live.grid((query.get("session") or [None])[0])).encode(), "application/json")
+                session = (query.get("session") or [None])[0]
+                if session:
+                    try:
+                        rect = json.loads((store.frames_dir(session) / "grid.json").read_text())
+                    except (FileNotFoundError, json.JSONDecodeError):
+                        rect = None
+                else:
+                    rect = live.grid()
+                self._send(200, json.dumps(rect).encode(), "application/json")
             except Exception as exc:  # noqa: BLE001
                 self._send(500, json.dumps({"error": str(exc)}).encode(), "application/json")
             return
@@ -411,7 +423,9 @@ class Handler(BaseHTTPRequestHandler):
                     key = str(body.get("key") or "")
                     digest = str(body.get("steps_hash") or "")
                     if key and digest and store.has_frames(key, digest):
-                        result = {"ok": True, "session": key, "cached": True}
+                        last = len(body.get("steps") or []) - 1
+                        complete = store.frame_path(key, -1).is_file() and store.frame_path(key, last).is_file()
+                        result = {"ok": True, "session": key, "cached": True, "complete": complete}
                     else:
                         if key:
                             store.delete_layer(key, "frames")
