@@ -252,8 +252,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
         if path == "/api/store":
-            info = store.storage_info()
-            payload = {"info": info, "entries": store.list_entries()}
+            entries = store.list_entries()
+            payload = {"info": store.storage_info(entries), "entries": entries}
             self._send(200, json.dumps(payload, ensure_ascii=False).encode(), "application/json")
             return
         if path == "/api/job":

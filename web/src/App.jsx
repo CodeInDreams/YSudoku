@@ -524,6 +524,8 @@ export default function App() {
   const [view, setView] = useState(() => persisted.view || "solve");
   const [inspectorTab, setInspectorTab] = useState(() => persisted.inspectorTab || "explain");
   const [store, setStore] = useState(null);
+  const [storeError, setStoreError] = useState(false);
+  const storeRequest = useRef(0);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState("recent");
   const [favOnly, setFavOnly] = useState(false);
@@ -713,17 +715,32 @@ export default function App() {
   }, [steps.length, view, idx, playing, deleted]);
 
   async function refreshStore() {
-    try {
-      const res = await fetch("/api/store");
-      if (res.ok) {
+    const request = ++storeRequest.current;
+    setStoreError(false);
+    for (let attempt = 0; attempt < 3 && request === storeRequest.current; attempt++) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 8000);
+      try {
+        const res = await fetch("/api/store", { signal: controller.signal });
+        if (!res.ok) throw new Error("History request failed");
         const data = await res.json();
+        if (!data.info || !Array.isArray(data.entries)) throw new Error("Invalid history data");
+        if (request !== storeRequest.current) return;
         setStore(data);
-        if (data.info?.settings) setSettings(data.info.settings);
+        if (data.info.settings) setSettings(data.info.settings);
+        return;
+      } catch {
+        if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
+      } finally {
+        clearTimeout(timer);
       }
-    } catch { /* ignore */ }
+    }
+    if (request === storeRequest.current) setStoreError(true);
   }
 
-  useEffect(() => { refreshStore(); }, []);
+  useEffect(() => {
+    if (view === "history" || !store) refreshStore();
+  }, [view]);
 
   useEffect(() => {
     fetch("https://api.github.com/repos/CodeInDreams/ysudoku")
@@ -1681,6 +1698,15 @@ export default function App() {
         {view === "history" && (
           <>
             <PageHead title={t("history.title")} description={t("history.desc")} />
+            {(!store || storeError) && (
+              <Card className="mb-4">
+                <CardContent className="flex items-center justify-between gap-3 p-4 text-sm">
+                  <span role="status">{t(storeError ? "history.loadError" : "history.loading")}</span>
+                  {storeError && <Button size="sm" variant="outline" onClick={refreshStore}>{t("history.retry")}</Button>}
+                </CardContent>
+              </Card>
+            )}
+            {store && <>
             <div className="grid gap-4 sm:grid-cols-3">
               {[["rules", "layers.rules"], ["steps", "layers.steps"], ["frames", "layers.frames"]].map(([layer, key]) => (
                 <Card key={layer}><CardContent className="p-4"><div className="text-xs text-muted-foreground">{t(key)}</div><div className="mt-1 text-lg font-semibold">{store?.info?.counts?.[layer] || 0} <span className="text-xs font-normal text-muted-foreground">{puzzleUnit(store?.info?.counts?.[layer] || 0)}</span></div><div className="text-xs text-muted-foreground">{fmtBytes(store?.info?.sizes?.[layer])}</div></CardContent></Card>
@@ -1716,6 +1742,7 @@ export default function App() {
                 <Button size="sm" className="col-span-2 sm:col-span-4" onClick={saveSettings}>{t("history.save")}</Button>
               </CardContent>
             </Card>
+            </>}
           </>
         )}
 

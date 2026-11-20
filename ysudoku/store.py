@@ -184,11 +184,16 @@ def set_favorite(key: str, favorite: bool) -> None:
 
 
 def _dir_size(path: Path) -> int:
-    if not path.exists():
-        return 0
-    if path.is_file():
-        return path.stat().st_size
-    return sum(p.stat().st_size for p in path.rglob("*") if p.is_file())
+    def file_size(file):
+        try:
+            return file.stat().st_size if file.is_file() else 0
+        except FileNotFoundError:
+            # A frame or layer may be replaced while a history request is reading it.
+            return 0
+
+    if not path.is_dir():
+        return file_size(path)
+    return sum(file_size(file) for file in path.rglob("*"))
 
 
 def entry_layers(key: str) -> dict:
@@ -240,8 +245,9 @@ def list_entries() -> list[dict]:
     return out
 
 
-def storage_info() -> dict:
-    entries = list_entries()
+def storage_info(entries: list[dict] | None = None) -> dict:
+    if entries is None:
+        entries = list_entries()
     sizes = {layer: sum(item["sizes"][layer] for item in entries) for layer in ("rules", "steps", "frames")}
     return {
         "location": str(_root().resolve()),
