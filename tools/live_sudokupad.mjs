@@ -50,7 +50,7 @@ setInterval(async () => {
   if (Date.now() - lastUsed > IDLE_MS) await closeBrowser();
 }, CHECK_MS).unref();
 
-async function open(url, logicalN = 0) {
+async function ensurePage() {
   if (!browser) {
     browser = await chromium.launch({
       headless: true,
@@ -58,53 +58,39 @@ async function open(url, logicalN = 0) {
       args: ["--no-sandbox", "--disable-dev-shm-usage"],
     });
   }
-  if (context) {
-    await context.close().catch(() => {});
+  if (!context || !page || page.isClosed()) {
+    context = await browser.newContext({
+      viewport: { width: 1200, height: 1000 },
+      colorScheme: "light",
+    });
+    await context.addInitScript(() => {
+      const settings = {
+        hidesvenpeek: true, hidesupportlinks: true, showplayinsudokupad: false,
+        largedigits: false, toolpen: true, toolletter: true, flipkeypad: false,
+        hidetimer: true, dashedgrid: false, hidecolours: false, showseen: false,
+        checkonfinish: false, pauseonstart: false, selection: "default",
+        multicolour: true, outlinesondigits: false, outlinesonlines: false,
+        hidesolved: true, autocheck: true, conflictchecker: "on",
+        checkpencilmarks: false, repeatundodelay: 700, repeatundointerval: 100,
+        toolletter_mode: "altletter", marksolveddigits: "off", uitheme: "monolight",
+        cellpaste: false, puzzleevents: "off",
+      };
+      try {
+        const current = JSON.parse(localStorage.getItem("svencodes_settings") || "{}");
+        localStorage.setItem("svencodes_settings", JSON.stringify({ ...current, ...settings }));
+      } catch {
+        localStorage.setItem("svencodes_settings", JSON.stringify(settings));
+      }
+    });
+    page = await context.newPage();
+    await page.emulateMedia({ colorScheme: "light" });
   }
-  context = await browser.newContext({
-    viewport: { width: 1200, height: 1000 },
-    colorScheme: "light",
-  });
-  await context.addInitScript(() => {
-    const settings = {
-      hidesvenpeek: true,
-      hidesupportlinks: true,
-      showplayinsudokupad: false,
-      largedigits: false,
-      toolpen: true,
-      toolletter: true,
-      flipkeypad: false,
-      hidetimer: true,
-      dashedgrid: false,
-      hidecolours: false,
-      showseen: false,
-      checkonfinish: false,
-      pauseonstart: false,
-      selection: "default",
-      multicolour: true,
-      outlinesondigits: false,
-      outlinesonlines: false,
-      hidesolved: true,
-      autocheck: true,
-      conflictchecker: "on",
-      checkpencilmarks: false,
-      repeatundodelay: 700,
-      repeatundointerval: 100,
-      toolletter_mode: "altletter",
-      marksolveddigits: "off",
-      uitheme: "monolight",
-      cellpaste: false,
-      puzzleevents: "off",
-    };
-    try {
-      const current = JSON.parse(localStorage.getItem("svencodes_settings") || "{}");
-      localStorage.setItem("svencodes_settings", JSON.stringify({ ...current, ...settings }));
-    } catch {
-      localStorage.setItem("svencodes_settings", JSON.stringify(settings));
-    }
-  });
-  page = await context.newPage();
-  await page.emulateMedia({ colorScheme: "light" });
+  touch();
+  return page;
+}
+
+async function open(url, logicalN = 0) {
+  await ensurePage();
   ledger = new Map();
   await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
   await page.waitForSelector("svg.boardsvg", { timeout: 15000 }).catch(() => {});
@@ -768,6 +754,12 @@ const server = http.createServer((req, res) => {
       return json(res, 500, { error: err?.message || String(err) });
     }
   });
+});
+
+ensurePage().then(() => {
+  console.log(JSON.stringify({ event: "pool-warm", pages: 1 }));
+}).catch((err) => {
+  console.error(JSON.stringify({ event: "pool-warm-failed", error: String(err?.message || err) }));
 });
 
 server.listen(PORT, "127.0.0.1", () => {
