@@ -54,7 +54,7 @@ async function check(puzzleId, crop) {
 }
 
 try {
-  await check("eynwu", true);
+  await check("ps23dp93mp", true);
   await check("ad4xg01xip", false);
 } catch (err) {
   console.error(err.message);
