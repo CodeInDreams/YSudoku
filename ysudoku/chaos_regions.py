@@ -1,9 +1,11 @@
 """Proven region fragments. A colour names a fragment, not a final region ID."""
 
+from copy import copy
 from itertools import combinations
 
 from .colour_map import ColourMap, MAX_COLOURS_PER_CELL
 from .narrate import Step
+from .region_refutation import refute_count, region_growth
 from .state import Contradiction, Reason, cell_name
 from .visual_colours import HEX
 
@@ -157,6 +159,16 @@ class RegionFragments:
             for b in roots[1:]:
                 self.merge(self.owner[cells[0]], b)
             return cells, "圈内只能有一个区域，因此这些格必须同区。"
+        if 1 < len(roots) < len(cells) and rule.counts == [len(roots)]:
+            if any(not self.blocked(a, b) for a, b in pairs):
+                for a, b in pairs:
+                    self.apart(a, b)
+                for a in roots:
+                    self.mark(a)
+                hosts = "、".join(cell_name(next(c for c in cells if self.owner[c] == a), self.n)
+                                 for a in roots)
+                return cells, f"已有格子同区，圈内只剩 {len(roots)} 个片区。要满足区域数，{hosts} 必须两两异区。"
+            return None
         # For small circles, intersect the local partitions still allowed by
         # their count and the proven pair relations (e.g. a three-region clue).
         if len(roots) <= 4 and not one and not distinct:
@@ -190,7 +202,8 @@ def region_steps(solver, rules, steps):
     state = solver.state
     fragments = RegionFragments(state)
     solver.allow_chains = False  # Construct regions from deductions before the separate search fallback.
-    clues = [c for c in rules.constraints if c.kind == "region_count"]
+    clues = [copy(c) for c in rules.constraints if c.kind == "region_count"]
+    fragments.count_clues = clues
     for clue, step in zip(clues, steps):
         observation = fragments.clue(clue)
         if observation:
@@ -227,6 +240,13 @@ def region_steps(solver, rules, steps):
                         f"{cell_name(e.reason.data['by'], state.n)} 已确定为 {e.value}，"
                         f"{cell_name(e.cell, state.n)} 排除 {e.value}" for e in events)
                     break
+        if not observation and any(min(c.counts) > 1 for c in clues):
+            forced = region_growth(fragments, clues)
+            if forced:
+                (a, b), detail = forced
+                cells = sorted(fragments.groups[a] | fragments.groups[b])
+                fragments.merge(a, b)
+                observation = cells, detail
         if observation:
             cells, detail = observation
             step = Step(len(steps), "chaos_region", 2, "混沌区域推理", detail, events,
@@ -236,7 +256,19 @@ def region_steps(solver, rules, steps):
             if error:
                 raise Contradiction(error)
             if step is None:
-                break
+                proof = refute_count(fragments, clues)
+                if proof is None:
+                    break
+                index, count, reasons = proof
+                clue = clues[index]
+                clue.counts = [k for k in clue.counts if k != count]
+                cells = clue.cells()
+                remaining = " 或 ".join(map(str, clue.counts))
+                detail = [f"假设以 {cell_name(cells[0], state.n)} 起的圈跨 {count} 个区域，"
+                          f"则每个区域至多占圈内 {len(cells) - count + 1} 格。",
+                          *reasons, f"排除 {count} 区，此圈只剩 {remaining} 区。"]
+                step = Step(len(steps), "constraint_simplify", 2, f"区域数反证：排除 {count} 区",
+                            "\n".join(detail), [], visual={"focus": cells}, pre_dom=pre_dom, pre_vals=pre_vals)
             step.index = len(steps)
         snapshot = fragments.snapshot()
         # Region labels take one slot; preserve other annotations up to the

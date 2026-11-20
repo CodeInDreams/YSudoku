@@ -105,7 +105,8 @@ def solve_chaos(puzzle, constraints, node_limit: int = 1_500_000,
                 apart_masks[c] = apart
     nodes = [0]
     started = time.monotonic()
-    region_rules = [con for con in constraints if con.kind == "region_count"]
+    region_rules = getattr(fragments, "count_clues",
+                           [con for con in constraints if con.kind == "region_count"])
     quadruples = [con for con in constraints if con.kind == "quadruple"]
     quad_needs = []
     for con in quadruples:
