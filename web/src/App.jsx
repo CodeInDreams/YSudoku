@@ -1373,11 +1373,11 @@ export default function App() {
     <div className="overflow-x-auto">
       <table className="w-full table-fixed border-collapse text-xs">
         <thead><tr className="text-left text-muted-foreground">
-          <th className="w-[38%] border-b px-3 py-2 font-medium">{t("table.puzzle")}</th>
-          <th className="w-[12%] border-b px-3 py-2 font-medium">{t("table.status")}</th>
-          <th className="w-[8%] border-b px-3 py-2 font-medium">{t("table.steps")}</th>
-          <th className="w-[28%] border-b px-3 py-2 font-medium">{t("history.layers")}</th>
-          <th className="w-[14%] border-b px-3 py-2 font-medium">{t(byOpened ? "table.opened" : "table.saved")}</th>
+          <th className="w-[48%] border-b px-3 py-2 font-medium md:w-[36%]">{t("table.puzzle")}</th>
+          <th className="hidden w-[10%] border-b px-2 py-2 font-medium md:table-cell">{t("table.status")}</th>
+          <th className="hidden w-[7%] border-b px-2 py-2 font-medium md:table-cell">{t("table.steps")}</th>
+          <th className="w-[52%] border-b px-2 py-2 font-medium md:w-[31%]">{t("history.layers")}</th>
+          <th className="hidden w-[16%] border-b px-2 py-2 font-medium md:table-cell">{t(byOpened ? "table.opened" : "table.saved")}</th>
         </tr></thead>
         <tbody>
           {entries.map((entry) => {
@@ -1387,26 +1387,27 @@ export default function App() {
               <tr key={entry.key} className={`cursor-pointer border-b last:border-0 hover:bg-muted/40 ${isCurrent ? "bg-muted/30" : ""}`} onClick={() => loadEntry(entry)}>
                 <td className="px-3 py-2.5">
                   <div className="flex items-center gap-2">
-                    <div className="min-w-0"><div className="truncate font-medium">{entry.title}</div><div className="text-[10.5px] text-muted-foreground">{entry.author || entry.key}{isCurrent ? ` · ${t("history.current")}` : ""}</div></div>
+                    <div className="min-w-0"><div className="truncate font-medium">{entry.title}</div><div className="text-[10.5px] text-muted-foreground">{entry.author || entry.key}{isCurrent ? ` · ${t("history.current")}` : ""}</div>
+                      <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-muted-foreground md:hidden"><span>{statusLabel(entry.status)}</span><span>·</span><span>{entry.steps_count || 0} {t("table.steps")}</span></div></div>
                     <div className="ml-auto flex items-center gap-1.5">
                       <button className={`${entry.favorite ? "text-amber-500" : "text-muted-foreground"}`} title={t("history.favorite")} onClick={(e) => { e.stopPropagation(); toggleFavorite(entry); }}><Star className="h-3.5 w-3.5" fill={entry.favorite ? "currentColor" : "none"} /></button>
                       <button className="text-rose-500 hover:text-rose-600" title={isCurrent ? t("history.deleteCurrentConfirm", { title: entry.title }) : t("history.deletePuzzle")} onClick={(e) => { e.stopPropagation(); removeEntry(entry); }}><Trash2 className="h-3.5 w-3.5" /></button>
                     </div>
                   </div>
                 </td>
-                <td className="px-2 py-2.5"><Badge className="whitespace-nowrap" variant={["solved", "solved-global", "solved-search"].includes(entry.status) ? "success" : "outline"}>{statusLabel(entry.status)}</Badge></td>
-                <td className="px-2 py-2.5 font-mono text-[11px] text-muted-foreground">{entry.steps_count || 0}</td>
-                <td className="px-2 py-2.5">
-                  <div className="flex flex-nowrap items-center gap-1 whitespace-nowrap">
+                <td className="hidden px-2 py-2.5 md:table-cell"><Badge className="whitespace-nowrap" variant={["solved", "solved-global", "solved-search"].includes(entry.status) ? "success" : "outline"}>{statusLabel(entry.status)}</Badge></td>
+                <td className="hidden px-2 py-2.5 font-mono text-[11px] text-muted-foreground md:table-cell">{entry.steps_count || 0}</td>
+                <td className="overflow-hidden px-2 py-2.5">
+                  <div className="flex min-w-0 flex-nowrap items-center gap-1 whitespace-nowrap">
                     {["rules", "steps", "frames"].map((layer) => entry.layers?.[layer] && (
-                      <span key={layer} className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                        {t(`layers.${layer}`)} {fmtBytes(entry.sizes?.[layer])}
-                        <button className="text-rose-500 hover:text-rose-600" title={isCurrent ? t("history.confirmDeleteCurrentLayer", { title: entry.title, layer: t(`layers.${layer}`) }) : t("history.delete", { layer: t(`layers.${layer}`) })} onClick={(e) => { e.stopPropagation(); removeLayer(entry, layer); }}><X className="h-3 w-3" /></button>
+                      <span key={layer} title={`${t(`layers.${layer}`)} ${fmtBytes(entry.sizes?.[layer])}`} className="inline-flex shrink-0 items-center gap-0 whitespace-nowrap rounded border px-0.5 py-0 text-[9px] text-muted-foreground">
+                        {{ rules: lang === "zh" ? "规" : "R", steps: lang === "zh" ? "步" : "S", frames: lang === "zh" ? "图" : "F" }[layer]} {fmtBytes(entry.sizes?.[layer])}
+                        <button className="text-rose-500 hover:text-rose-600" title={isCurrent ? t("history.confirmDeleteCurrentLayer", { title: entry.title, layer: t(`layers.${layer}`) }) : t("history.delete", { layer: t(`layers.${layer}`) })} onClick={(e) => { e.stopPropagation(); removeLayer(entry, layer); }}><X className="h-2.5 w-2.5" /></button>
                       </span>
                     ))}
                   </div>
                 </td>
-                <td className="whitespace-nowrap px-2 py-2.5 text-[10.5px] text-muted-foreground">{timestamp ? new Date(timestamp * 1000).toLocaleDateString(lang === "zh" ? "zh-CN" : "en-US") : ""}</td>
+                <td className="hidden whitespace-nowrap px-2 py-2.5 text-[10.5px] text-muted-foreground md:table-cell">{timestamp ? new Date(timestamp * 1000).toLocaleDateString(lang === "zh" ? "zh-CN" : "en-US") : ""}</td>
               </tr>
             );
           })}
