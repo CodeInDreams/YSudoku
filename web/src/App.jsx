@@ -1371,13 +1371,13 @@ export default function App() {
 
   const entryTable = (entries, byOpened = false) => (
     <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-xs">
+      <table className="w-full table-fixed border-collapse text-xs">
         <thead><tr className="text-left text-muted-foreground">
-          <th className="border-b px-3 py-2 font-medium">{t("table.puzzle")}</th>
-          <th className="border-b px-3 py-2 font-medium">{t("table.status")}</th>
-          <th className="border-b px-3 py-2 font-medium">{t("table.steps")}</th>
-          <th className="border-b px-3 py-2 font-medium">{t("history.layers")}</th>
-          <th className="border-b px-3 py-2 font-medium">{t(byOpened ? "table.opened" : "table.saved")}</th>
+          <th className="w-[38%] border-b px-3 py-2 font-medium">{t("table.puzzle")}</th>
+          <th className="w-[12%] border-b px-3 py-2 font-medium">{t("table.status")}</th>
+          <th className="w-[8%] border-b px-3 py-2 font-medium">{t("table.steps")}</th>
+          <th className="w-[28%] border-b px-3 py-2 font-medium">{t("history.layers")}</th>
+          <th className="w-[14%] border-b px-3 py-2 font-medium">{t(byOpened ? "table.opened" : "table.saved")}</th>
         </tr></thead>
         <tbody>
           {entries.map((entry) => {
@@ -1394,19 +1394,19 @@ export default function App() {
                     </div>
                   </div>
                 </td>
-                <td className="px-3 py-2.5"><Badge variant={["solved", "solved-global", "solved-search"].includes(entry.status) ? "success" : "outline"}>{statusLabel(entry.status)}</Badge></td>
-                <td className="px-3 py-2.5 font-mono text-[11px] text-muted-foreground">{entry.steps_count || 0}</td>
-                <td className="px-3 py-2.5">
-                  <div className="flex flex-wrap gap-1">
+                <td className="px-2 py-2.5"><Badge className="whitespace-nowrap" variant={["solved", "solved-global", "solved-search"].includes(entry.status) ? "success" : "outline"}>{statusLabel(entry.status)}</Badge></td>
+                <td className="px-2 py-2.5 font-mono text-[11px] text-muted-foreground">{entry.steps_count || 0}</td>
+                <td className="px-2 py-2.5">
+                  <div className="flex flex-nowrap items-center gap-1 whitespace-nowrap">
                     {["rules", "steps", "frames"].map((layer) => entry.layers?.[layer] && (
-                      <span key={layer} className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                      <span key={layer} className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground">
                         {t(`layers.${layer}`)} {fmtBytes(entry.sizes?.[layer])}
                         <button className="text-rose-500 hover:text-rose-600" title={isCurrent ? t("history.confirmDeleteCurrentLayer", { title: entry.title, layer: t(`layers.${layer}`) }) : t("history.delete", { layer: t(`layers.${layer}`) })} onClick={(e) => { e.stopPropagation(); removeLayer(entry, layer); }}><X className="h-3 w-3" /></button>
                       </span>
                     ))}
                   </div>
                 </td>
-                <td className="px-3 py-2.5 text-[10.5px] text-muted-foreground">{timestamp ? new Date(timestamp * 1000).toLocaleDateString(lang === "zh" ? "zh-CN" : "en-US") : ""}</td>
+                <td className="whitespace-nowrap px-2 py-2.5 text-[10.5px] text-muted-foreground">{timestamp ? new Date(timestamp * 1000).toLocaleDateString(lang === "zh" ? "zh-CN" : "en-US") : ""}</td>
               </tr>
             );
           })}
