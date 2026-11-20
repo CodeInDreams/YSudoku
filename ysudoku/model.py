@@ -33,6 +33,7 @@ class Circle:
     border: str
     thickness: float
     texts: list[str] = field(default_factory=list)
+    layer: str = "overlay"
 
 
 @dataclass
@@ -415,6 +416,25 @@ def parse_puzzle(data: dict, puzzle_id: str = "") -> Puzzle:
         elif abs(x - int(x) - 0.5) < 0.01 and abs(y - int(y) - 0.5) < 0.01:
             cell = int(x) * n + int(y)
             markers.append(Circle(i, (x, y), [cell], fill, border, thick))
+
+    for i, under in enumerate(data.get("underlays") or []):
+        if not under.get("rounded"):
+            continue
+        center = under.get("center")
+        w, h = float(under.get("width") or 0), float(under.get("height") or 0)
+        if not center or w < 0.2 or abs(w - h) >= 0.01:
+            continue
+        r, c = map(float, center)
+        row, col = round(r - 0.5), round(c - 0.5)
+        if not (0 <= row < n and 0 <= col < n
+                and abs(r - row - 0.5) < 0.01 and abs(c - col - 0.5) < 0.01):
+            continue
+        fill = _norm_color(under.get("backgroundColor"), "#ffffff")
+        border = _norm_color(under.get("borderColor") or under.get("color"), "#000000")
+        text = str(under.get("text") or "").strip()
+        markers.append(Circle(i, (r, c), [row * n + col], fill, border,
+                              float(under.get("thickness") or 0), [text] if text else [],
+                              layer="underlay"))
 
     # Some editors store X/V as underlays rather than overlays.
     for i, over in enumerate(data.get("underlays") or []):

@@ -548,6 +548,9 @@ def _llm_repair(puzzle, inventory, config, spec, diagnostics, warnings):
         warnings.append(f"LLM 规则修复失败：{exc}")
         return None
     new_rules = compile_spec(puzzle, inventory, new_spec, source="llm-repair")
+    if new_rules.errors:
+        warnings.append("LLM 修复后的规则无法编译：" + "；".join(new_rules.errors[:3]))
+        return None
     if puzzle.solution:
         errors = check_solution(puzzle, new_rules, puzzle.solution)
         if errors:
@@ -624,24 +627,26 @@ def _llm_spec(puzzle, inventory, config, warnings: list[str]):
         )
         _apply_arrow_geometry(puzzle, spec, warnings)
         rules = compile_spec(puzzle, inventory, spec, source="llm")
-        if not puzzle.solution:
-            return spec, "llm", True
-        errors = check_solution(puzzle, rules, puzzle.solution)
+        errors = rules.errors
+        if not errors and puzzle.solution:
+            errors = check_solution(puzzle, rules, puzzle.solution)
         if not errors:
             return spec, "llm", True
         if attempt == 0:
-            warnings.append("LLM 规则与内置答案冲突，正在自动修正：" + "；".join(errors[:4]))
+            warnings.append("LLM 规则校验失败，正在自动修正：" + "；".join(errors[:4]))
             feedback = [
                 {"role": "assistant", "content": json.dumps(spec, ensure_ascii=False)},
                 {
                     "role": "user",
                     "content": (
-                        "The official solution violates these constraints: "
+                        "Rule validation found these errors: "
                         + "; ".join(errors[:10])
                         + ". Fix the rule spec (wrong element mapping, wrong variant, "
                         "missing/extra rules) and reply with JSON only."
                     ),
                 },
             ]
+    if rules.errors:
+        raise llm.LLMError("；".join(rules.errors[:3]))
     warnings.append("LLM 规则仍未通过内置答案校验")
     return spec, "llm", validated

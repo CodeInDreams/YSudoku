@@ -86,8 +86,10 @@ def build_inventory(puzzle: Puzzle) -> list[Element]:
         }))
 
     for i, marker in enumerate(puzzle.markers):
-        elements.append(Element(f"marker:{i}", "marker", marker.cells,
-                                {"fill": marker.fill, "thickness": round(marker.thickness, 2)}))
+        attrs = {"fill": marker.fill, "thickness": round(marker.thickness, 2)}
+        if marker.layer == "underlay":
+            attrs.update(layer=marker.layer, border=marker.border, texts=marker.texts)
+        elements.append(Element(f"marker:{i}", "marker", marker.cells, attrs))
 
     for i, clue in enumerate(puzzle.xv_clues):
         elements.append(Element(f"xv:{i}", "xv", clue.cells,
@@ -115,6 +117,8 @@ def build_inventory(puzzle: Puzzle) -> list[Element]:
         if len(line.cells) < 2:
             continue
         for marker in puzzle.markers:
+            if marker.layer != "overlay":
+                continue
             if marker.cells[0] in (line.cells[0], line.cells[-1]) and dist(
                 marker.center, _cell_center(marker.cells[0], n)
             ) < 0.45:
@@ -159,6 +163,7 @@ class CompiledRules:
     resolved: list[dict] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     source: str = "heuristic"
+    errors: list[str] = field(default_factory=list)
 
     def describe(self) -> list[dict]:
         return self.resolved
@@ -340,7 +345,7 @@ def compile_spec(puzzle: Puzzle, elements: list[Element], spec: dict,
             used.update(eids)
             continue
         if kind == "custom":
-            obj = _build_custom(puzzle, elements, raw, result.warnings)
+            obj = _build_custom(puzzle, elements, raw, result.errors)
             if obj is not None:
                 result.constraints.append(obj["constraint"])
                 used.update(obj.get("elements", []))
@@ -458,6 +463,7 @@ def compile_spec(puzzle: Puzzle, elements: list[Element], spec: dict,
         result.warnings.append(
             f"包含 {len(hypotheses)} 条推测规则（LLM 自定义谓词），相关步骤会标注【推测规则】"
         )
+    result.warnings.extend(result.errors)
     return result
 
 
@@ -542,8 +548,24 @@ def _build_custom(puzzle: Puzzle, elements: list[Element], raw: dict, warnings: 
     if not isinstance(raw_pred, dict):
         warnings.append("custom 缺少 predicate")
         return None
+
+    by_id = {e.id: e for e in elements}
+
+    def element_index(eid):
+        element = by_id.get(eid)
+        if element is None or len(element.cells) != 1:
+            raise predicate_mod.PredicateError(f"{eid} must reference one cell")
+        cell = element.cells[0]
+        if cell not in scope:
+            raise predicate_mod.PredicateError(
+                f"{eid} ({cell_name(cell, puzzle.size)}) is outside this rule's scope"
+            )
+        if eid not in element_ids:
+            element_ids.append(eid)
+        return scope.index(cell)
+
     try:
-        node = predicate_mod.parse(raw_pred)
+        node = predicate_mod.parse(raw_pred, element_index=element_index)
     except predicate_mod.PredicateError as exc:
         warnings.append(f"custom predicate 无效：{exc}")
         return None

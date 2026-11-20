@@ -13,7 +13,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from ysudoku.llm import LLMConfig
-from ysudoku.pipeline import analyze
+from ysudoku.model import parse_puzzle
+from ysudoku.pipeline import _llm_spec, analyze
+from ysudoku.rules import build_inventory, compile_spec
 
 
 _TMP = tempfile.mkdtemp(prefix="ysudoku-test-")
@@ -87,6 +89,40 @@ class LLMPipelineTest(unittest.TestCase):
         self.assertEqual(cached.source, "cache")
         self.assertEqual(cached.status, "solved")
         self.assertEqual(_Handler.calls, 1, "second run must reuse the cached spec")
+
+    @patch("ysudoku.pipeline._rule_image", return_value="image")
+    @patch("ysudoku.pipeline.llm.compile_rules")
+    def test_underlay_markers_bind_custom_variables_and_retry_bad_scope(self, compile_llm, _image):
+        circle = {"width": 0.72, "height": 0.72, "rounded": True}
+        puzzle = parse_puzzle({
+            "cells": [[{} for _ in range(4)] for _ in range(4)],
+            "cages": [{"cells": [[0, 0], [0, 1]]}],
+            "underlays": [
+                {**circle, "center": [0.5, 1.5]},
+                {**circle, "center": [1.5, 0.5]},
+                {"center": [2.5, 0.5], "width": 1, "height": 1},
+            ],
+        })
+        inventory = build_inventory(puzzle)
+        def spec(marker):
+            return {"rules": [{
+                "kind": "custom", "scope": {"element": "cage:0"},
+                "predicate": {"op": "gt", "args": [
+                    {"op": "var", "element": marker}, {"op": "var", "index": 0},
+                ]},
+            }]}
+        compile_llm.side_effect = [spec("marker:1"), spec("marker:0")]
+        rules_spec, _, valid = _llm_spec(puzzle, inventory, LLMConfig(), [])
+        self.assertTrue(valid)
+        self.assertEqual(compile_llm.call_count, 2)
+        request = compile_llm.call_args
+        self.assertIn("R2C1", request.kwargs["previous"][-1]["content"])
+        self.assertEqual([e["cells"] for e in request.args[2] if e["kind"] == "marker"],
+                         [["R1C2"], ["R2C1"]])
+        compiled = compile_spec(puzzle, inventory, rules_spec)
+        self.assertEqual(compiled.resolved[0]["elements"], ["cage:0", "marker:0"])
+        self.assertTrue(compiled.constraints[0].check([1, 2]))
+        self.assertFalse(compiled.constraints[0].check([2, 1]))
 
 
 if __name__ == "__main__":

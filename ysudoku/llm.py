@@ -51,25 +51,38 @@ Schema:
 }
 
 Rules:
-- The rules text is authoritative. Colours, thicknesses and sizes are hints only.
+- Use the rules text for semantics and the inventory's cells for exact geometry.
+  The inventory includes single-cell markers on both drawing layers. Use the
+  screenshot for appearance or details absent from the inventory. When a rule
+  relates a shape to markers inside it, match their inventory cells first.
+- Colours, thicknesses and sizes are hints only.
 - A line that the text calls a "German Whisper" is german_whisper even if it is
   not green; "Renban" is renban; "Palindrome" is palindrome, etc.
 - Dots: "white dot" = consecutive = variant "white"; "black dot" = ratio 1:2 =
   variant "black".  If the text inverts this, follow the text.
 - Quadruple circles: digits written in the circle must appear in the four cells
   around it.  A "?" is unknown and must be skipped.
-- A cage with a number is killer.  A cage without a number is only a region
-  outline: skip it.
+- Use the built-in cage rule for a stated numerical sum. An unnumbered cage
+  still defines the scope of any rule the text assigns to it.
 - "Arrow" means the digit in the circle equals the sum of the digits on the arm.
 - Put every non-cosmetic element you did not use into "ignored" with a reason.
-- If no built-in kind can express a stated rule, emit ONE "custom" rule:
+- If no built-in kind can express a stated rule, use "custom" for each
+  applicable group of cells:
   {"kind":"custom","cells":["R1C1","R1C2",...],
    "predicate":{"op":"eq","args":[{"op":"sum","args":[{"op":"var","index":0},{"op":"var","index":1}]},{"op":"const","value":10}]},
    "cite":"the exact sentence from the rules","hypothesis":true}
   Allowed ops: const(value), var(index), sum, min, max, abs, add, sub, mul, mod,
   count_digit(digit), count_distinct, all_different, ordered,
   eq, ne, lt, le, gt, ge, and, or, not.
-  Scope is 2-6 cells.  Only use "custom" when nothing else fits; always set
+  Use "scope":{"element":"<element id>"} instead of "cells" when one element
+  supplies the full scope. Indexes are zero-based in scope order. For a
+  variable identified by a single-cell marker, use
+  {"op":"var","element":"<marker id>"}; the compiler resolves the cell and
+  checks that it is in scope.
+  Scope is 2-6 cells. If a rule needs more cells, reduce its scope only using
+  an equivalent relation that follows from the stated rules and the inventory.
+  Report rules that cannot be represented in "warnings".
+  Only use "custom" when nothing else fits; always set
   "hypothesis": true unless the rule is completely explicit.
 - The image shows the original SudokuPad board before step one. Read its
   clues and geometry together with the official rules and element coordinates.

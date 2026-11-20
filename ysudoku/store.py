@@ -106,7 +106,8 @@ def record_open(key, timestamp):
 
 def save_rules(key: str, spec: dict, meta: dict) -> str:
     digest = hash_json(spec)
-    _write_json(_entry_dir(key) / "rules.json", {"hash": digest, "spec": spec})
+    _write_json(_entry_dir(key) / "rules.json", {"hash": digest, "spec": spec,
+                                                "includes_underlay_markers": True})
     _update_meta(key, rules_hash=digest, **meta)
     prune()
     return digest

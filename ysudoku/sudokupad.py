@@ -81,6 +81,23 @@ def _payload_from_raw(raw: str) -> dict:
     raise LoadError("响应不是 SudokuPad 数据包")
 
 
+def _cache_file(puzzle_id: str) -> Path:
+    key = re.sub(r"[^A-Za-z0-9_.-]", "_", puzzle_id)
+    return CACHE_DIR / f"v{CACHE_VERSION}" / (key + ".json")
+
+
+def _read_cached_id(puzzle_id: str) -> dict | None:
+    try:
+        return json.loads(_cache_file(puzzle_id).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def load_cached(target: str) -> dict | None:
+    kind, value = _extract_target(target)
+    return _read_cached_id(value) if kind == "id" else None
+
+
 def load(target: str, use_cache: bool = True) -> dict:
     kind, value = _extract_target(target)
     if kind == "json":
@@ -102,12 +119,9 @@ def load(target: str, use_cache: bool = True) -> dict:
         return _payload_from_raw(text)
 
     puzzle_id = value
-    cache_file = CACHE_DIR / f"v{CACHE_VERSION}" / (re.sub(r"[^A-Za-z0-9_.-]", "_", puzzle_id) + ".json")
-    if use_cache and cache_file.exists():
-        try:
-            return json.loads(cache_file.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            pass
+    cache_file = _cache_file(puzzle_id)
+    if use_cache and (cached := _read_cached_id(puzzle_id)) is not None:
+        return cached
 
     errors = []
     for url in (API_URL.format(id=urllib.parse.quote(puzzle_id, safe="")),

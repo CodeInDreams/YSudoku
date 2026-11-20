@@ -19,6 +19,7 @@ import uuid
 from . import history, live, store, sudokupad
 from .pipeline import analyze, initial_screenshot
 from .llm import LLMError
+from .model import parse_puzzle
 
 STATIC_DIR = Path(__file__).parent / "static"
 DIST_DIR = Path(__file__).parent.parent / "web" / "dist"
@@ -94,6 +95,13 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
             store.delete_layer(key, layer)
 
     rules = store.load_rules(key)
+    if rules and not rules.get("includes_underlay_markers"):
+        try:
+            raw = sudokupad.load_cached(target)
+        except sudokupad.LoadError:
+            raw = None
+        if raw and any(marker.layer == "underlay" for marker in parse_puzzle(raw).markers):
+            rules = None
     meta = store._meta(key)
     if on_title and meta.get("title"):
         on_title(meta["title"])

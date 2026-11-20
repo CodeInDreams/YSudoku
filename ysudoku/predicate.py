@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from itertools import product
-from typing import Any
+from typing import Any, Callable
 
 from .state import bits
 
@@ -35,7 +35,7 @@ _BINARY = {"add", "sub", "mul", "mod", "eq", "ne", "lt", "le", "gt", "ge"}
 _COMPARE = {"eq", "ne", "lt", "le", "gt", "ge"}
 
 
-def parse(raw: dict) -> Node:
+def parse(raw: dict, *, element_index: Callable[[str], int] | None = None) -> Node:
     if not isinstance(raw, dict):
         raise PredicateError("predicate must be an object")
     op = str(raw.get("op", ""))
@@ -45,6 +45,10 @@ def parse(raw: dict) -> Node:
         except (KeyError, TypeError, ValueError) as exc:
             raise PredicateError("const needs an integer value") from exc
     if op == "var":
+        if "element" in raw:
+            if element_index is None or "index" in raw:
+                raise PredicateError("var must use either an element reference or an index")
+            return Node("var", (), {"index": element_index(str(raw["element"]))})
         try:
             index = int(raw["index"])
         except (KeyError, TypeError, ValueError) as exc:
@@ -53,7 +57,7 @@ def parse(raw: dict) -> Node:
             raise PredicateError("var index must be >= 0")
         return Node("var", (), {"index": index})
 
-    args = [parse(a) for a in raw.get("args", [])]
+    args = [parse(a, element_index=element_index) for a in raw.get("args", [])]
     if op in _BINARY and len(args) != 2:
         raise PredicateError(f"{op} needs exactly 2 arguments")
     if op in {"abs", "not"} and len(args) != 1:
