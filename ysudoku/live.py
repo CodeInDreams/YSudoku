@@ -95,9 +95,12 @@ def ensure() -> None:
     raise LiveError("SudokuPad 镜像启动超时")
 
 
-def initial_frame(url: str, size: int) -> bytes:
+def initial_frame(url: str, size: int, crop: bool = False) -> bytes:
     ensure()
-    return _request("/initial-frame", {"url": url, "size": size})
+    payload = {"url": url, "size": size}
+    if crop:
+        payload["crop"] = True
+    return _request("/initial-frame", payload)
 
 
 def start(url: str) -> dict:

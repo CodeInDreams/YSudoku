@@ -722,7 +722,7 @@ const server = http.createServer((req, res) => {
     try {
       if (url.pathname === "/initial-frame") {
         const capture = async () => {
-          await open(body.url, Number(body.size) || 0);
+          await open(body.url, Number(body.size) || 0, Boolean(body.crop));
           return shot();
         };
         touch();

@@ -75,10 +75,15 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
     if opened_at is not None:
         store.record_open(key, opened_at)
 
-    def preview(url, size, existing=""):
+    def preview(url, size, existing="", outside=True):
         path = Path(".cache/rulesheets") / Path(existing).name
         try:
-            if not existing or not path.is_file():
+            if not outside:
+                png = live.initial_frame(url, size, crop=True)
+                path = Path(".cache/rulesheets") / (store.hash_json({"url": url, "crop": True}) + ".png")
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(png)
+            elif not existing or not path.is_file():
                 path = Path(initial_screenshot(url, size, store.frame_path(key, -1)))
         except (OSError, LLMError):
             on_preview("")
@@ -105,7 +110,9 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
                 and cached.get("algo_version") == ANALYSIS_VERSION
                 and meta.get("rules_hash") == rules.get("hash")):
             if on_preview and not on_preview_start:
-                preview(cached.get("source_url", ""), cached["puzzle"]["size"], cached.get("rule_sheet", ""))
+                preview(cached.get("source_url", ""), cached["puzzle"]["size"],
+                        cached.get("rule_sheet", ""),
+                        bool(cached.get("puzzle", {}).get("outside", True)))
             cached["notes"] = meta.get("notes", "")
             if isinstance(cached.get("rules"), dict):
                 cached["rules"]["notes"] = meta.get("notes", "")
@@ -131,7 +138,8 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
         if on_title:
             on_title(puzzle.title)
         if on_preview:
-            return preview(puzzle.source_url, puzzle.size)
+            return preview(puzzle.source_url, puzzle.size, outside=bool(
+                (analysis.to_json().get("puzzle") or {}).get("outside", True)))
         return None
 
     if on_preview_start:
