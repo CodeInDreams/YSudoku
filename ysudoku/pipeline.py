@@ -253,7 +253,7 @@ def analyze(
     elif not puzzle.source_url and target.isalnum():
         puzzle.source_url = "https://sudokupad.app/" + target
     if on_puzzle:
-        puzzle.rule_sheet = on_puzzle(puzzle.source_url, puzzle.size) or ""
+        puzzle.rule_sheet = on_puzzle(puzzle) or ""
     inventory = build_inventory(puzzle)
 
     warnings: list[str] = []

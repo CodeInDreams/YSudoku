@@ -24,7 +24,7 @@ STATIC_DIR = Path(__file__).parent / "static"
 DIST_DIR = Path(__file__).parent.parent / "web" / "dist"
 def _stored_analysis(target: str, body: dict, demo: bool = False,
                      force_rules: bool = False, force_steps: bool = False,
-                     on_rules=None, on_step=None, on_preview=None, on_preview_start=None, opened_at=None):
+                     on_rules=None, on_step=None, on_preview=None, on_preview_start=None, on_title=None, opened_at=None):
     if "logic-masters.de" in target:
         try:
             data = sudokupad.load(target)
@@ -58,6 +58,8 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
 
     rules = store.load_rules(key)
     meta = store._meta(key)
+    if on_title and meta.get("title"):
+        on_title(meta["title"])
     notes = str(body["notes"] if "notes" in body else meta.get("notes", "") or "").strip()
     if not force_rules and not force_steps and rules:
         cached = store.load_analysis(key)
@@ -88,6 +90,13 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
                         pass
             return key, cached
 
+    def on_puzzle(puzzle):
+        if on_title:
+            on_title(puzzle.title)
+        if on_preview:
+            return preview(puzzle.source_url, puzzle.size)
+        return None
+
     if on_preview_start:
         on_preview_start()
     analysis = analyze(
@@ -105,7 +114,7 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
         lang=lang,
         on_rules=on_rules,
         on_step=on_step,
-        on_puzzle=preview if on_preview else None,
+        on_puzzle=on_puzzle if on_preview or on_title else None,
     )
     payload = analysis.to_json()
     payload["notes"] = notes
@@ -187,6 +196,7 @@ def _start_job(target: str, body: dict, demo: bool) -> str:
                 target, body, demo=demo, on_rules=on_rules, on_step=on_step,
                 on_preview=on_preview,
                 on_preview_start=lambda: _job_update(job_id, phase="preview"),
+                on_title=lambda title: _job_update(job_id, title=title),
                 opened_at=job["started"],
             )
             _job_update(
@@ -257,7 +267,7 @@ class Handler(BaseHTTPRequestHandler):
             payload = {
                 "id": job["id"], "phase": job["phase"], "status": job["status"],
                 "rules": job.get("rules", []), "steps": job.get("steps", []),
-                "error": job.get("error"), "key": job.get("key"),
+                "error": job.get("error"), "key": job.get("key"), "title": job.get("title"),
                 "count": len(job.get("steps", [])), "preview": job.get("preview", ""),
             }
             if job.get("payload") is not None:

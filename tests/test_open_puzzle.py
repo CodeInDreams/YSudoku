@@ -46,8 +46,9 @@ class OpenPuzzleTest(unittest.TestCase):
     def test_browser_job_waits_for_initial_preview(self):
         reached_rules = Event()
 
-        def analyze(*_args, on_preview, on_preview_start, **_kwargs):
+        def analyze(*_args, on_preview, on_preview_start, on_title, **_kwargs):
             on_preview_start()
+            on_title("Sample puzzle")
             on_preview("/api/rulesheet/preview.png")
             reached_rules.set()
             return "key", {}
@@ -64,6 +65,7 @@ class OpenPuzzleTest(unittest.TestCase):
                     time.sleep(0.01)
                 self.assertEqual(job["preview"], "/api/rulesheet/preview.png")
                 self.assertEqual(job["phase"], "preview")
+                self.assertEqual(job["title"], "Sample puzzle")
                 self.assertFalse(reached_rules.is_set())
                 job["preview_ready"].set()
                 self.assertTrue(reached_rules.wait(1))

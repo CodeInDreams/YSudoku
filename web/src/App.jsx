@@ -83,19 +83,32 @@ function detectGridRect(img, size) {
       for (let i = 0; i < lines.length; i++) {
         const first = lines[i];
         while (lines[i+1] === lines[i]+1) i++;
-        centers.push((first + lines[i]) / 2);
+        // Canvas coordinates denote pixel edges. Sampled pixels are centered
+        // half a pixel inside those edges.
+        centers.push((first + lines[i] + 1) / 2);
       }
       let best = null;
       for (const start of centers) {
         for (const end of centers) {
           const spacing = (end - start) / size;
           if (spacing < 8) continue;
+          const matched = [start];
           let error = 0;
           for (let i = 1; i < size; i++) {
-            error += Math.min(...centers.map(line => Math.abs(line - (start + i * spacing))));
+            const expected = start + i * spacing;
+            const nearest = centers.reduce((a, b) => Math.abs(a - expected) <= Math.abs(b - expected) ? a : b);
+            error += Math.abs(nearest - expected);
+            matched.push(nearest);
           }
           if (error <= size - 1 && (!best || error < best.error)) {
-            best = { start, span: end - start, error };
+            matched.push(end);
+            // Fit all grid lines so that rounding or unequal stroke widths
+            // at the outside border cannot shift the whole overlay.
+            const middle = size / 2;
+            const average = matched.reduce((sum, line) => sum + line, 0) / matched.length;
+            const slope = matched.reduce((sum, line, index) => sum + (index - middle) * (line - average), 0)
+              / matched.reduce((sum, _, index) => sum + (index - middle) ** 2, 0);
+            best = { start: average - middle * slope, span: size * slope, error };
           }
         }
       }
@@ -469,6 +482,7 @@ export default function App() {
   const [session, setSession] = useState(null);
 
   const [previewSrc, setPreviewSrc] = useState("");
+  const [openingTitle, setOpeningTitle] = useState("");
   const [previewJob, setPreviewJob] = useState("");
   const [frameSrc, setFrameSrc] = useState("");
   const [frameStep, setFrameStep] = useState(-2);
@@ -717,9 +731,7 @@ export default function App() {
       if (cancelled) return;
       const width = probe.naturalWidth;
       const height = probe.naturalHeight;
-      const metadata = sessionGrid?.session === session ? sessionGrid.rect : null;
-      const rect = metadata?.imageWidth === width && metadata?.imageHeight === height
-        ? metadata : detectGridRect(probe, analysis?.puzzle?.size || 9);
+      const rect = detectGridRect(probe, analysis?.puzzle?.size || 9);
       setFrameGeometry({ src, width, height, rect });
       setFrameSrc(src);
       setFrameStep(idx);
@@ -821,8 +833,9 @@ export default function App() {
     frameTimer.current = setInterval(tick, 500);
   }
 
-  async function streamSolve(body, targetUrl) {
+  async function streamSolve(body, targetUrl, title = "") {
     const token = ++streamToken.current;
+    setOpeningTitle(title);
     setPreviewSrc("");
     setPreviewJob("");
     setView("solve");
@@ -844,6 +857,7 @@ export default function App() {
         const job = await res.json().catch(() => ({}));
         if (token !== streamToken.current) return;
         if (!res.ok) throw new Error(job.error || "job failed");
+        if (job.title) setOpeningTitle(job.title);
         if (job.preview) { setPreviewJob(id); setPreviewSrc(job.preview); }
         if (job.phase === "preview" || job.phase === "rules") setPhase(job.phase);
         setStreamRules(job.rules || []);
@@ -898,6 +912,7 @@ export default function App() {
 
   function exitPuzzle() {
     ++streamToken.current;
+    setOpeningTitle("");
     if (frameTimer.current) clearInterval(frameTimer.current);
     setBusy(false);
     setPreviewJob("");
@@ -959,7 +974,6 @@ export default function App() {
     setStreamRules([]);
     setStreamSteps([]);
     setStreamTarget([]);
-    setPhase("rules");
     const targetUrl = entry.demo ? "" : entry.target;
     setTarget(targetUrl);
     setUrl(targetUrl);
@@ -967,7 +981,7 @@ export default function App() {
       entry.demo
         ? { demo: true, llm, audit, chains: true }
         : { url: entry.target, llm, audit, chains: true, demo: false, lang },
-      targetUrl,
+      targetUrl, entry.title,
     );
   }
 
@@ -1060,11 +1074,11 @@ export default function App() {
   }, [analysis, lang, streamRules]);
 
   const displaySteps = analysis ? steps : streamSteps;
-  const phasePct = phase === "preview" ? 4 : phase === "rules" ? 8
+  const phasePct = phase === "rules" ? 8
     : phase === "solving" ? Math.min(85, 15 + streamSteps.length * 2)
       : phase === "rendering" ? (frameProgress.total ? Math.round((frameProgress.frames / frameProgress.total) * 100) : 12)
         : phase === "done" ? 100 : 0;
-  const phaseLabel = phase === "opening" ? t("board.loading") : phase === "preview" ? t("phase.preview") : phase === "rules" ? t("phase.rules")
+  const phaseLabel = ["opening", "preview"].includes(phase) ? t("board.loading") : phase === "rules" ? t("phase.rules")
     : phase === "solving" ? `${t("phase.solving")} · ${t("phase.steps", { n: streamSteps.length })}`
       : phase === "rendering" ? `${t("phase.rendering")} · ${t("phase.frames", { done: frameProgress.frames, total: frameProgress.total })}`
         : phase === "done" ? t("phase.done") : phase === "failed" ? t("phase.failed") : "";
@@ -1086,18 +1100,22 @@ export default function App() {
   const showingPreview = previewSrc && (!frameSrc || idx < 0);
   const geometry = frameGeometry?.src === frameSrc ? frameGeometry : null;
   const metadata = sessionGrid?.session === session ? sessionGrid.rect : null;
-  const gridRect = geometry && (metadata?.imageWidth === geometry.width && metadata?.imageHeight === geometry.height
-    ? metadata : geometry.rect);
+  const savedRect = geometry && metadata?.imageWidth === geometry.width && metadata?.imageHeight === geometry.height
+    ? metadata : null;
+  const measuredRect = geometry?.rect;
+  const gridRect = measuredRect && (!savedRect || ["x", "y", "width", "height"].every(
+    key => Math.abs(measuredRect[key] - savedRect[key]) <= 3
+  )) ? measuredRect : savedRect;
   const boardCard = (analysis || previewSrc) && (
     <Card className="overflow-hidden">
       <CardHeader className="flex-row items-center gap-3 space-y-0 border-b py-3.5">
         <div><CardTitle className="text-sm">{t("board.title")}</CardTitle><p className="mt-0.5 text-xs text-muted-foreground">{idx < 0 ? t("board.initial") : t(candidateCount === 1 ? "board.descCandidate" : "board.descCandidates", { i: idx + 1, c: candidateCount })}</p></div>
-        <div className="ml-auto flex items-center gap-1.5">{phase === "rendering" && <Badge variant="outline">{phaseLabel}</Badge>}<Badge variant="outline">{t("board.readonly")}</Badge><Badge variant="outline">{t("board.readonly.badge")}</Badge></div>
+        <div className="ml-auto flex items-center gap-1.5"><Badge variant="outline">{t("board.readonly")}</Badge><Badge variant="outline">{t("board.readonly.badge")}</Badge></div>
       </CardHeader>
       <CardContent className="p-5">
         <div className="relative mx-auto flex w-full max-w-[540px] items-center justify-center overflow-hidden rounded-[2px] border bg-white dark:border-border dark:bg-neutral-800"
           style={{ aspectRatio: geometry && !showingPreview ? `${geometry.width} / ${geometry.height}` : "1 / 1" }}>
-          {!ready && !previewSrc && !deleted && <div className="absolute inset-0 z-10 grid place-items-center gap-2 bg-white/80 text-xs text-slate-500 dark:bg-neutral-800/90 dark:text-neutral-300"><Loader2 className="h-5 w-5 animate-spin text-primary" />{phase === "rendering" ? t("phase.rendering") : t("board.loading")}</div>}
+          {!ready && !previewSrc && !deleted && <div className="absolute inset-0 z-10 grid place-items-center gap-2 bg-white/80 text-xs text-slate-500 dark:bg-neutral-800/90 dark:text-neutral-300"><Loader2 className="h-5 w-5 animate-spin text-primary" />{t("board.loading")}</div>}
           {deleted && (
             <div className="absolute inset-0 z-20 grid place-items-center bg-background/90 p-6 text-center">
               <div className="max-w-xs space-y-2">
@@ -1479,7 +1497,7 @@ export default function App() {
         {view === "solve" && (
           <>
             <PageHead
-              title={analysis?.puzzle?.title || (phase !== "idle" ? phaseLabel : t("page.waiting"))}
+              title={analysis?.puzzle?.title || openingTitle || t(phase === "idle" ? "page.waiting" : "table.puzzle")}
               description={analysis ? (
                 <span>
                   {analysis.puzzle.author || ""} · {t("page.givens", { n: analysis.puzzle.givens.filter(Boolean).length })}
@@ -1493,8 +1511,8 @@ export default function App() {
                   )}
                   {isSolved ? ` · ${statusLabel(analysis.status)}` : ""}
                 </span>
-              ) : (phaseHint || t("empty.solve"))}
-              badges={analysis ? <><Badge variant="outline">{n}×{n}</Badge><Badge variant={isSolved ? "success" : "outline"}>{statusLabel(analysis.status)}</Badge></> : (phase !== "idle" ? <Badge variant="outline">{phaseLabel}</Badge> : null)}
+              ) : (phase === "idle" ? t("empty.solve") : null)}
+              badges={analysis ? <><Badge variant="outline">{n}×{n}</Badge><Badge variant={isSolved ? "success" : "outline"}>{statusLabel(analysis.status)}</Badge></> : null}
             />
             {analysis?.conflicts?.length > 0 && !conflictChoice && (
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -1528,7 +1546,7 @@ export default function App() {
                 </div>
               </div>
             )}
-            {["preview", "rules", "solving", "rendering"].includes(phase) && (
+            {["rules", "solving", "rendering"].includes(phase) && (
               <div className="mb-5 rounded-lg border bg-card px-3 py-2.5">
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                   <span className="font-medium">{phaseLabel}</span>
@@ -1542,12 +1560,8 @@ export default function App() {
             )}
             {!analysis && !previewSrc ? (phase === "idle" ? emptySolve : (
               <Card>
-                <CardContent className="flex min-h-[320px] flex-col items-center justify-center gap-4 text-center">
-                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                  <div className="text-sm font-medium">{phaseLabel}</div>
-                  <div className="w-full max-w-md space-y-2">
-                    {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-3 animate-pulse rounded bg-muted" style={{ width: `${90 - i * 12}%` }} />)}
-                  </div>
+                <CardContent className="flex min-h-[320px] items-center justify-center text-sm text-muted-foreground">
+                  <div role="status">{phase === "failed" ? t("phase.failed") : t("board.loading")}</div>
                 </CardContent>
               </Card>
             )) : (
