@@ -794,6 +794,7 @@ export default function App() {
     setDeleted(false);
     setFrameErrors(0);
     setFrameVersion(Date.now());
+    setFrameProgress({ frames: 0, total: nextAnalysis.steps?.length || 0, complete: false });
     try {
       const actions = buildStepActions(nextAnalysis);
       let hash = 2166136261;

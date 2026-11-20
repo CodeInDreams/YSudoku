@@ -629,7 +629,11 @@ async function buildSession(url, steps, session, targetDir, size = 0) {
   let expected = new Map();
   initialBoard.values.forEach((value, cell) => { if (value) expected.set(cell, value); });
   for (let i = 0; i < steps.length; i++) {
+    let valueTouched = false;
     for (const action of steps[i] || []) {
+      if (["place", "clear", "undo", "redo", "undo_to_snapshot", "reload_base"].includes(action.op)) {
+        valueTouched = true;
+      }
       await act(action);
       if (["undo", "redo", "undo_to_snapshot", "reload_base"].includes(action.op)) {
         const base = await readBoard();
@@ -638,33 +642,35 @@ async function buildSession(url, steps, session, targetDir, size = 0) {
       }
       if (action.op === "place") expected.set(action.cell, Number(action.value));
     }
-    // One reconciliation pass per step: missing, wrong, then stray values.
-    let actual = await readBoard();
-    for (const [cell, value] of expected.entries()) {
-      if (actual.values[cell] !== value) {
-        const ok = await ensureCellValue(cell, value, actual);
-        if (!ok) console.error(JSON.stringify({event:"restore-warning", cell, value}));
+    if (valueTouched) {
+      // One reconciliation pass per step: missing, wrong, then stray values.
+      let actual = await readBoard();
+      for (const [cell, value] of expected.entries()) {
+        if (actual.values[cell] !== value) {
+          const ok = await ensureCellValue(cell, value, actual);
+          if (!ok) console.error(JSON.stringify({event:"restore-warning", cell, value}));
+        }
       }
-    }
-    const wrong = actual.values
-      .map((value, cell) => (value && expected.has(cell) && value !== expected.get(cell) ? cell : -1))
-      .filter((cell) => cell >= 0);
-    for (const cell of wrong) await setCellValue(cell, expected.get(cell));
-    const stray = actual.values
-      .map((value, cell) => (value && !expected.has(cell) ? cell : -1))
-      .filter((cell) => cell >= 0);
-    for (const cell of stray) await clearCellValue(cell);
-    if (wrong.length || stray.length) {
-      actual = await readBoard();
-      const left = actual.values
+      const wrong = actual.values
+        .map((value, cell) => (value && expected.has(cell) && value !== expected.get(cell) ? cell : -1))
+        .filter((cell) => cell >= 0);
+      for (const cell of wrong) await setCellValue(cell, expected.get(cell));
+      const stray = actual.values
         .map((value, cell) => (value && !expected.has(cell) ? cell : -1))
         .filter((cell) => cell >= 0);
-      if (left.length) throw new Error(`stray values remain: ${left.join(",")}`);
-    }
-    for (const [cell, value] of expected.entries()) {
-      if (actual.values[cell] !== value) {
-        const ok = await ensureCellValue(cell, value, actual);
-        if (!ok) console.error(JSON.stringify({event:"final-restore-warning", cell, value}));
+      for (const cell of stray) await clearCellValue(cell);
+      if (wrong.length || stray.length) {
+        actual = await readBoard();
+        const left = actual.values
+          .map((value, cell) => (value && !expected.has(cell) ? cell : -1))
+          .filter((cell) => cell >= 0);
+        if (left.length) throw new Error(`stray values remain: ${left.join(",")}`);
+      }
+      for (const [cell, value] of expected.entries()) {
+        if (actual.values[cell] !== value) {
+          const ok = await ensureCellValue(cell, value, actual);
+          if (!ok) console.error(JSON.stringify({event:"final-restore-warning", cell, value}));
+        }
       }
     }
     await clearSelection();
