@@ -17,11 +17,6 @@ class ChaosPatternTest(unittest.TestCase):
         puzzle = parse_puzzle(json.loads((ROOT / "fixtures" / "tringle.json").read_text()))
         inventory = build_inventory(puzzle)
         spec = heuristic_spec(puzzle, inventory)
-        for element in inventory:
-            if element.kind == "circle":
-                counts = [3] if "dddd" in (element.attrs.get("fill") or "") else [1, 4]
-                spec["rules"].append({"kind": "region_count", "elements": [element.id],
-                                      "counts": counts})
         rules = compile_spec(puzzle, inventory, spec)
         solver = Solver(puzzle, rules)
         steps = _chaos_pattern_steps(puzzle, rules, solver.state)
@@ -29,7 +24,13 @@ class ChaosPatternTest(unittest.TestCase):
         self.assertEqual(steps[0].technique, "chaos_pattern")
         self.assertEqual(steps[0].events, [])
         self.assertEqual(len(steps[0].visual["focus"]), 4)
-        self.assertIn("区域划分只剩", steps[0].detail)
+        self.assertIn("两两不同区", steps[0].detail)
+        counts = [c for c in rules.constraints if c.kind == "region_count"]
+        self.assertEqual(counts[0].clue_counts, [1, 4])
+        self.assertEqual(counts[0].counts, [4])
+        self.assertEqual(counts[0].repeat_witness, (9, 2))
+        self.assertEqual([c.counts for c in counts[1:4]], [[1, 4]] * 3)
+        self.assertEqual([c.counts for c in counts[4:]], [[3]] * 4)
 
 
 if __name__ == "__main__":

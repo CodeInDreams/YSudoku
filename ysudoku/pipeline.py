@@ -18,7 +18,7 @@ from .narrate import Step
 
 
 # Invalidate cached results when the solver's proof strategy changes.
-ANALYSIS_VERSION = 12
+ANALYSIS_VERSION = 13
 
 
 @dataclass
@@ -123,6 +123,17 @@ def _chaos_pattern_steps(puzzle, rules, state) -> list:
             "这一步只缩小“区域划分模式”的范围，还不能确定任何一格属于哪个区域；\n"
             "要删候选或定区域，需要对“同区/不同区”做假设并传播矛盾。"
         )
+        if con.repeat_witness:
+            digit, copies = con.repeat_witness
+            original = " 或 ".join(map(str, con.clue_counts))
+            conclusion = (f"所以这 {len(cells)} 格两两不同区。"
+                          if con.counts == [len(cells)] else
+                          f"所以可行的区域数只剩 {counts}。" if con.counts else
+                          "因此圈中的数字与区域数提示矛盾。")
+            title = f"约束简化：{conclusion.rstrip('。')}"
+            detail = (f"圈的区域提示原本允许 {original} 个区域。圈内有 {copies} 个 {digit}，"
+                      f"而每个区域只能出现一次 {digit}，所以至少需要 {copies} 个区域。"
+                      + conclusion)
         steps.append(Step(
             index=index, technique="chaos_pattern", tier=2,
             title=title, detail=detail, events=[],
@@ -356,6 +367,11 @@ def analyze(
                 message="检测到作者自定义的区域语义（区域计数/视野/边界），首个混沌版本暂不支持",
             )
         pattern_steps = _chaos_pattern_steps(puzzle, rules, solver.state)
+        if any(c.kind == "region_count" and not c.counts for c in rules.constraints):
+            return Analysis(puzzle=puzzle, spec=spec, rules=rules, source=source,
+                            initial=solver.initial, status="invalid", warnings=warnings,
+                            result=SolveResult("invalid", pattern_steps, solver.state.vals),
+                            message="圈内重复数字与区域数提示矛盾")
         chaos_result = solve_chaos(puzzle, rules.constraints, time_limit=chaos_time_limit)
         if chaos_result.status == "solved":
             errors = check_chaos_solution(puzzle, rules.constraints, chaos_result.values, chaos_result.regions)

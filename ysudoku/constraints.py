@@ -1106,17 +1106,31 @@ class RegionCount(Constraint):
     def __init__(self, cells: list[int], counts: list[int]):
         self._cells = list(cells)
         self.counts = sorted({int(c) for c in counts})
+        self.clue_counts = self.counts.copy()
+        self.repeat_witness = None
         if not self.counts:
             raise ValueError("region_count needs at least one count")
 
     def cells(self) -> list[int]:
         return self._cells
 
+    def simplify_with_quadruple(self, quad):
+        # A subset of this scope can also witness a lower bound.
+        if not set(quad.cells()) <= set(self._cells) or not quad.digits:
+            return
+        digit = max(quad.digits, key=quad.digits.count)
+        minimum = quad.digits.count(digit)
+        allowed = [k for k in self.counts if k >= minimum]
+        if allowed != self.counts:
+            self.counts = allowed
+            self.repeat_witness = digit, minimum
+
     def describe(self) -> str:
         return f"区域计数 {self.counts}（{len(self._cells)} 格）"
 
     def to_dict(self) -> dict:
-        return {"kind": "region_count", "cells": self._cells, "counts": self.counts}
+        return {"kind": "region_count", "cells": self._cells, "counts": self.counts,
+                "clue_counts": self.clue_counts}
 
     def check(self, values: list[int]) -> bool:
         return True  # needs regions; see check_regions

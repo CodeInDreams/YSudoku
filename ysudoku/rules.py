@@ -422,6 +422,13 @@ def compile_spec(puzzle: Puzzle, elements: list[Element], spec: dict,
         else:
             result.warnings.append(f"未知全局规则 {kind}")
 
+    if puzzle.is_chaos:
+        quadruples = [c for c in result.constraints if isinstance(c, Quadruple)]
+        for count in result.constraints:
+            if isinstance(count, RegionCount):
+                for quad in quadruples:
+                    count.simplify_with_quadruple(quad)
+
     ignored = [e for e in elements if e.id not in used]
     for e in ignored:
         if e.kind == "cage" and not e.attrs.get("sum"):
@@ -725,6 +732,22 @@ def heuristic_spec(puzzle: Puzzle, elements: list[Element]) -> dict:
     circle_ids = [e.id for e in elements if e.kind == "circle" and e.attrs.get("texts")]
     if circle_ids and _has(text, "quadruple", "quadruples", "四"):
         rules.append({"kind": "quadruple", "elements": circle_ids})
+
+    if puzzle.is_chaos:
+        low = " ".join(text.lower().split())
+        for element in elements:
+            if element.kind != "circle":
+                continue
+            fill = (element.attrs.get("fill") or "").lower()
+            if (fill in ("#fff", "#ffffff", "#ffffffff") and
+                    "white circle with a thin outline must either belong to the same region or four distinct regions" in low):
+                counts = [1, 4]
+            elif (fill[:7] == "#dddddd" and
+                  "grey circle with a thick outline must belong to exactly three distinct regions" in low):
+                counts = [3]
+            else:
+                continue
+            rules.append({"kind": "region_count", "elements": [element.id], "counts": counts})
 
     for element in elements:
         if element.kind == "xv":
