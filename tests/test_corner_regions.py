@@ -25,17 +25,22 @@ class CornerRegionTest(unittest.TestCase):
             snapshot = fragments.snapshot()
             choice, = snapshot["region_options"]
             self.assertEqual(choice["cells"], [corner])
-            self.assertEqual(set(choice["colours"]), {fragments.colours[a], fragments.colours[b]})
+            self.assertEqual(set(choice["colours"]), {
+                g["colour"] for g in snapshot["colours"] if g["cells"][0] in (a, b)
+            })
             self.assertEqual(len(snapshot["colours"]), 3)
             def local_edges(result):
                 return [e for e in result["region_edges"] if set(e["cells"]) <= set(cells)]
 
-            self.assertEqual(sum(edge["fixed"] for edge in local_edges(snapshot)), 2)
+            self.assertEqual(sum(edge["status"] == "confirmed" for edge in local_edges(snapshot)), 2)
+            self.assertEqual(sum(edge["status"] == "candidate" for edge in local_edges(snapshot)), 2)
             fragments.apart(corner, a)
             self.assertTrue(fragments.propagate_choices())
             self.assertEqual(fragments.owner[corner], fragments.owner[b])
             self.assertFalse(fragments.snapshot()["region_options"])
-            self.assertEqual(len(local_edges(fragments.snapshot())), 3)
+            resolved = {tuple(sorted(e["cells"])): e["status"] for e in local_edges(fragments.snapshot())}
+            self.assertEqual(resolved[tuple(sorted((corner, a)))], "confirmed")
+            self.assertEqual(resolved[tuple(sorted((corner, b)))], "excluded")
             self.assertEqual(len(local_edges(snapshot)), 4)
 
     def test_replacement_is_active_and_rejects_two_blocked_exits(self):

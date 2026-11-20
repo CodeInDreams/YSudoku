@@ -1,6 +1,6 @@
 import unittest
 
-from ysudoku.chaos_regions import RegionFragments, region_steps
+from ysudoku.chaos_regions import RegionFragments, colour_distance, region_steps
 from ysudoku.constraints import RegionCount
 from ysudoku.model import parse_puzzle
 from ysudoku.rules import CompiledRules
@@ -13,11 +13,11 @@ class RegionFragmentsTest(unittest.TestCase):
         f = RegionFragments(State(4, []))
         self.assertFalse(f.snapshot()["colours"])
         f.clue(RegionCount([0, 1], [2]))
-        first = f.colours[0]
         f.clue(RegionCount([4, 5], [2]))
         second = f.colours[4]
         snapshot = f.snapshot()
-        self.assertIn({"a": first, "b": second, "possible": True}, snapshot["region_pairs"])
+        display = {group["cells"][0]: group["colour"] for group in snapshot["colours"]}
+        self.assertIn({"a": display[0], "b": display[4], "possible": True}, snapshot["region_pairs"])
         f.clue(RegionCount([0, 4], [1]))
         self.assertEqual(f.owner[0], f.owner[4])
         self.assertNotIn(second, f.colours.values())
@@ -29,6 +29,27 @@ class RegionFragmentsTest(unittest.TestCase):
         f = RegionFragments(State(4, []))
         self.assertIsNone(f.clue(RegionCount([0, 1, 4, 5], [3])))
         self.assertEqual(f.snapshot()["colours"], [])
+
+    def test_adjacent_pieces_use_contrasting_native_swatches(self):
+        f = RegionFragments(State(4, []))
+        f.colours = {0: 3, 1: 16}  # Blue and cyan would be neighbours.
+        f.display_colours = f.colours.copy()
+        palette = f.region_palette()
+        self.assertGreater(colour_distance(palette[0], palette[1]), colour_distance(3, 16))
+        self.assertEqual(f.region_palette(), palette)
+        self.assertEqual(f.colours, {0: 3, 1: 16})
+        f.display_colours = {0: 3, 1: 11}
+        self.assertEqual(f.region_palette(), {0: 3, 1: 11})
+
+    def test_ordinary_edges_are_only_drawn_where_colour_does_not_show_them(self):
+        f = RegionFragments(State(4, []))
+        f.apart(0, 1)
+        f.apart(0, 4)
+        f.mark(0)
+        f.mark(1)
+        edges = {tuple(e["cells"]): e["status"] for e in f.snapshot()["region_edges"]}
+        self.assertNotIn((0, 1), edges)
+        self.assertEqual(edges[(0, 4)], "confirmed")
 
     def test_capacity_includes_space_left_for_other_regions(self):
         f = RegionFragments(State(4, []))

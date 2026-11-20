@@ -15,6 +15,13 @@ SWATCHES = {**HEX, **dict(enumerate((
     "#f046f0", "#a05a1e", "#33bbee", "#911eb4",
 ), 9))}
 
+RGB = {colour: tuple(bytes.fromhex(hex_value[1:])) for colour, hex_value in SWATCHES.items()}
+MIN_ADJACENT_DISTANCE = 85 ** 2
+
+
+def colour_distance(a, b):
+    return sum((x - y) ** 2 for x, y in zip(RGB[a], RGB[b]))
+
 
 class RegionFragments:
     def __init__(self, state):
@@ -25,6 +32,7 @@ class RegionFragments:
         self.separate = set()
         self.corner_choices = {}
         self.colours = {}
+        self.display_colours = {}
         self.geometry = {}
         self.board = (1 << (n*n)) - 1
         self.left = sum(1 << (i*n) for i in range(n))
@@ -157,7 +165,7 @@ class RegionFragments:
             left, right = (cell_name(c, self.n) for c in exits)
             return (f"{cell_name(corner, self.n)} 在盘角，要连成 {self.n} 格区域，必须与 {left} 或 {right} 同区。"
                     f"四格跨三区，只能有一对同区，所以 {left}、{right}、{cell_name(diagonal, self.n)} 两两异区。"
-                    "角格的两种颜色表示二选一。红线是已确定的边界，两条蓝线中恰有一条会成为边界。")
+                    "角格的两种颜色表示二选一。绿线是已确定的边界。两条黄线中恰有一条会成为边界，排除的边界会变红。")
         return None
 
     def propagate_choices(self):
@@ -176,22 +184,56 @@ class RegionFragments:
                                              f" {cell_name(other, self.n)} 所在片区，因此必须同区。")
         return None
 
+    def region_palette(self):
+        """Choose distinct swatches for visible fragments that touch."""
+        display = {root: colour for root, colour in self.display_colours.items() if root in self.colours}
+        adjacent = {root: set() for root in self.colours}
+        for cell, root in enumerate(self.owner):
+            if root not in adjacent:
+                continue
+            for other in (cell + 1, cell + self.n):
+                if other >= len(self.owner) or not self.expand(1 << cell) & (1 << other):
+                    continue
+                peer = self.owner[other]
+                if root != peer and peer in adjacent:
+                    adjacent[root].add(peer)
+                    adjacent[peer].add(root)
+        for root, original in self.colours.items():
+            current = display.get(root)
+            neighbours = [display[peer] for peer in adjacent[root] if peer in display]
+            free = [colour for colour in SWATCHES if colour not in display.values()]
+            preferred = current if current is not None else (original if original in free else free[0])
+            alternatives = [preferred, *(colour for colour in free if colour != preferred)]
+            display[root] = next(
+                (colour for colour in alternatives if all(
+                    colour_distance(colour, other) >= MIN_ADJACENT_DISTANCE for other in neighbours
+                )),
+                preferred,
+            )
+        self.display_colours = display
+        return display
+
     def snapshot(self):
+        palette = self.region_palette()
         groups = [{"region": True, "colour": colour, "hex": SWATCHES[colour], "cells": sorted(self.groups[root])}
-                  for root, colour in self.colours.items()]
+                  for root, colour in palette.items()]
         pairs = [{"a": ca, "b": cb, "possible": not self.blocked(a, b)}
-                 for (a, ca), (b, cb) in combinations(self.colours.items(), 2)]
+                 for (a, ca), (b, cb) in combinations(palette.items(), 2)]
         options, edges = {}, []
         for cell, (a, b, diagonal) in self.corner_choices.items():
             owned = self.owner[cell]
             targets = [self.owner[a], self.owner[b]]
-            if owned not in targets and all(r in self.colours for r in targets):
+            if owned not in targets and all(r in palette for r in targets):
                 options.setdefault(owned, {"cells": sorted(self.groups[owned]),
-                                           "colours": [self.colours[r] for r in targets]})
+                                           "colours": [palette[r] for r in targets]})
             for anchor in (a, b):
-                edges.append({"cells": [anchor, diagonal], "fixed": True})
-                if self.owner[anchor] != owned:
-                    edges.append({"cells": [cell, anchor], "fixed": owned in targets})
+                edges.append({"cells": [anchor, diagonal], "status": "confirmed"})
+                target = self.owner[anchor]
+                if target == owned:
+                    status = "excluded"
+                else:
+                    status = "confirmed" if self.blocked(owned, target) else "candidate"
+                edges.append({"cells": [cell, anchor], "status": status})
         drawn = {tuple(sorted(edge["cells"])) for edge in edges}
         for cell, root in enumerate(self.owner):
             for other in (cell + 1, cell + self.n):
@@ -199,8 +241,13 @@ class RegionFragments:
                         or (cell, other) in drawn):
                     continue
                 peer = self.owner[other]
-                if root != peer and (root in self.colours or peer in self.colours) and self.blocked(root, peer):
-                    edges.append({"cells": [cell, other], "fixed": True})
+                # Keep the corner clue's explanatory strokes, drawn above.
+                # An ordinary edge adds nothing between two single-colour pieces.
+                visible = (root in palette or peer in palette)
+                both_single = (root in palette and peer in palette
+                               and root not in options and peer not in options)
+                if root != peer and visible and not both_single and self.blocked(root, peer):
+                    edges.append({"cells": [cell, other], "status": "confirmed"})
         progress = {"complete": sum(len(g) == self.n for g in self.groups.values()),
                     "total": len(self.owner) // self.n,
                     "coloured": sum(len(self.groups[r]) for r in self.colours if r not in options)}

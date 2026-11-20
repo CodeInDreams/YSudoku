@@ -1,3 +1,5 @@
+const PEN_COLOURS = { confirmed: 1, candidate: 5, excluded: 4 };
+
 // Each visual describes the annotations for one frame. Send only changes
 // from the previous frame so obsolete colours and edges can be removed.
 export function nativeAnnotations(visual, n) {
@@ -30,7 +32,8 @@ export function nativeAnnotations(visual, n) {
   for (const edge of visual.region_edges || []) {
     const [a, b] = [...edge.cells].sort((x, y) => x - y);
     if (!(b - a === n || (b - a === 1 && a % n !== n - 1))) continue;
-    annotations.set(`edge:${a}:${b}`, { op: "pen", cells: [a, b], index: edge.fixed ? 4 : 6 });
+    const status = edge.status ?? (edge.fixed ? "confirmed" : "candidate");
+    annotations.set(`edge:${a}:${b}`, { op: "pen", cells: [a, b], index: PEN_COLOURS[status] });
   }
   return annotations;
 }
