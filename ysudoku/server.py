@@ -475,7 +475,7 @@ class Handler(BaseHTTPRequestHandler):
                     canonical = _canonical_frame_actions(steps, analysis)
                     digest = str(body.get("steps_hash") or "")
                     if canonical is not steps:
-                        digest = store.hash_json({"renderer": 31, "url": url, "size": size, "steps": canonical})
+                        digest = store.hash_json({"renderer": 32, "url": url, "size": size, "steps": canonical})
                     steps = canonical
                     if key and digest and store.has_frames(key, digest):
                         last = len(steps) - 1

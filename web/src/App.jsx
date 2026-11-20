@@ -799,7 +799,7 @@ export default function App() {
       const actions = buildStepActions(nextAnalysis);
       let hash = 2166136261;
       const crop = !nextAnalysis.puzzle?.outside;
-      const text = "frame-v31:" + (crop ? "crop:" : "full:") + JSON.stringify(actions);
+      const text = "frame-v32:" + (crop ? "crop:" : "full:") + JSON.stringify(actions);
       for (let i = 0; i < text.length; i++) { hash ^= text.charCodeAt(i); hash = Math.imul(hash, 16777619); }
       const data = await postJson("/api/live/build", {
         url: nextAnalysis.source_url || "",
