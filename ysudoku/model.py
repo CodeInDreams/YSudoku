@@ -110,6 +110,13 @@ class Puzzle:
     def cells(self) -> range:
         return range(self.size * self.size)
 
+    @property
+    def has_outside_clues(self) -> bool:
+        return bool(self.clues) or any(
+            not (0 <= r < self.size and 0 <= c < self.size)
+            for arrow in self.arrows for r, c in (arrow.points or [])
+        )
+
     def box_regions(self) -> list[list[int]]:
         """Return the standard box regions for this size."""
         n = self.size

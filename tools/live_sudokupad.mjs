@@ -127,31 +127,30 @@ async function open(url, logicalN = 0, crop = false) {
   }
   const box = await page.locator("svg.boardsvg").boundingBox();
   if (!box) throw new Error("board not visible");
-  const viewBox = await page.locator("svg.boardsvg").getAttribute("viewBox");
-  const parts = (viewBox || "-16 -16 608 608").trim().split(/\s+/).map(Number);
-  const units = parts[2] || 608;
+  const { units, x, y, scaleX, scaleY } = await page.locator("svg.boardsvg").evaluate(svg => {
+    const transform = svg.getScreenCTM();
+    return {
+      units: svg.viewBox.baseVal.width,
+      x: transform.e,
+      y: transform.f,
+      scaleX: transform.a,
+      scaleY: transform.d,
+    };
+  });
   const n = logicalN || Math.max(1, Math.round((units - 32) / 64));
-  const scale = box.width / units;
-  const grid = {
-    x: box.x - (parts[0] || 0) * scale,
-    y: box.y - (parts[1] || 0) * scale,
-    width: n * 64 * scale,
-    height: n * 64 * scale,
-  };
-  const pad = Math.max(2, 6 * scale);
-  const fullGrid = crop ? {
-    x: grid.x, y: grid.y,
-    width: grid.width + pad, height: grid.height + pad,
-  } : {
-    x: box.x,
-    y: box.y,
-    width: box.width,
-    height: box.height,
-  };
-  const rect = { x: grid.x - fullGrid.x, y: grid.y - fullGrid.y,
-                 width: grid.width, height: grid.height,
-                 imageWidth: fullGrid.width, imageHeight: fullGrid.height };
-  board = { box, grid, fullGrid, rect, n };
+  const grid = { x, y, width: n * 64 * scaleX, height: n * 64 * scaleY };
+  // The outer strokes straddle the grid edge. Keep room on all four sides and
+  // use the same integer pixel bounds for the PNG and its overlay coordinates.
+  const padX = Math.max(2, 6 * scaleX);
+  const padY = Math.max(2, 6 * scaleY);
+  const left = Math.floor(crop ? Math.max(box.x, grid.x - padX) : box.x);
+  const top = Math.floor(crop ? Math.max(box.y, grid.y - padY) : box.y);
+  const right = Math.ceil(crop ? Math.min(box.x + box.width, grid.x + grid.width + padX) : box.x + box.width);
+  const bottom = Math.ceil(crop ? Math.min(box.y + box.height, grid.y + grid.height + padY) : box.y + box.height);
+  const capture = { x: left, y: top, width: right - left, height: bottom - top };
+  const rect = { x: grid.x - left, y: grid.y - top, width: grid.width, height: grid.height,
+                 imageWidth: capture.width, imageHeight: capture.height };
+  board = { box, grid, capture, rect, n };
   lastRect = rect;
 
   const initial = await readBoard();
@@ -163,9 +162,8 @@ async function open(url, logicalN = 0, crop = false) {
 }
 
 async function shot() {
-  const { fullGrid } = board;
   latest = await page.screenshot({
-    clip: { x: fullGrid.x, y: fullGrid.y, width: fullGrid.width, height: fullGrid.height },
+    clip: board.capture,
     type: "png",
   });
   return latest;
@@ -173,14 +171,11 @@ async function shot() {
 
 function center(r, c) {
   const { grid, n } = board;
-  const unit = grid.width / n;
-  return [grid.x + (c + 0.5) * unit, grid.y + (r + 0.5) * unit];
+  return [grid.x + (c + 0.5) * grid.width / n, grid.y + (r + 0.5) * grid.height / n];
 }
 
 async function cellPoint(r, c) {
-  const unit = board.grid.width / board.n;
-  return [board.grid.x + (c + 0.5) * unit,
-          board.grid.y + (r + 0.5) * unit];
+  return center(r, c);
 }
 
 async function readBoard() {

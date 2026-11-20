@@ -14,7 +14,7 @@ class OpenPuzzleTest(unittest.TestCase):
         fixture = str(Path(__file__).resolve().parents[1] / "fixtures/demo-killer.json")
         with TemporaryDirectory() as directory, patch.dict(os.environ, YSUDOKU_STORE=directory):
             seen = []
-            with patch.object(server, "initial_screenshot", return_value="preview.png"):
+            with patch.object(server, "initial_screenshot", return_value="preview.png") as screenshot:
                 def open_fixture(at):
                     return server._stored_analysis(
                         fixture, {"llm": False}, opened_at=at,
@@ -22,16 +22,18 @@ class OpenPuzzleTest(unittest.TestCase):
                         on_rules=lambda rules: seen.append("rules"),
                     )
 
-                key, result = open_fixture(100)
+                key, result = open_fixture(time.time())
                 self.assertEqual(seen[:2], ["/api/rulesheet/preview.png", "rules"])
-                saved_at = store._meta(key)["at"]
+                self.assertTrue(screenshot.call_args.kwargs["crop"])
+                saved = store._meta(key)
+                reopened_at = saved["opened_at"] + 1
                 seen.clear()
-                _, result = open_fixture(200)
+                _, result = open_fixture(reopened_at)
                 self.assertTrue(result["cached"])
                 self.assertEqual(seen[:2], ["/api/rulesheet/preview.png", "rules"])
                 entry, = store.list_entries()
-                self.assertEqual(entry["opened_at"], 200)
-                self.assertEqual(entry["at"], saved_at)
+                self.assertEqual(entry["opened_at"], reopened_at)
+                self.assertEqual(entry["at"], saved["at"])
                 seen.clear()
                 _, result = server._stored_analysis(
                     fixture, {"llm": False}, on_preview=seen.append,

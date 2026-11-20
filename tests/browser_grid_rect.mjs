@@ -1,8 +1,6 @@
-// Visual regression: the grid rect must describe the inner 9x9 area of the
-// full screenshot. Run with the web server on :8765.
+// Grid geometry and screenshot margins, with and without outside clues.
+// Run with the web server on :8765.
 const BASE = process.env.YS_BASE || "http://127.0.0.1:8765";
-const URL = "https://sudokupad.app/ad4xg01xip";
-const key = `test-${Date.now().toString(36)}`;
 
 async function post(path, body) {
   const r = await fetch(BASE + path, {
@@ -13,8 +11,10 @@ async function post(path, body) {
   return r.json();
 }
 
-async function main() {
-  await post("/api/live/build", { url: URL, steps: [], key, size: 9 });
+async function check(puzzleId, crop) {
+  const key = `test-${puzzleId}-${Date.now().toString(36)}`;
+  const url = `https://sudokupad.app/${puzzleId}`;
+  await post("/api/live/build", { url, steps: [[]], key, size: 9, crop });
   let rect = null;
   for (let i = 0; i < 60 && !rect; i++) {
     await new Promise((r) => setTimeout(r, 500));
@@ -22,26 +22,41 @@ async function main() {
     if (r.ok) rect = await r.json();
   }
   if (!rect) throw new Error("grid rect never appeared");
-  if (rect.width >= rect.imageWidth * 0.99) throw new Error("rect covers the whole image");
-  if (rect.x <= 0 || rect.y <= 0) throw new Error("rect has no outside-clue margin");
-  if (rect.x + rect.width > rect.imageWidth + 2) throw new Error("rect overflows right");
-  if (rect.y + rect.height > rect.imageHeight + 2) throw new Error("rect overflows bottom");
-  const ratio = rect.width / rect.imageWidth;
-  if (ratio < 0.7 || ratio > 0.9) throw new Error(`unexpected grid ratio ${ratio}`);
-
-  let img = null;
-  for (let i = 0; i < 60; i++) {
-    img = await fetch(`${BASE}/api/live/frame?session=${key}&step=-1`);
-    if (img.ok) break;
-    await new Promise((r) => setTimeout(r, 500));
+  const right = rect.imageWidth - rect.x - rect.width;
+  const bottom = rect.imageHeight - rect.y - rect.height;
+  if (Math.min(rect.x, rect.y, right, bottom) <= 0) throw new Error("grid touches or crosses the capture edge");
+  if (crop) {
+    if (Math.abs(rect.x - right) > 1.01 || Math.abs(rect.y - bottom) > 1.01) {
+      throw new Error("cropped margins are asymmetric");
+    }
+    if (Math.max(rect.x, right, rect.y, bottom) > 1 + rect.width / 96) {
+      throw new Error("too much blank margin around the cropped grid");
+    }
+  } else {
+    const ratio = rect.width / rect.imageWidth;
+    if (ratio < 0.7 || ratio > 0.9) throw new Error(`unexpected full-board grid ratio ${ratio}`);
   }
-  if (!img || !img.ok) throw new Error("frame never appeared");
-  const png = Buffer.from(await img.arrayBuffer());
-  const width = png.readUInt32BE(16);
-  const height = png.readUInt32BE(20);
-  if (Math.abs(width - rect.imageWidth) > 2) throw new Error(`frame width ${width} != rect ${rect.imageWidth}`);
-  if (Math.abs(height - rect.imageHeight) > 2) throw new Error(`frame height ${height} != rect ${rect.imageHeight}`);
-  console.log("grid rect ok", JSON.stringify({ ...rect, frame: [width, height] }));
+
+  for (const step of [-1, 0]) {
+    let img;
+    for (let i = 0; i < 60; i++) {
+      img = await fetch(`${BASE}/api/live/frame?session=${key}&step=${step}`);
+      if (img.ok) break;
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    if (!img?.ok) throw new Error(`frame ${step} never appeared`);
+    const png = Buffer.from(await img.arrayBuffer());
+    if (png.readUInt32BE(16) !== rect.imageWidth || png.readUInt32BE(20) !== rect.imageHeight) {
+      throw new Error(`PNG dimensions disagree with grid metadata for frame ${step}`);
+    }
+  }
+  console.log("grid rect ok", JSON.stringify({ puzzleId, crop, ...rect }));
 }
 
-main().catch((err) => { console.error(err.message); process.exit(1); });
+try {
+  await check("eynwu", true);
+  await check("ad4xg01xip", false);
+} catch (err) {
+  console.error(err.message);
+  process.exit(1);
+}

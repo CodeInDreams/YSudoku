@@ -78,13 +78,8 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
     def preview(url, size, existing="", outside=True):
         path = Path(".cache/rulesheets") / Path(existing).name
         try:
-            if not outside:
-                png = live.initial_frame(url, size, crop=True)
-                path = Path(".cache/rulesheets") / (store.hash_json({"url": url, "crop": True}) + ".png")
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_bytes(png)
-            elif not existing or not path.is_file():
-                path = Path(initial_screenshot(url, size, store.frame_path(key, -1)))
+            if not outside or not existing or not path.is_file():
+                path = Path(initial_screenshot(url, size, store.frame_path(key, -1), crop=not outside))
         except (OSError, LLMError):
             on_preview("")
             return ""
@@ -141,7 +136,7 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
             on_title(puzzle.title)
         if on_preview:
             return preview(puzzle.source_url, puzzle.size,
-                           outside=bool(puzzle.clues or puzzle.arrows))
+                           outside=puzzle.has_outside_clues)
         return None
 
     if on_preview_start:
@@ -485,7 +480,8 @@ class Handler(BaseHTTPRequestHandler):
                     canonical = _canonical_frame_actions(steps, analysis)
                     digest = str(body.get("steps_hash") or "")
                     if canonical is not steps:
-                        digest = store.hash_json({"renderer": 32, "url": url, "size": size, "steps": canonical})
+                        digest = store.hash_json({"renderer": 33, "url": url, "size": size,
+                                                  "crop": crop, "steps": canonical})
                     steps = canonical
                     if key and digest and store.has_frames(key, digest):
                         last = len(steps) - 1

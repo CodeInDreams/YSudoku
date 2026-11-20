@@ -61,10 +61,7 @@ class Analysis:
                 "givens": [self.puzzle.givens.get(c, 0) for c in range(n * n)],
                 "regions": self.puzzle.regions,
                 "has_solution": bool(self.puzzle.solution),
-                "outside": bool(self.puzzle.clues)
-                    or any(any(p[0] < 0 or p[1] < 0 or p[0] >= n or p[1] >= n
-                               for p in (arrow.points or []))
-                           for arrow in self.puzzle.arrows),
+                "outside": self.puzzle.has_outside_clues,
                 "clues": [
                     {"side": c.side, "index": c.index, "value": c.value}
                     for c in self.puzzle.clues
@@ -559,13 +556,13 @@ def _llm_repair(puzzle, inventory, config, spec, diagnostics, warnings):
     return new_spec, new_rules
 
 
-def initial_screenshot(url, size, frame):
+def initial_screenshot(url, size, frame, *, crop=False):
     from urllib.parse import urlsplit
     from . import live
     if urlsplit(url).hostname != "sudokupad.app" or urlsplit(url).scheme != "https":
         raise llm.LLMError("缺少可用于截取初始盘面的 SudokuPad 链接")
     try:
-        png = frame.read_bytes() if frame.is_file() else live.initial_frame(url, size)
+        png = frame.read_bytes() if not crop and frame.is_file() else live.initial_frame(url, size, crop=crop)
         if not png.startswith(b"\x89PNG\r\n\x1a\n") or not png.endswith(b"IEND\xaeB`\x82"):
             raise ValueError("初始帧 PNG 不完整")
         path = Path(".cache/rulesheets") / (hashlib.sha256(png).hexdigest() + ".png")
