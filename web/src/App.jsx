@@ -1691,21 +1691,30 @@ export default function App() {
             <Card className="mt-4">
               <CardHeader className="py-3.5"><CardTitle className="text-sm">{t("history.settings")}</CardTitle><p className="text-xs text-muted-foreground">{t("history.settingsDesc")}</p></CardHeader>
               <CardContent className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
-                {[["rules", "layers.rules"], ["steps", "layers.steps"], ["frames", "layers.frames"]].map(([layer, key]) => (
-                  <div key={layer} className="rounded-md border px-2.5 py-2">
-                    <div className="text-muted-foreground">{t(key)}</div>
-                    <div className="mt-0.5 font-medium">{store?.info?.counts?.[layer] || 0} <span className="font-normal text-muted-foreground">{puzzleUnit(store?.info?.counts?.[layer] || 0)}</span></div>
-                    <div className="text-[10px] text-muted-foreground">{fmtBytes(store?.info?.sizes?.[layer])}</div>
-                  </div>
-                ))}
-                <div className="col-span-2 flex items-center gap-1.5 rounded-md border px-2.5 py-2 text-[10px] text-muted-foreground sm:col-span-4">
+                <div className="col-span-2 flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[10px] text-muted-foreground sm:col-span-4">
                   <Database className="h-3.5 w-3.5 shrink-0" />
                   <code className="truncate">{store?.info?.location || "—"}</code>
-                  <span className="ml-auto shrink-0">{fmtBytes(store?.info?.total)}</span>
                 </div>
-                {[["max_rules", "history.maxRules"], ["max_steps", "history.maxSteps"], ["max_frames", "history.maxFrames"], ["max_mb", "history.maxMb"]].map(([key, label]) => (
-                  <label key={key} className="flex items-center justify-between gap-2 rounded-md border px-2.5 py-2"><span className="text-muted-foreground">{t(label)}</span><input type="number" min="0" value={settings[key] ?? ""} onChange={(e) => setSettings((s) => ({ ...s, [key]: Number(e.target.value) }))} className="w-14 bg-transparent text-right outline-none" /></label>
+                {[
+                  ["rules", "layers.rules", "max_rules", store?.info?.counts?.rules || 0, store?.info?.sizes?.rules],
+                  ["steps", "layers.steps", "max_steps", store?.info?.counts?.steps || 0, store?.info?.sizes?.steps],
+                  ["frames", "layers.frames", "max_frames", store?.info?.counts?.frames || 0, store?.info?.sizes?.frames],
+                ].map(([layer, label, key, count, size]) => (
+                  <div key={layer} className="col-span-2 flex items-center gap-2 rounded-md border px-2.5 py-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[11px] font-medium">{t(label)}</div>
+                      <div className="text-[10px] text-muted-foreground">{t("history.usedLimit", { used: count, limit: settings[key] ?? 0, size: fmtBytes(size) })}</div>
+                    </div>
+                    <input type="number" min="0" value={settings[key] ?? ""} onChange={(e) => setSettings((s) => ({ ...s, [key]: Number(e.target.value) }))} className="w-14 rounded border bg-transparent px-1 py-0.5 text-right text-[11px] outline-none" />
+                  </div>
                 ))}
+                <div className="col-span-2 flex items-center gap-2 rounded-md border px-2.5 py-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[11px] font-medium">{t("history.totalSpace")}</div>
+                    <div className="text-[10px] text-muted-foreground">{t("history.spaceUsed", { used: fmtBytes(store?.info?.total), limit: settings.max_mb ?? 0 })}</div>
+                  </div>
+                  <input type="number" min="0" value={settings.max_mb ?? ""} onChange={(e) => setSettings((s) => ({ ...s, max_mb: Number(e.target.value) }))} className="w-14 rounded border bg-transparent px-1 py-0.5 text-right text-[11px] outline-none" />
+                </div>
                 <Button size="sm" className="col-span-2 sm:col-span-4" onClick={saveSettings}>{t("history.save")}</Button>
               </CardContent>
             </Card>
