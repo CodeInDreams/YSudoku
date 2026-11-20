@@ -107,33 +107,32 @@ async function open(url, logicalN = 0) {
   await page.emulateMedia({ colorScheme: "light" });
   ledger = new Map();
   await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
-  await page.waitForTimeout(1200);
+  await page.waitForSelector("svg.boardsvg", { timeout: 15000 }).catch(() => {});
   // The start overlay darkens the board; click it as soon as it appears,
   // otherwise a cropped screenshot captures the dimmed start screen.
   let started = false;
   try {
     const start = page.getByText("Start Puzzle");
-    await start.first().waitFor({ state: "visible", timeout: 4000 });
+    await start.first().waitFor({ state: "visible", timeout: 2500 });
     await start.first().click();
     started = true;
-    await page.waitForTimeout(900);
+    await page.waitForTimeout(250);
   } catch { /* puzzle already started or a resume overlay */ }
   await page.waitForSelector("svg.boardsvg", { timeout: 30000 });
   let lastView = "";
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 40; i++) {
     const current = await page.locator("svg.boardsvg").getAttribute("viewBox");
     if (current && current === lastView) break;
     lastView = current;
-    await page.waitForTimeout(250);
+    await page.waitForTimeout(50);
   }
-  await page.waitForTimeout(300);
   if (!started) {
     // Some reopen paths show a play/resume overlay instead of "Start Puzzle";
     // clicking the board centre dismisses it (or merely selects a cell).
     const b = await page.locator("svg.boardsvg").boundingBox();
     if (b) {
       await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
-      await page.waitForTimeout(600);
+      await page.waitForTimeout(300);
     }
   }
   const box = await page.locator("svg.boardsvg").boundingBox();
