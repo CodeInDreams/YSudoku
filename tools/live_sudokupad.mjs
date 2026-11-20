@@ -98,11 +98,15 @@ async function open(url, logicalN = 0, crop = false) {
   // otherwise a cropped screenshot captures the dimmed start screen.
   let started = false;
   try {
-    const start = page.getByText(/^(Start Puzzle|Resume Puzzle|Continue)$/);
-    await start.first().waitFor({ state: "visible", timeout: 2500 });
+    const start = page.getByRole("button", { name: /Start Puzzle|Resume Puzzle|Continue/i });
+    await start.first().waitFor({ state: "visible", timeout: 10000 });
     await start.first().click();
     started = true;
-    await page.waitForTimeout(250);
+    await page.waitForTimeout(300);
+    if (await start.first().isVisible().catch(() => false)) {
+      await start.first().click().catch(() => {});
+      await page.waitForTimeout(300);
+    }
   } catch { /* puzzle already started or a resume overlay */ }
   await page.waitForSelector("svg.boardsvg", { timeout: 30000 });
   let lastView = "";
