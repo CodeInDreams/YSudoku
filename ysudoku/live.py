@@ -114,11 +114,13 @@ def place(digits: list[list[int]], reset: bool, corners: list | None = None,
 
 
 def build(url: str, steps: list[list[dict]], directory: str | None = None,
-          session: str | None = None, size: int = 0) -> dict:
+          session: str | None = None, size: int = 0, crop: bool = False) -> dict:
     ensure()
     payload = {"url": url, "steps": steps}
     if size:
         payload["size"] = int(size)
+    if crop:
+        payload["crop"] = True
     if directory:
         payload["dir"] = directory
     if session:

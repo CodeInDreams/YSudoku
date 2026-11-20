@@ -89,7 +89,7 @@ async function ensurePage() {
   return page;
 }
 
-async function open(url, logicalN = 0) {
+async function open(url, logicalN = 0, crop = false) {
   await ensurePage();
   ledger = new Map();
   await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
@@ -134,7 +134,7 @@ async function open(url, logicalN = 0) {
     width: n * 64 * scale,
     height: n * 64 * scale,
   };
-  const fullGrid = {
+  const fullGrid = crop ? { x: grid.x, y: grid.y, width: grid.width, height: grid.height } : {
     x: box.x,
     y: box.y,
     width: box.width,
@@ -601,8 +601,8 @@ async function ensureCellValue(cell, value, known = null) {
   return final.values[cell] === Number(value);
 }
 
-async function buildSession(url, steps, session, targetDir, size = 0) {
-  await open(url, size);
+async function buildSession(url, steps, session, targetDir, size = 0, crop = false) {
+  await open(url, size, crop);
   const dir = targetDir || path.join(process.cwd(), ".cache", "frames", session);
   fs.mkdirSync(dir, { recursive: true });
   const initial = await shot();
@@ -729,8 +729,8 @@ const server = http.createServer((req, res) => {
         const steps = body.steps || [];
         const targetDir = body.dir || null;
         work = work.then(
-          () => buildSession(body.url, steps, session, targetDir, Number(body.size) || 0),
-          () => buildSession(body.url, steps, session, targetDir, Number(body.size) || 0),
+          () => buildSession(body.url, steps, session, targetDir, Number(body.size) || 0, Boolean(body.crop)),
+          () => buildSession(body.url, steps, session, targetDir, Number(body.size) || 0, Boolean(body.crop)),
         ).catch(() => {});
         return json(res, 200, { ok: true, session, count: steps.length });
       }

@@ -465,6 +465,7 @@ class Handler(BaseHTTPRequestHandler):
                     steps = body.get("steps") or []
                     url = str(body.get("url") or "")
                     size = int(body.get("size") or 0)
+                    crop = bool(body.get("crop"))
                     analysis = store.load_analysis(key) if key else None
                     canonical = _canonical_frame_actions(steps, analysis)
                     digest = str(body.get("steps_hash") or "")
@@ -484,7 +485,7 @@ class Handler(BaseHTTPRequestHandler):
                             _BUILDING.add(key)
                             def _build():
                                 try:
-                                    live.build(url, steps, directory=directory, session=key, size=size)
+                                    live.build(url, steps, directory=directory, session=key, size=size, crop=crop)
                                     if digest:
                                         store.set_frames_hash(key, digest)
                                 except Exception as exc:  # noqa: BLE001
@@ -494,7 +495,7 @@ class Handler(BaseHTTPRequestHandler):
                             threading.Thread(target=_build, daemon=True).start()
                             result = {"ok": True, "session": key, "building": True}
                         else:
-                            result = live.build(url, steps, directory=directory, session=None, size=size)
+                            result = live.build(url, steps, directory=directory, session=None, size=size, crop=crop)
                             if digest:
                                 store.set_frames_hash(key, digest)
                 elif urlparse(self.path).path == "/api/live/start":

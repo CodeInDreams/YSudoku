@@ -61,6 +61,10 @@ class Analysis:
                 "givens": [self.puzzle.givens.get(c, 0) for c in range(n * n)],
                 "regions": self.puzzle.regions,
                 "has_solution": bool(self.puzzle.solution),
+                "outside": bool(self.puzzle.clues)
+                    or any(any(p[0] < 0 or p[1] < 0 or p[0] >= n or p[1] >= n
+                               for p in (arrow.points or []))
+                           for arrow in self.puzzle.arrows),
                 "clues": [
                     {"side": c.side, "index": c.index, "value": c.value}
                     for c in self.puzzle.clues
