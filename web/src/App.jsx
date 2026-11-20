@@ -1097,6 +1097,23 @@ export default function App() {
                 <div className="flex items-center gap-2"><h2 className="text-sm font-semibold">{stepTitle(current)}</h2><Badge variant="outline">{t("step.tier", { tier: current.tier })}</Badge></div>
                 <p className="text-[11px] text-muted-foreground">{t("step.of", { i: idx + 1, n: steps.length })}</p>
                 <StepNarrative step={current} lang={lang} n={n} t={t} />
+                {current.visual?.region_pairs?.length > 0 && (
+                  <details className="text-xs">
+                    <summary className="cursor-pointer">{lang === "zh" ? "区域颜色关系" : "Region colour relationships"}</summary>
+                    <table className="mt-2 w-full"><tbody>
+                      {current.visual.colours.filter(group => group.region).map(group => {
+                        const related = current.visual.region_pairs.filter(p => p.a === group.colour || p.b === group.colour);
+                        const list = possible => related.filter(p => p.possible === possible).map(p => p.a === group.colour ? p.b : p.a).join(", ") || "—";
+                        return <tr key={group.colour} className="border-b">
+                          <th className="p-1 text-left"><span style={{ backgroundColor: group.hex }} className="mr-1 inline-block h-3 w-3 rounded-sm" />
+                            {cellName(group.cells[0])} (#{group.colour})</th>
+                          <td>{lang === "zh" ? "可能同区" : "May match"} {list(true)}</td>
+                          <td>{lang === "zh" ? "确定异区" : "Distinct"} {list(false)}</td>
+                        </tr>;
+                      })}
+                    </tbody></table>
+                  </details>
+                )}
                 {current.audit === "ok" && <div className="rounded-md bg-emerald-50 px-2 py-1 text-[11px] text-emerald-700 dark:bg-emerald-950 dark:text-emerald-200">✓ {t("step.audited")}</div>}
                 {current.audit === "bad" && <div className="rounded-md bg-rose-50 px-2 py-1 text-[11px] text-rose-700 dark:bg-rose-950 dark:text-rose-200">✗ {t("step.auditBad")}</div>}
                 <div className="flex gap-2 pt-1">

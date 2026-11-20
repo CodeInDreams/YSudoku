@@ -130,7 +130,11 @@ class Puzzle:
 
     @property
     def is_chaos(self) -> bool:
-        return (not self.regions) and "chaos" in (self.rules_text or "").lower()
+        text = (self.rules_text or "").lower()
+        return any(key in text for key in (
+            "chaos construction", "chaos sudoku", "regions are hidden",
+            "hidden regions", "regions must be determined",
+        )) or (not self.regions and "chaos" in text)
 
     def is_standard_boxes(self) -> bool:
         boxes = {frozenset(b) for b in self.box_regions()}

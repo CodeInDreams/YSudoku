@@ -71,7 +71,7 @@ def _neighbors(cell: int, n: int):
 
 
 def solve_chaos(puzzle, constraints, node_limit: int = 1_500_000,
-                time_limit: float = 20.0) -> ChaosResult:
+                time_limit: float = 20.0, *, fragments=None, domains=None) -> ChaosResult:
     n = puzzle.size
     if n > 9:
         return ChaosResult("unsupported", [0] * (n * n), message="仅支持 9x9 及以下")
@@ -93,6 +93,16 @@ def solve_chaos(puzzle, constraints, node_limit: int = 1_500_000,
     latin_units = [(cells, "row", r) for r, cells in enumerate(row_units)] + [
         (cells, "col", c) for c, cells in enumerate(col_units)
     ]
+    base_domains = domains if domains is not None else [full] * total
+    same_masks = [0] * total
+    apart_masks = [0] * total
+    if fragments is not None:
+        masks = {r: sum(1 << c for c in g) for r, g in fragments.groups.items()}
+        for root, cells in fragments.groups.items():
+            apart = sum(masks[b] for b in masks if b != root and fragments.blocked(root, b))
+            for c in cells:
+                same_masks[c] = masks[root] ^ (1 << c)
+                apart_masks[c] = apart
     nodes = [0]
     started = time.monotonic()
     region_rules = [con for con in constraints if con.kind == "region_count"]
@@ -183,7 +193,7 @@ def solve_chaos(puzzle, constraints, node_limit: int = 1_500_000,
         if given:
             bit = 1 << (given - 1)
             return bit if not blocked & bit else 0
-        return full & ~blocked
+        return base_domains[cell] & ~blocked
 
     def propagated_domains() -> list[int] | None:
         """Forward-check Latin units and quadruples to a local fixed point."""
@@ -334,6 +344,9 @@ def solve_chaos(puzzle, constraints, node_limit: int = 1_500_000,
             options.append(-1)
 
         for choice in options:
+            owned = region_cell_masks[choice] if choice >= 0 else 0
+            if owned & apart_masks[cell] or same_masks[cell] & ~unassigned_mask & ~owned:
+                continue
             created = False
             if choice == -1:
                 choice = len(region_cells)
@@ -347,7 +360,10 @@ def solve_chaos(puzzle, constraints, node_limit: int = 1_500_000,
             unassigned_mask &= ~cell_bit
             region_of[cell] = choice
             # Connectivity depends on region membership, not on the digit.
-            if not region_can_grow(choice) or not region_rules_ok(cell):
+            # Occupying a bridge may also strand a different unfinished region.
+            if (not region_rules_ok(cell) or not region_can_grow(choice)
+                    or any(not region_can_grow(rr) for rr in range(len(region_cells))
+                           if rr != choice and len(region_cells[rr]) < n)):
                 region_cells[choice].pop()
                 region_cell_masks[choice] &= ~cell_bit
                 unassigned_mask |= cell_bit

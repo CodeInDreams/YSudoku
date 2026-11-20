@@ -13,12 +13,13 @@ from .model import Puzzle, parse_puzzle
 from .rules import compile_spec, heuristic_spec, build_inventory
 from .chaos import check_chaos_solution, solve_chaos
 from .solve import Solver, SolveResult, audit_steps, check_solution, compare_with_solution
-from .state import cell_name
+from .state import Contradiction, cell_name
+from .chaos_regions import region_steps
 from .narrate import Step
 
 
 # Invalidate cached results when the solver's proof strategy changes.
-ANALYSIS_VERSION = 14
+ANALYSIS_VERSION = 15
 
 
 @dataclass
@@ -120,8 +121,7 @@ def _chaos_pattern_steps(puzzle, rules, state) -> list:
         detail = (
             f"这个圆周围的 {len(cells)} 格必须包含数字 {digits or '（未标注）'}；\n"
             f"区域计数要求它们跨 {counts} 个区域，因此区域划分只剩 {patterns} 类模式。\n"
-            "这一步只缩小“区域划分模式”的范围，还不能确定任何一格属于哪个区域；\n"
-            "要删候选或定区域，需要对“同区/不同区”做假设并传播矛盾。"
+            "结合其他线索、区域大小与连通性，可以继续判断哪些格必须同区或不同区。"
         )
         if con.repeat_witness:
             digit, copies = con.repeat_witness
@@ -349,11 +349,7 @@ def analyze(
     if clue_ids - mapped_clues:
         warnings.append(f"{len(clue_ids - mapped_clues)} 个盘外提示未被规则使用")
     rules_low = (puzzle.rules_text or "").lower()
-    chaos = any(key in rules_low for key in (
-        "chaos construction", "chaos sudoku", "regions are hidden",
-        "hidden regions", "regions must be determined",
-    ))
-    if chaos:
+    if puzzle.is_chaos:
         exotic = any(word in rules_low for word in (
             "trisection", "unbalanced", "region count", "region-count",
             "how many cells of its own region", "block vision",
@@ -370,12 +366,29 @@ def analyze(
                 message="检测到作者自定义的区域语义（区域计数/视野/边界），首个混沌版本暂不支持",
             )
         pattern_steps = _chaos_pattern_steps(puzzle, rules, solver.state)
-        if any(c.kind == "region_count" and not c.counts for c in rules.constraints):
+        if solver.invalid or any(c.kind == "region_count" and not c.counts for c in rules.constraints):
             return Analysis(puzzle=puzzle, spec=spec, rules=rules, source=source,
                             initial=solver.initial, status="invalid", warnings=warnings,
                             result=SolveResult("invalid", pattern_steps, solver.state.vals),
-                            message="圈内重复数字与区域数提示矛盾")
-        chaos_result = solve_chaos(puzzle, rules.constraints, time_limit=chaos_time_limit)
+                            message=solver.invalid or "圈内重复数字与区域数提示矛盾")
+        try:
+            fragments = region_steps(solver, rules, pattern_steps)
+        except Contradiction as exc:
+            return Analysis(puzzle=puzzle, spec=spec, rules=rules, source=source,
+                            initial=solver.initial, status="invalid", warnings=warnings,
+                            result=SolveResult("invalid", pattern_steps, solver.state.vals),
+                            source_url=puzzle.source_url, message=str(exc))
+        groups = list(fragments.groups.values())
+        if solver.state.solved and all(len(group) == puzzle.size for group in groups):
+            regions = [sorted(group) for group in groups]
+            if not check_chaos_solution(puzzle, rules.constraints, solver.state.vals, regions):
+                return Analysis(puzzle=puzzle, spec=spec, rules=rules, source=source,
+                                initial=solver.initial, status="solved", warnings=warnings,
+                                result=SolveResult("solved", pattern_steps, solver.state.vals),
+                                source_url=puzzle.source_url, chaos_regions=regions,
+                                solution_check="区域和数字均通过校验")
+        chaos_result = solve_chaos(puzzle, rules.constraints, time_limit=chaos_time_limit,
+                                  fragments=fragments, domains=solver.state.dom)
         if chaos_result.status == "solved":
             errors = check_chaos_solution(puzzle, rules.constraints, chaos_result.values, chaos_result.regions)
             return Analysis(
@@ -385,7 +398,7 @@ def analyze(
                 warnings=warnings + [chaos_result.message, "混沌构造由搜索求解，不是逐步人类推理"],
                 status="solved-search",
                 message=chaos_result.message,
-                chaos_regions=chaos_result.regions,
+                chaos_regions=chaos_result.regions, source_url=puzzle.source_url,
                 solution_check="；".join(errors[:3]) if errors else "混沌解自检通过",
             )
         return Analysis(
@@ -394,7 +407,7 @@ def analyze(
             initial=solver.initial, source=source,
             warnings=warnings + [chaos_result.message],
             status="stuck",
-            message=f"混沌搜索未完成：{chaos_result.message}",
+            source_url=puzzle.source_url, message=f"混沌搜索未完成：{chaos_result.message}",
         )
 
     result = solver.run(max_steps=max_steps)
