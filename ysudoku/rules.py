@@ -22,6 +22,7 @@ from .constraints import (
     RegionSum,
     Sandwich,
     XSums,
+    ProductLine,
     IRSupport,
     Skyscraper,
     Arrow,
@@ -191,6 +192,7 @@ KINDS = {
     "region_sum": "区域和线",
     "region_count": "区域计数",
     "x_sums": "X-Sums（盘外提示）",
+    "product": "乘积线",
     "full_rank": "Full Rank（全局排名）",
     "ir": "通用约束关系",
     "modular": "模块 2×2（每宫含 1/4/7、2/5/8、3/6/9）",
@@ -266,6 +268,17 @@ def compile_spec(puzzle: Puzzle, elements: list[Element], spec: dict,
             result.constraints.append(constraint)
             result.resolved.append({"kind": kind, "label": KINDS[kind],
                                     "elements": ids, "count": len(relations)})
+            used.update(ids)
+            continue
+        if kind == "product":
+            total = params.get("total", raw.get("total", 48))
+            for element in elements:
+                if element.id not in ids or len(element.cells) < 2:
+                    continue
+                result.constraints.append(ProductLine(element.cells, int(total),
+                                                       str(element.attrs.get("color") or "")))
+            result.resolved.append({"kind": kind, "label": KINDS[kind],
+                                    "elements": list(ids), "count": len(ids)})
             used.update(ids)
             continue
         if kind == "x_sums" and raw.get("cells"):
@@ -724,6 +737,14 @@ def heuristic_spec(puzzle: Puzzle, elements: list[Element]) -> dict:
     rules: list[dict] = []
     globals_: list[dict] = [{"kind": "non_consecutive"}] if _global_non_consecutive(text) else []
     warnings: list[str] = []
+
+    if _has(text, "product") and _has(text, "line"):
+        line_ids = [e.id for e in elements if e.kind == "line" and len(e.cells) >= 2]
+        if line_ids:
+            import re as _re
+            match = _re.search(r"multiply\s+to\s+(\d+)|product\s+(\d+)", text, _re.I)
+            total = int(match.group(1) or match.group(2)) if match else 48
+            rules.append({"kind": "product", "elements": line_ids, "total": total})
 
     cage_ids = [e.id for e in elements if e.kind == "cage" and e.attrs.get("sum") is not None]
     if cage_ids and _has(text, "killer", "cage", "sum", "笼"):

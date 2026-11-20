@@ -171,6 +171,44 @@ def _cell_from_xy(x: float, y: float, n: int) -> int | None:
     return None
 
 
+def _svg_points(duration: str, n: int, cell_size: float = 64.0) -> list[list[float]]:
+    """Convert a simple SVG path (M/L/Q/C/H/V) to cell-centre coordinates."""
+    import re
+    tokens = re.findall(r"[MLQCHVmlqchv]|-?\d+(?:\.\d+)?", str(duration or ""))
+    if not tokens:
+        return []
+    points: list[list[float]] = []
+    x = y = 0.0
+    cmd = "M"
+    i = 0
+    while i < len(tokens):
+        if tokens[i].isalpha():
+            cmd = tokens[i]
+            i += 1
+            continue
+        try:
+            if cmd in "ML":
+                x, y = float(tokens[i]), float(tokens[i + 1]); i += 2
+                points.append([y / cell_size, x / cell_size])
+            elif cmd in "HV":
+                if cmd == "H":
+                    x = float(tokens[i]); i += 1
+                else:
+                    y = float(tokens[i]); i += 1
+                points.append([y / cell_size, x / cell_size])
+            elif cmd in "QC":
+                nums = [float(tokens[i + k]) for k in range(4)]
+                i += 4
+                points.append([nums[1] / cell_size, nums[0] / cell_size])
+                points.append([nums[3] / cell_size, nums[2] / cell_size])
+                x, y = nums[2], nums[3]
+            else:
+                i += 1
+        except (IndexError, ValueError):
+            break
+    return points
+
+
 def _path_cells(points: list[list[float]], n: int) -> list[int]:
     """Map a polyline to the ordered cells it passes through.
 
@@ -321,7 +359,7 @@ def parse_puzzle(data: dict, puzzle_id: str = "") -> Puzzle:
 
     lines: list[Line] = []
     for i, line in enumerate(data.get("lines") or []):
-        points = line.get("wayPoints") or []
+        points = line.get("wayPoints") or _svg_points(line.get("duration"), n)
         if not points:
             continue
         cells_in = _path_cells(points, n)

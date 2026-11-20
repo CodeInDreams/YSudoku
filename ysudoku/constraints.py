@@ -1048,6 +1048,77 @@ class XSums(Constraint):
         return changed
 
 
+class ProductLine(Constraint):
+    """Digits on a line multiply to a fixed target."""
+
+    kind = "product"
+
+    def __init__(self, cells, total, color=""):
+        self._cells = list(cells)
+        self.total = int(total)
+        self.color = color
+
+    def cells(self) -> list[int]:
+        return self._cells
+
+    def describe(self) -> str:
+        return f"乘积线（{len(self._cells)} 格，积={self.total}）"
+
+    def to_dict(self) -> dict:
+        return {"kind": self.kind, "cells": self._cells, "total": self.total}
+
+    def check(self, values: list[int]) -> bool:
+        vals = [values[c] for c in self._cells]
+        if any(v == 0 for v in vals):
+            return True
+        product = 1
+        for v in vals:
+            product *= v
+        return product == self.total
+
+    def prune(self, st: State) -> bool:
+        reason = Reason("product", {"cells": self._cells, "total": self.total})
+        changed = False
+        supports = {c: set() for c in self._cells}
+        nodes = [0]
+        complete = [True]
+        assignment = []
+
+        def dfs(index: int, product: int):
+            if not complete[0]:
+                return
+            nodes[0] += 1
+            if nodes[0] > 50000:
+                complete[0] = False
+                return
+            if index == len(self._cells):
+                if product == self.total:
+                    for c, v in zip(self._cells, assignment):
+                        supports[c].add(v)
+                return
+            remaining = len(self._cells) - index
+            for v in bits(st.dom[self._cells[index]]):
+                nxt = product * v
+                if nxt > self.total or self.total % nxt:
+                    continue
+                if remaining == 1 and nxt != self.total:
+                    continue
+                assignment.append(v)
+                dfs(index + 1, nxt)
+                assignment.pop()
+                if not complete[0]:
+                    return
+
+        dfs(0, 1)
+        if complete[0] and supports[self._cells[0]]:
+            for c in self._cells:
+                allowed = 0
+                for v in supports[c]:
+                    allowed |= 1 << (v - 1)
+                changed |= st.restrict(c, allowed, reason)
+        return changed
+
+
 class ClassCover(Constraint):
     """Every block must contain at least one digit from each class."""
 
