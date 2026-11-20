@@ -33,13 +33,18 @@ class RegionFragmentsTest(unittest.TestCase):
     def test_adjacent_pieces_use_contrasting_native_swatches(self):
         f = RegionFragments(State(4, []))
         f.colours = {0: 3, 1: 16}  # Blue and cyan would be neighbours.
-        f.display_colours = f.colours.copy()
+        f.display_colours = {0: 3}
         palette = f.region_palette()
+        self.assertEqual(palette[0], 3)
         self.assertGreater(colour_distance(palette[0], palette[1]), colour_distance(3, 16))
-        self.assertEqual(f.region_palette(), palette)
         self.assertEqual(f.colours, {0: 3, 1: 16})
-        f.display_colours = {0: 3, 1: 11}
-        self.assertEqual(f.region_palette(), {0: 3, 1: 11})
+
+    def test_existing_colours_stay_when_fragments_become_adjacent(self):
+        f = RegionFragments(State(4, []))
+        f.colours = {0: 3, 2: 16}
+        self.assertEqual(f.region_palette(), {0: 3, 2: 16})
+        f.merge(0, 1)
+        self.assertEqual(f.region_palette(), {0: 3, 2: 16})
 
     def test_ordinary_edges_are_only_drawn_where_colour_does_not_show_them(self):
         f = RegionFragments(State(4, []))

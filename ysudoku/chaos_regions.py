@@ -185,7 +185,7 @@ class RegionFragments:
         return None
 
     def region_palette(self):
-        """Choose distinct swatches for visible fragments that touch."""
+        """Avoid close swatches when assigning a colour for the first time."""
         display = {root: colour for root, colour in self.display_colours.items() if root in self.colours}
         adjacent = {root: set() for root in self.colours}
         for cell, root in enumerate(self.owner):
@@ -199,10 +199,11 @@ class RegionFragments:
                     adjacent[root].add(peer)
                     adjacent[peer].add(root)
         for root, original in self.colours.items():
-            current = display.get(root)
+            if root in display:
+                continue
             neighbours = [display[peer] for peer in adjacent[root] if peer in display]
             free = [colour for colour in SWATCHES if colour not in display.values()]
-            preferred = current if current is not None else (original if original in free else free[0])
+            preferred = original if original in free else free[0]
             alternatives = [preferred, *(colour for colour in free if colour != preferred)]
             display[root] = next(
                 (colour for colour in alternatives if all(
