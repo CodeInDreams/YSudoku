@@ -512,9 +512,9 @@ class Solver:
         import time
         from .search import proof_cost
         self.refutation_limited = False
-        # Reserve the assumption, contradiction, rollback and conclusion.
+        # Reserve the assumption, contradiction and combined rollback.
         chunk_size = 8
-        max_pages = min(32, max_steps - len(self.steps) - 4)
+        max_pages = min(32, max_steps - len(self.steps) - 3)
         if max_pages < 1:
             self.refutation_limited = True
             return None
@@ -717,23 +717,7 @@ class Solver:
             try: self.on_step(refuted)
             except Exception: pass
 
-        revert = Step(
-            index=len(self.steps), technique="contradiction", tier=4,
-            title="反证回退", detail=f"反证回退：撤销假设 {name} = {value}。",
-            events=[], visual={"focus": [], "premise": [],
-                               "groups": [{"cells": [cell], "kind": "assumption"}],
-                               "links": [], "chips": [],
-                               "assumption": {"cells": [cell],
-                                              "label": f"反证回退：假设 {name}={value}"}},
-            branch=True, revert=True)
-        revert.pre_dom, revert.pre_vals = pre_dom, pre_vals
-        revert.candidates = []
-        self.steps.append(revert)
-        if self.on_step:
-            try: self.on_step(revert)
-            except Exception: pass
-
-        forced = values[0] if len(values) == 2 and values[1] == value else (values[1] if len(values) == 2 else None)
+        forced = next((candidate for candidate in values if candidate != value), None) if len(values) == 2 else None
         reason = Reason("contradiction", {"cell": cell, "value": value,
                                           "forced": forced, "phase": "end",
                                           "cause": cause})
@@ -744,21 +728,12 @@ class Solver:
             self.state.elim(cell, value, reason)
         events = self.state.end()
         step = self._commit(events, pre_dom, pre_vals)
-        if step is None:
-            kind = "place" if forced is not None else "elim"
-            event = Event(kind, cell, forced if forced is not None else value,
-                          reason, pre_dom[cell])
-            step = Step(
-                index=len(self.steps), technique="contradiction", tier=4,
-                title="反证结论",
-                detail=(f"反证结论：排除 {name} = {value}。"
-                        if forced is None else f"反证结论：{name} = {forced}。"),
-                events=[event], visual={"focus": [cell], "premise": [],
-                                        "groups": [], "links": [], "chips": []})
-            step.pre_dom, step.pre_vals = pre_dom, pre_vals
-            step.candidates = [{"cell": cell,
-                                "digits": [forced if forced is not None else value]}]
-        step.title = "反证结论"
+        step.revert = True
+        step.title = "反证回退"
+        conclusion = (f"排除 {name} 的候选 {value}。" if forced is None
+                      else f"{name} 只剩 {forced}，填入 {forced}。")
+        step.detail = f"撤销假设 {name} = {value}。{conclusion}"
+        step.visual = {"focus": [cell], "premise": [], "groups": [], "links": [], "chips": []}
         self.steps.append(step)
         if self.on_step:
             try: self.on_step(step)

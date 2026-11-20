@@ -106,6 +106,44 @@ class RefuterTest(unittest.TestCase):
         self.assertTrue(refuted)
         self.assertEqual(proof["visual_conflict"], {"scope": (0, 1, 2, 3), "cells": ()})
 
+    def test_refutation_applies_conclusion_in_rollback_step(self):
+        import time
+        from ysudoku.model import parse_puzzle
+        from ysudoku.rules import CompiledRules
+        from ysudoku.solve import Solver
+        from ysudoku.state import Reason
+
+        class RejectOne:
+            kind = "test_rule"
+
+            def cells(self):
+                return [0, 1]
+
+            def prune(self, state):
+                if state.vals[0] == 1:
+                    return state.elim(1, 4, Reason("test_rule"))
+                return False
+
+        puzzle = parse_puzzle({"cells": [[{} for _ in range(9)] for _ in range(9)]})
+        for mask, event_kind, value in ((0b11, "place", 2), (0b111, "elim", 1)):
+            with self.subTest(mask=mask):
+                solver = Solver(puzzle, CompiledRules([RejectOne()]))
+                solver.state.dom[0] = mask
+                solver.state.dom[1] = 0b1000
+                step = solver.contradiction_step(time.time() + 5, max_steps=4)
+                self.assertEqual(len(solver.steps), 4)
+                self.assertIs(step, solver.steps[-1])
+                self.assertEqual(step.title, "反证回退")
+                self.assertTrue(step.revert)
+                self.assertFalse(step.branch)
+                self.assertEqual(step.pre_dom[0], mask)
+                self.assertEqual(
+                    (step.events[0].kind, step.events[0].cell, step.events[0].value),
+                    (event_kind, 0, value),
+                )
+                self.assertEqual(step.events[0].reason.data["phase"], "end")
+                self.assertFalse(solver.state.has(0, 1))
+
     def test_incomplete_deep_search_is_not_reported_as_a_refutation(self):
         from ysudoku.search import refute_candidate_with_proof
         from ysudoku.state import State

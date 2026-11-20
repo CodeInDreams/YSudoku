@@ -132,11 +132,18 @@ function detectGridRect(img, size) {
 }
 
 function candidateStateUpTo(analysis, idx) {
-  const state = new Map();
+  let state = new Map();
+  let branchBase = null;
   if (!analysis) return state;
   const n = analysis.puzzle.size;
   for (let i = 0; i <= idx && i < analysis.steps.length; i++) {
     const step = analysis.steps[i];
+    if (step.revert) {
+      if (branchBase) state = branchBase;
+      branchBase = null;
+    } else if (step.branch && !branchBase) {
+      branchBase = new Map(state);
+    }
     const pre = step.pre_dom || [];
     for (const cell of state.keys()) state.set(cell, new Set(digitsOf(pre[cell] || 0, n)));
     for (const ev of step.events || []) {
@@ -216,7 +223,6 @@ function buildStepActions(analysis) {
   let inBranch = false;
   let branchBase = null;
   let branchCell = null;
-  const baseActions = [];
   const MAX_POSITIVE = 5;
   const digits = (mask) => digitsOf(mask || 0, n);
   const same = (a, b) => a.size === b.size && [...a].every((d) => b.has(d));
@@ -224,10 +230,11 @@ function buildStepActions(analysis) {
   for (let stepIndex = 0; stepIndex < analysis.steps.length; stepIndex++) {
     const step = analysis.steps[stepIndex];
     const actions = [];
-    if (step.branch && !inBranch) {
+    if (step.branch && !step.revert && !inBranch) {
       inBranch = true;
       branchCell = (step.events || []).find((ev) => ev.kind === "place")?.cell ?? null;
       branchBase = { state: new Map(state), marked: new Set(marked), values: new Map(values) };
+      actions.push({ op: "snapshot_start", cell: branchCell });
     }
     if (step.revert) {
       actions.push({ op: "undo_to_snapshot", cell: branchCell });
@@ -239,8 +246,13 @@ function buildStepActions(analysis) {
         branchBase.values.forEach((value, cell) => values.set(cell, value));
       }
       inBranch = false;
-      steps.push(actions);
-      continue;
+      branchBase = null;
+      branchCell = null;
+      // Previously saved rollback steps may have no conclusion events.
+      if (!step.events?.length) {
+        steps.push(actions);
+        continue;
+      }
     }
     const pre = step.pre_dom || [];
     const elimsByCell = new Map();
@@ -321,12 +333,6 @@ function buildStepActions(analysis) {
         actions.push({ op: "colour", cell, index: item.colour });
       }
     }
-    const nextStep = analysis.steps[stepIndex + 1];
-    if (!inBranch && nextStep?.branch && !nextStep.revert) {
-      const nextCell = (nextStep.events || []).find((ev) => ev.kind === "place")?.cell ?? null;
-      actions.push({ op: "snapshot_start", cell: nextCell });
-    }
-    if (!step.branch) baseActions.push(...actions);
     steps.push(actions);
   }
   return steps;
