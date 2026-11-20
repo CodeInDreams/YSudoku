@@ -586,6 +586,7 @@ export default function App() {
   }, [session, frameVersion, frameProgress.complete]);
   const frameTimer = useRef(null);
   const streamToken = useRef(0);
+  const buildingKey = useRef("");
 
   const t = (key, vars) => translate(lang, key, vars);
   const puzzleUnit = (count) => (lang === "zh" ? "个谜题" : count === 1 ? "puzzle" : "puzzles");
@@ -782,6 +783,9 @@ export default function App() {
 
   async function startLive(nextAnalysis) {
     const token = streamToken.current;
+    const buildKey = nextAnalysis?.storage?.key || nextAnalysis?.source_url || "";
+    if (buildingKey.current === buildKey) return;
+    buildingKey.current = buildKey;
     setReady(false);
     setSession(null);
     setSessionGrid(null);
