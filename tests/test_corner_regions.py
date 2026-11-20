@@ -1,7 +1,7 @@
 import unittest
 from itertools import product
 
-from ysudoku.chaos_regions import RegionFragments, region_steps
+from ysudoku.chaos_regions import RegionFragments, colours_are_close, region_steps
 from ysudoku.constraints import RegionCount
 from ysudoku.model import parse_puzzle
 from ysudoku.rules import CompiledRules
@@ -42,6 +42,15 @@ class CornerRegionTest(unittest.TestCase):
             self.assertEqual(resolved[tuple(sorted((corner, a)))], "confirmed")
             self.assertEqual(resolved[tuple(sorted((corner, b)))], "excluded")
             self.assertEqual(len(local_edges(snapshot)), 4)
+
+    def test_corner_options_avoid_pink_next_to_red_on_first_assignment(self):
+        fragments = RegionFragments(State(9, []))
+        fragments.colours = {7: 7, 17: 8, 16: 10}
+        fragments.display_colours = {7: 7}
+        self.assertTrue(fragments.replace_corner_clue(RegionCount([7, 8, 16, 17], [3])))
+        options, = fragments.snapshot()["region_options"]
+        self.assertEqual(options["colours"][0], 7)
+        self.assertFalse(colours_are_close(*options["colours"]))
 
     def test_replacement_is_active_and_rejects_two_blocked_exits(self):
         p = parse_puzzle({"cells": [[{} for _ in range(4)] for _ in range(4)],

@@ -1,5 +1,6 @@
 """Proven region fragments. A colour names a fragment, not a final region ID."""
 
+from colorsys import rgb_to_hsv
 from copy import copy
 from itertools import combinations
 
@@ -16,11 +17,21 @@ SWATCHES = {**HEX, **dict(enumerate((
 ), 9))}
 
 RGB = {colour: tuple(bytes.fromhex(hex_value[1:])) for colour, hex_value in SWATCHES.items()}
+HSV = {colour: rgb_to_hsv(*(channel / 255 for channel in rgb)) for colour, rgb in RGB.items()}
 MIN_ADJACENT_DISTANCE = 85 ** 2
 
 
 def colour_distance(a, b):
     return sum((x - y) ** 2 for x, y in zip(RGB[a], RGB[b]))
+
+
+def colours_are_close(a, b):
+    hue_a, sat_a, value_a = HSV[a]
+    hue_b, sat_b, value_b = HSV[b]
+    hue_gap = abs(hue_a - hue_b)
+    return (colour_distance(a, b) < MIN_ADJACENT_DISTANCE
+            or (min(sat_a, sat_b) >= 0.4 and abs(value_a - value_b) < 0.2
+                and min(hue_gap, 1 - hue_gap) < 0.20))
 
 
 class RegionFragments:
@@ -198,6 +209,14 @@ class RegionFragments:
                 if root != peer and peer in adjacent:
                     adjacent[root].add(peer)
                     adjacent[peer].add(root)
+        # Candidate colours displayed together in a corner also need to
+        # be distinguishable, even when their two anchor cells are diagonal.
+        for cell, (a, b, _) in self.corner_choices.items():
+            corner = self.owner[cell]
+            left, right = self.owner[a], self.owner[b]
+            if corner not in (left, right) and left in adjacent and right in adjacent:
+                adjacent[left].add(right)
+                adjacent[right].add(left)
         for root, original in self.colours.items():
             if root in display:
                 continue
@@ -207,7 +226,7 @@ class RegionFragments:
             alternatives = [preferred, *(colour for colour in free if colour != preferred)]
             display[root] = next(
                 (colour for colour in alternatives if all(
-                    colour_distance(colour, other) >= MIN_ADJACENT_DISTANCE for other in neighbours
+                    not colours_are_close(colour, other) for other in neighbours
                 )),
                 preferred,
             )

@@ -22,6 +22,37 @@ from .llm import LLMError
 
 STATIC_DIR = Path(__file__).parent / "static"
 DIST_DIR = Path(__file__).parent.parent / "web" / "dist"
+PEN_COLOURS = {"confirmed": 1, "candidate": 5, "excluded": 4}
+
+
+def _canonical_frame_actions(steps, analysis):
+    """Use the saved proof to make boundary rendering independent of client version."""
+    if not analysis or len(analysis.get("steps", ())) != len(steps):
+        return steps
+    visuals = [step.get("visual", {}) for step in analysis["steps"]]
+    if not any("region_edges" in visual for visual in visuals):
+        return steps
+
+    frames = []
+    previous = {}
+    for actions, proof_step, visual in zip(steps, analysis["steps"], visuals):
+        frame = [action for action in actions if action.get("op") != "pen"]
+        if not proof_step.get("branch"):
+            current = {}
+            for edge in visual.get("region_edges", ()):
+                status = edge.get("status") or ("confirmed" if edge.get("fixed") else "candidate")
+                current[tuple(sorted(edge["cells"]))] = PEN_COLOURS[status]
+            for cells, index in previous.items():
+                if cells not in current:
+                    frame.append({"op": "pen", "cells": list(cells), "index": index, "enabled": False})
+            for cells, index in current.items():
+                if previous.get(cells) != index:
+                    frame.append({"op": "pen", "cells": list(cells), "index": index, "enabled": True})
+            previous = current
+        frames.append(frame)
+    return frames
+
+
 def _stored_analysis(target: str, body: dict, demo: bool = False,
                      force_rules: bool = False, force_steps: bool = False,
                      on_rules=None, on_step=None, on_preview=None, on_preview_start=None, on_title=None, opened_at=None):
@@ -431,25 +462,29 @@ class Handler(BaseHTTPRequestHandler):
                 body = json.loads(self.rfile.read(length) or b"{}")
                 if urlparse(self.path).path == "/api/live/build":
                     key = str(body.get("key") or "")
+                    steps = body.get("steps") or []
+                    url = str(body.get("url") or "")
+                    size = int(body.get("size") or 0)
+                    analysis = store.load_analysis(key) if key else None
+                    canonical = _canonical_frame_actions(steps, analysis)
                     digest = str(body.get("steps_hash") or "")
+                    if canonical is not steps:
+                        digest = store.hash_json({"renderer": 31, "url": url, "size": size, "steps": canonical})
+                    steps = canonical
                     if key and digest and store.has_frames(key, digest):
-                        last = len(body.get("steps") or []) - 1
+                        last = len(steps) - 1
                         complete = store.frame_path(key, -1).is_file() and store.frame_path(key, last).is_file()
                         result = {"ok": True, "session": key, "cached": True, "complete": complete}
                     else:
-                        if key:
-                            store.delete_layer(key, "frames")
                         directory = str(store.frames_dir(key)) if key else None
                         if key and key in _BUILDING:
                             result = {"ok": True, "session": key, "building": True}
                         elif key:
+                            store.delete_layer(key, "frames")
                             _BUILDING.add(key)
                             def _build():
                                 try:
-                                    live.build(str(body.get("url") or ""),
-                                               body.get("steps") or [],
-                                               directory=directory, session=key,
-                                               size=int(body.get("size") or 0))
+                                    live.build(url, steps, directory=directory, session=key, size=size)
                                     if digest:
                                         store.set_frames_hash(key, digest)
                                 except Exception as exc:  # noqa: BLE001
@@ -459,10 +494,7 @@ class Handler(BaseHTTPRequestHandler):
                             threading.Thread(target=_build, daemon=True).start()
                             result = {"ok": True, "session": key, "building": True}
                         else:
-                            result = live.build(str(body.get("url") or ""),
-                                                body.get("steps") or [],
-                                                directory=directory, session=None,
-                                                size=int(body.get("size") or 0))
+                            result = live.build(url, steps, directory=directory, session=None, size=size)
                             if digest:
                                 store.set_frames_hash(key, digest)
                 elif urlparse(self.path).path == "/api/live/start":

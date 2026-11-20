@@ -73,3 +73,16 @@ class OpenPuzzleTest(unittest.TestCase):
                 with server._JOBS_LOCK:
                     job = server._JOBS.pop(job_id)
                     job["preview_ready"].set()
+
+    def test_old_client_pen_actions_are_replaced_by_saved_edge_meaning(self):
+        cells = [7, 8]
+        analysis = {"steps": [
+            {"visual": {"region_edges": [{"cells": cells, "status": "candidate"}]}},
+            {"visual": {"region_edges": [{"cells": cells, "status": "confirmed"}]}},
+            {"visual": {"region_edges": [{"cells": cells, "status": "excluded"}]}},
+            {"visual": {"region_edges": []}},
+        ]}
+        stale = [[{"op": "pen", "cells": cells, "index": 6}]] * 4
+        directions = server._canonical_frame_actions(stale, analysis)
+        self.assertEqual([frame[0]["index"] for frame in directions], [5, 1, 4, 4])
+        self.assertEqual([frame[0]["enabled"] for frame in directions], [True, True, True, False])

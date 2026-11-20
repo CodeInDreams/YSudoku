@@ -457,6 +457,7 @@ async function applyAnnotation(action) {
       if (!side || !cell) return;
       const previous = cell.pen.find(value => value[0] === side);
       const color = String(action.index);
+      if (enabled && !["1", "4", "5"].includes(color)) return;
       if (enabled ? previous === side + color : !previous) return;
       app.act({ type: "groupstart" });
       app.act({ type: "deselect" });
