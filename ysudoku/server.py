@@ -44,6 +44,7 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
             if not existing or not path.is_file():
                 path = Path(initial_screenshot(url, size, store.frame_path(key, -1)))
         except (OSError, LLMError):
+            on_preview("")
             return ""
         on_preview(f"/api/rulesheet/{path.name}")
         return str(path)
@@ -142,8 +143,10 @@ def _job_update(job_id: str, **values) -> None:
 
 def _start_job(target: str, body: dict, demo: bool) -> str:
     job_id = uuid.uuid4().hex[:12]
+    preview_ready = threading.Event()
     job = {
-        "id": job_id, "phase": "rules", "status": "running",
+        "preview_ready": preview_ready,
+        "id": job_id, "phase": "preview", "status": "running",
         "rules": [], "steps": [], "error": None, "payload": None,
         "key": None, "started": time.time(),
     }
@@ -151,6 +154,13 @@ def _start_job(target: str, body: dict, demo: bool) -> str:
         _JOBS[job_id] = job
         while len(_JOBS) > 20:
             _JOBS.pop(next(iter(_JOBS)))
+
+    def on_preview(url):
+        if url:
+            _job_update(job_id, preview=url)
+            if body.get("wait_for_preview"):
+                preview_ready.wait(timeout=3)
+        _job_update(job_id, phase="rules")
 
     def on_rules(rules):
         _job_update(job_id, phase="solving", rules=list(rules or []))
@@ -173,7 +183,7 @@ def _start_job(target: str, body: dict, demo: bool) -> str:
         try:
             key, payload = _stored_analysis(
                 target, body, demo=demo, on_rules=on_rules, on_step=on_step,
-                on_preview=lambda url: _job_update(job_id, preview=url), opened_at=job["started"],
+                on_preview=on_preview, opened_at=job["started"],
             )
             _job_update(
                 job_id, phase="done", status="done", key=key, payload=payload,
@@ -348,7 +358,16 @@ class Handler(BaseHTTPRequestHandler):
         self._send(200, file.read_bytes(), _CONTENT_TYPES.get(file.suffix, "application/octet-stream"))
 
     def do_POST(self):
-        if urlparse(self.path).path not in (
+        path = urlparse(self.path)
+        if path.path == "/api/job/preview-ready":
+            job_id = parse_qs(path.query).get("id", [""])[0]
+            with _JOBS_LOCK:
+                job = _JOBS.get(job_id)
+                if job:
+                    job["preview_ready"].set()
+            self._send(200, b'{}', "application/json")
+            return
+        if path.path not in (
             "/api/solve", "/api/solve/start", "/api/demo", "/api/live/start", "/api/live/place",
             "/api/live/build", "/api/history/clear",
             "/api/store/settings", "/api/store/delete", "/api/store/favorite",

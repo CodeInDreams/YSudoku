@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from threading import Event
+import time
 import unittest
 from unittest.mock import patch
 
@@ -30,3 +32,31 @@ class OpenPuzzleTest(unittest.TestCase):
                 entry, = store.list_entries()
                 self.assertEqual(entry["opened_at"], 200)
                 self.assertEqual(entry["at"], saved_at)
+
+    def test_browser_job_waits_for_initial_preview(self):
+        reached_rules = Event()
+
+        def analyze(*_args, on_preview, **_kwargs):
+            on_preview("/api/rulesheet/preview.png")
+            reached_rules.set()
+            return "key", {}
+
+        with patch.object(server, "_stored_analysis", side_effect=analyze):
+            job_id = server._start_job("sample", {"wait_for_preview": True}, False)
+            try:
+                deadline = time.monotonic() + 1
+                while True:
+                    with server._JOBS_LOCK:
+                        job = dict(server._JOBS[job_id])
+                    if job.get("preview") or time.monotonic() >= deadline:
+                        break
+                    time.sleep(0.01)
+                self.assertEqual(job["preview"], "/api/rulesheet/preview.png")
+                self.assertEqual(job["phase"], "preview")
+                self.assertFalse(reached_rules.is_set())
+                job["preview_ready"].set()
+                self.assertTrue(reached_rules.wait(1))
+            finally:
+                with server._JOBS_LOCK:
+                    job = server._JOBS.pop(job_id)
+                    job["preview_ready"].set()

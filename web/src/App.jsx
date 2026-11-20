@@ -445,6 +445,7 @@ export default function App() {
   const [session, setSession] = useState(null);
 
   const [previewSrc, setPreviewSrc] = useState("");
+  const [previewJob, setPreviewJob] = useState("");
   const [frameSrc, setFrameSrc] = useState("");
   const [frameStep, setFrameStep] = useState(-2);
   const [ready, setReady] = useState(false);
@@ -623,22 +624,22 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!playing || deleted) return;
+    if (!playing || deleted || (frameStep !== idx && !(idx === -1 && previewSrc))) return;
     if (idx >= steps.length - 1) { setPlaying(false); return; }
     const timer = setTimeout(() => setIdx((value) => Math.min(value + 1, steps.length - 1)), speed);
     return () => clearTimeout(timer);
-  }, [playing, idx, steps.length, speed, deleted]);
+  }, [playing, idx, steps.length, speed, deleted, frameStep, previewSrc]);
 
   useEffect(() => {
     const onKey = (event) => {
-      if (view !== "solve" || event.target.tagName === "INPUT" || event.target.tagName === "SELECT") return;
+      if (view !== "solve" || !steps.length || event.target.closest?.("input, select, textarea, button, [role=slider]")) return;
       if (event.key === "ArrowRight") { setPlaying(false); setIdx((v) => Math.min(v + 1, steps.length - 1)); }
       if (event.key === "ArrowLeft") { setPlaying(false); setIdx((v) => Math.max(v - 1, -1)); }
-      if (event.key === " ") { event.preventDefault(); setPlaying((v) => !v); }
+      if (event.key === " ") { event.preventDefault(); togglePlayback(); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [steps.length, view]);
+  }, [steps.length, view, idx, playing, deleted]);
 
   async function refreshStore() {
     try {
@@ -716,7 +717,6 @@ export default function App() {
     setNotes(data.notes || data.rules?.notes || "");
     setPhase("rendering");
     startLive(data);
-    startFrameProgress(data.storage?.key, data.steps?.length || 0);
     refreshStore();
   }
 
@@ -743,9 +743,13 @@ export default function App() {
       });
       if (token !== streamToken.current) return;
       setSession(data.session);
+      startFrameProgress(data.session, actions.length);
       setRetry((v) => v + 1);
     } catch (err) {
-      if (token === streamToken.current) setError(`${t("error.build")}: ${err.message}`);
+      if (token === streamToken.current) {
+        setPhase("failed");
+        setError(`${t("error.build")}: ${err.message}`);
+      }
     }
   }
 
@@ -753,11 +757,13 @@ export default function App() {
     if (frameTimer.current) clearInterval(frameTimer.current);
     setFrameProgress({ frames: 0, total, complete: false });
     if (!key || !total) { setPhase("done"); return; }
+    const token = streamToken.current;
     const tick = async () => {
       try {
         const res = await fetch(`/api/live/progress?session=${encodeURIComponent(key)}&total=${total}`);
         if (res.ok) {
           const data = await res.json();
+          if (token !== streamToken.current) return;
           setFrameProgress({ frames: data.frames || 0, total: data.total || total, complete: !!data.complete });
           if (data.error) {
             setError(`${t("error.build")}: ${data.error.message || "render failed"}`);
@@ -781,23 +787,27 @@ export default function App() {
   async function streamSolve(body, targetUrl) {
     const token = ++streamToken.current;
     setPreviewSrc("");
+    setPreviewJob("");
+    setView("solve");
     setSession(null);
     setFrameSrc("");
+    setFrameStep(-2);
     setReady(false);
     setIdx(-1);
     if (frameTimer.current) clearInterval(frameTimer.current);
     setBusy(true); setError(""); setPlaying(false);
     setAnalysis(null); setStreamRules([]); setStreamSteps([]); setStreamTarget([]); finalPayload.current = null;
-    setPhase("rules");
+    setPhase("preview");
     try {
-      const { id } = await postJson("/api/solve/start", body);
+      const { id } = await postJson("/api/solve/start", { ...body, wait_for_preview: true });
       while (token === streamToken.current) {
         await new Promise((resolve) => setTimeout(resolve, 300));
         const res = await fetch(`/api/job?id=${encodeURIComponent(id)}`);
         const job = await res.json().catch(() => ({}));
         if (token !== streamToken.current) return;
         if (!res.ok) throw new Error(job.error || "job failed");
-        if (job.preview) setPreviewSrc(job.preview);
+        if (job.preview) { setPreviewJob(id); setPreviewSrc(job.preview); }
+        if (job.phase === "rules") setPhase("rules");
         setStreamRules(job.rules || []);
         setStreamTarget(job.steps || []);
         if (job.phase === "solving") setPhase("solving");
@@ -815,10 +825,12 @@ export default function App() {
         if (job.status === "failed") throw new Error(job.error || "solve failed");
       }
     } catch (err) {
-      setPhase("failed");
-      setError(`${t("error.solve")}: ${err.message}`);
+      if (token === streamToken.current) {
+        setPhase("failed");
+        setError(`${t("error.solve")}: ${err.message}`);
+      }
     } finally {
-      setBusy(false);
+      if (token === streamToken.current) setBusy(false);
     }
   }
 
@@ -847,6 +859,10 @@ export default function App() {
   }
 
   function exitPuzzle() {
+    ++streamToken.current;
+    if (frameTimer.current) clearInterval(frameTimer.current);
+    setBusy(false);
+    setPreviewJob("");
     setPlaying(false);
     setAnalysis(null);
     setSession(null);
@@ -947,6 +963,17 @@ export default function App() {
     setIdx((v) => Math.min(steps.length - 1, v + 1));
   }
 
+  function togglePlayback() {
+    if (!steps.length || deleted) return;
+    if (!playing && idx === steps.length - 1) setIdx(-1);
+    setPlaying(!playing);
+  }
+
+  function goToStart() {
+    setPlaying(false);
+    setIdx(-1);
+  }
+
   function prevStep() {
     if (deleted) { setError(t("step.deleted")); setPlaying(false); return; }
     setPlaying(false);
@@ -994,14 +1021,14 @@ export default function App() {
   }, [analysis, lang, streamRules]);
 
   const displaySteps = analysis ? steps : streamSteps;
-  const phasePct = phase === "rules" ? 8
+  const phasePct = phase === "preview" ? 4 : phase === "rules" ? 8
     : phase === "solving" ? Math.min(85, 15 + streamSteps.length * 2)
       : phase === "rendering" ? (frameProgress.total ? Math.round((frameProgress.frames / frameProgress.total) * 100) : 12)
         : phase === "done" ? 100 : 0;
-  const phaseLabel = phase === "rules" ? t("phase.rules")
+  const phaseLabel = phase === "preview" ? t("phase.preview") : phase === "rules" ? t("phase.rules")
     : phase === "solving" ? `${t("phase.solving")} · ${t("phase.steps", { n: streamSteps.length })}`
       : phase === "rendering" ? `${t("phase.rendering")} · ${t("phase.frames", { done: frameProgress.frames, total: frameProgress.total })}`
-        : phase === "done" ? t("phase.done") : "";
+        : phase === "done" ? t("phase.done") : phase === "failed" ? t("phase.failed") : "";
   const phaseHint = phase === "rules" ? t("phase.rulesHint")
     : phase === "solving" ? t("phase.solvingHint")
       : phase === "rendering" ? t("phase.renderingHint") : "";
@@ -1017,10 +1044,11 @@ export default function App() {
       action={<Button onClick={demo} disabled={busy}>{t("header.demo")}</Button>} />
   );
 
-  const boardCard = analysis && (
+  const showingPreview = previewSrc && (!frameSrc || idx < 0);
+  const boardCard = (analysis || previewSrc) && (
     <Card className="overflow-hidden">
       <CardHeader className="flex-row items-center gap-3 space-y-0 border-b py-3.5">
-        <div><CardTitle className="text-sm">{t("board.title")}</CardTitle><p className="mt-0.5 text-xs text-muted-foreground">{t(candidateCount === 1 ? "board.descCandidate" : "board.descCandidates", { i: idx + 1, c: candidateCount })}</p></div>
+        <div><CardTitle className="text-sm">{t("board.title")}</CardTitle><p className="mt-0.5 text-xs text-muted-foreground">{idx < 0 ? t("board.initial") : t(candidateCount === 1 ? "board.descCandidate" : "board.descCandidates", { i: idx + 1, c: candidateCount })}</p></div>
         <div className="ml-auto flex items-center gap-1.5">{phase === "rendering" && <Badge variant="outline">{phaseLabel}</Badge>}<Badge variant="outline">{t("board.readonly")}</Badge><Badge variant="outline">{t("board.readonly.badge")}</Badge></div>
       </CardHeader>
       <CardContent className="p-5">
@@ -1036,16 +1064,21 @@ export default function App() {
               </div>
             </div>
           )}
-          {previewSrc && !frameSrc && !deleted && (
-            <img src={previewSrc} alt={t("board.initial")} className="h-full w-full object-contain" />
+          {showingPreview && !deleted && (
+            <img src={previewSrc} alt={t("board.initial")} className="h-full w-full object-contain"
+              onLoad={() => {
+                if (previewJob) requestAnimationFrame(() => requestAnimationFrame(() => {
+                  fetch(`/api/job/preview-ready?id=${encodeURIComponent(previewJob)}`, { method: "POST" }).catch(() => {});
+                }));
+              }} />
           )}
-          {frameSrc && !deleted && (
+          {frameSrc && !showingPreview && !deleted && (
             <img src={frameSrc} alt="SudokuPad"
               className={`h-full w-full object-fill transition-opacity ${ready ? "opacity-100" : "opacity-0"}`}
               style={{ filter: dark ? "brightness(0.8) contrast(1.04)" : undefined }}
               onLoad={() => setReady(true)} />
           )}
-          {overlay && ready && !deleted && (
+          {overlay && idx >= 0 && !showingPreview && ready && !deleted && (
             <svg className="pointer-events-none absolute" viewBox={`0 0 ${n} ${n}`} preserveAspectRatio="none"
               style={gridRect ? {
                 left: `${(gridRect.x / gridRect.imageWidth) * 100}%`,
@@ -1102,7 +1135,7 @@ export default function App() {
       </CardContent>
       <div className="flex items-center gap-2 border-t px-4 py-3">
         <Button variant="outline" size="icon" className="h-8 w-8" onClick={prevStep} disabled={idx <= -1 || deleted}><ChevronLeft className="h-4 w-4" /></Button>
-        <Button size="sm" onClick={() => setPlaying((v) => !v)} disabled={!steps.length || deleted}>
+        <Button size="sm" onClick={togglePlayback} disabled={!steps.length || deleted}>
           {playing ? <Pause className="mr-1 h-3.5 w-3.5" /> : <Play className="mr-1 h-3.5 w-3.5" />}
           {playing ? t("player.pause") : t("player.play")}
         </Button>
@@ -1113,11 +1146,11 @@ export default function App() {
       </div>
       <div className="border-t px-4 py-3">
         <Slider
-          value={[Math.max(0, idx)]}
+          value={[idx + 1]}
           min={0}
-          max={Math.max(0, steps.length - 1)}
+          max={steps.length}
           step={1}
-          onValueChange={([value]) => { setPlaying(false); setIdx(value); }}
+          onValueChange={([value]) => { setPlaying(false); setIdx(value - 1); }}
           disabled={!steps.length || deleted}
         />
       </div>
@@ -1229,8 +1262,14 @@ export default function App() {
           style={{ overflowAnchor: "none" }}
           onScroll={(e) => { stepScrollRef.current = e.currentTarget.scrollTop; }}
         >
+          {(analysis || previewSrc) && (
+            <button onClick={goToStart} disabled={deleted} aria-current={idx < 0 ? "step" : undefined}
+              className={`flex w-full items-center gap-3 rounded-md px-2.5 py-1.5 text-left text-xs ${idx < 0 ? "bg-muted font-medium" : "text-muted-foreground hover:bg-muted/60"}`}>
+              <span className="w-6 text-right font-mono text-[10.5px]">0</span>{t("board.initial")}
+            </button>
+          )}
           {displaySteps.map((step, i) => (
-            <button key={i} onClick={() => { setPlaying(false); setIdx(i); }} className={`flex w-full items-center gap-3 rounded-md px-2.5 py-1.5 text-left text-xs ${i === idx ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:bg-muted/60"}`}>
+            <button key={i} disabled={!analysis || deleted} onClick={() => { setPlaying(false); setIdx(i); }} className={`flex w-full items-center gap-3 rounded-md px-2.5 py-1.5 text-left text-xs ${i === idx ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:bg-muted/60"}`}>
               <span className="w-6 text-right font-mono text-[10.5px]">{i + 1}</span><span className="truncate">{stepTitle(step)}</span>
               <Badge variant="outline" className="ml-auto">{t("step.tier", { tier: step.tier })}</Badge>
             </button>
@@ -1458,11 +1497,7 @@ export default function App() {
                 {phaseHint && <div className="mt-1 text-[11px] text-muted-foreground">{phaseHint}</div>}
               </div>
             )}
-            {!analysis ? (phase === "idle" ? emptySolve : previewSrc ? (
-              <Card><CardContent className="p-5">
-                <img src={previewSrc} alt={t("board.initial")} className="mx-auto w-full max-w-[540px] object-contain" />
-              </CardContent></Card>
-            ) : (
+            {!analysis && !previewSrc ? (phase === "idle" ? emptySolve : (
               <Card>
                 <CardContent className="flex min-h-[320px] flex-col items-center justify-center gap-4 text-center">
                   <Loader2 className="h-6 w-6 animate-spin text-primary" />
