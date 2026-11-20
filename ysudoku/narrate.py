@@ -243,25 +243,27 @@ def _explain_hidden_single(events, data, n):
 
 
 def _explain_locked(events, data, n):
-    digit = data["digit"]
-    cells = data.get("cells", [])
-    target = data.get("target")
-    unit = data.get("unit", "")
-    if target in ("row", "col"):
-        target_name = f"第{int(data['index']) + 1}{'行' if target == 'row' else '列'}"
-        detail = (
-            f"在{unit}中，数字 {digit} 的所有可能位置 {_names(cells, n)} 都在同一{('行' if target == 'row' else '列')}。\n"
-            f"因此 {target_name} 上、{unit}之外的格子都不能是 {digit}。"
-        )
-    else:
-        detail = (
-            f"在{unit}中，数字 {digit} 的所有可能位置 {_names(cells, n)} 都落在同一个区域内。\n"
-            f"因此该区域内、{unit}之外的格子都不能是 {digit}。"
-        )
-    visual = _unit_visual(data.get("unit_cells", []), n, focus=cells)
-    if data.get("region_cells"):
-        visual["groups"].append({"cells": data["region_cells"], "kind": "unit"})
-    return detail, visual
+    reasons = {ev.value: ev.reason.data for ev in events if ev.reason.kind == "locked"}
+    detail = []
+    visual = _unit_visual(data["unit_cells"], n, focus=sorted(_group_elims(events)))
+    hosts = set()
+    regions = {tuple(data["unit_cells"])}
+    for digit, reason in reasons.items():
+        cells = reason["cells"]
+        hosts.update(cells)
+        target = reason["target"]
+        if target in ("row", "col"):
+            target_name = f"第{reason['index'] + 1}{'行' if target == 'row' else '列'}"
+        else:
+            target_name = "同一个区域"
+            region_cells = tuple(reason["region_cells"])
+            if region_cells not in regions:
+                visual["groups"].append({"cells": list(region_cells), "kind": "unit"})
+                regions.add(region_cells)
+        detail.append(f"在{reason['unit']}中，数字 {digit} 只可能出现在 {_names(cells, n)}，"
+                      f"这些格都在{target_name}。因此{target_name}内、{reason['unit']}之外的格子排除 {digit}。")
+    visual["premise"] = sorted(hosts)
+    return "\n".join([*detail, *_effect_lines(events, n)]), visual
 
 
 def _explain_subset(events, data, n):

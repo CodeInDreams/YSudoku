@@ -149,57 +149,46 @@ def hidden_single(st: State, constraints=None):
 def locked_candidates(st: State, constraints=None):
     st.begin()
     n = st.n
+    regions = [unit for unit in st.units if unit.kind == "region"]
     for unit in st.units:
         if unit.kind not in ("region", "row", "col"):
             continue
+        # Collect independent deductions from the same source unit before
+        # changing any candidates. A new premise belongs to a later step.
+        pending = []
         for digit in range(1, n + 1):
             hosts = [c for c in unit.cells if st.has(c, digit)]
             if len(hosts) < 2:
                 continue
-            rows = {c // n for c in hosts}
-            cols = {c % n for c in hosts}
+            data = {"digit": digit, "unit": unit.label, "unit_kind": unit.kind,
+                    "unit_cells": unit.cells, "cells": hosts}
             if unit.kind == "region":
+                rows = {c // n for c in hosts}
+                cols = {c % n for c in hosts}
                 if len(rows) == 1:
-                    r = rows.pop()
-                    outside = [r * n + c for c in range(n) if r * n + c not in unit.cells]
-                    made = any(
-                        st.elim(c, digit, Reason("locked", {
-                            "digit": digit, "unit": unit.label, "unit_kind": unit.kind,
-                            "unit_cells": unit.cells, "target": "row", "index": r,
-                            "cells": hosts,
-                        }))
-                        for c in outside
-                    )
-                    if made:
-                        return _wrap(st)
-                if len(cols) == 1:
-                    c = cols.pop()
-                    outside = [r * n + c for r in range(n) if r * n + c not in unit.cells]
-                    made = any(
-                        st.elim(cell, digit, Reason("locked", {
-                            "digit": digit, "unit": unit.label, "unit_kind": unit.kind,
-                            "unit_cells": unit.cells, "target": "col", "index": c,
-                            "cells": hosts,
-                        }))
-                        for cell in outside
-                    )
-                    if made:
-                        return _wrap(st)
-            else:  # row/col claiming
-                regions = [u for u in st.units if u.kind == "region" and any(c in u.cells for c in hosts)]
-                for region in regions:
-                    if all(c in region.cells for c in hosts):
-                        outside = [c for c in region.cells if c not in unit.cells]
-                        made = any(
-                            st.elim(c, digit, Reason("locked", {
-                                "digit": digit, "unit": unit.label, "unit_kind": unit.kind,
-                                "unit_cells": unit.cells, "target": "region",
-                                "cells": hosts, "region_cells": region.cells,
-                            }))
-                            for c in outside
-                        )
-                        if made:
-                            return _wrap(st)
+                    row, = rows
+                    data.update(target="row", index=row)
+                    targets = range(row * n, (row + 1) * n)
+                elif len(cols) == 1:
+                    col, = cols
+                    data.update(target="col", index=col)
+                    targets = range(col, n * n, n)
+                else:
+                    continue
+            else:
+                region = next((r for r in regions if all(c in r.cells for c in hosts)), None)
+                if region is None:
+                    continue
+                data.update(target="region", region_cells=region.cells)
+                targets = region.cells
+            removals = [c for c in targets if c not in unit.cells and st.has(c, digit)]
+            if removals:
+                pending.append((digit, removals, Reason("locked", data)))
+        if pending:
+            for digit, removals, reason in pending:
+                for cell in removals:
+                    st.elim(cell, digit, reason)
+            break
     return _wrap(st)
 
 
