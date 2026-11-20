@@ -1134,7 +1134,7 @@ export default function App() {
     <Card className="overflow-hidden">
       <CardHeader className="flex-row items-center gap-3 space-y-0 border-b py-3.5">
         <div><CardTitle className="text-sm">{t("board.title")}</CardTitle><p className="mt-0.5 text-xs text-muted-foreground">{idx < 0 ? t("board.initial") : t(candidateCount === 1 ? "board.descCandidate" : "board.descCandidates", { i: idx + 1, c: candidateCount })}</p></div>
-        <div className="ml-auto flex items-center gap-1.5"><Badge variant="outline">{t("board.readonly")}</Badge><Badge variant="outline">{t("board.readonly.badge")}</Badge></div>
+        <div className="ml-auto flex w-16 shrink-0 items-center justify-end gap-3"><Badge variant="outline">{t("board.readonly")}</Badge><Badge variant="outline">{t("board.readonly.badge")}</Badge></div>
       </CardHeader>
       <CardContent className="p-5">
         <div className="relative mx-auto flex w-full max-w-[540px] items-center justify-center overflow-hidden rounded-[2px] border bg-white dark:border-border dark:bg-neutral-800"
@@ -1380,10 +1380,10 @@ export default function App() {
     <div className="overflow-x-auto">
       <table className="w-full table-fixed border-collapse text-xs">
         <thead><tr className="text-left text-muted-foreground">
-          <th className="w-[48%] border-b px-3 py-2 font-medium md:w-[36%]">{t("table.puzzle")}</th>
+          <th className="w-[58%] border-b px-3 py-2 font-medium md:w-[36%]">{t("table.puzzle")}</th>
           <th className="hidden w-[10%] border-b px-2 py-2 font-medium md:table-cell">{t("table.status")}</th>
           <th className="hidden w-[7%] border-b px-2 py-2 font-medium md:table-cell">{t("table.steps")}</th>
-          <th className="w-[52%] border-b px-2 py-2 font-medium md:w-[31%]">{t("history.layers")}</th>
+          <th className="w-[42%] border-b px-2 py-2 font-medium md:w-[31%]">{t("history.layers")}</th>
           <th className="hidden w-[16%] border-b px-2 py-2 font-medium md:table-cell">{t(byOpened ? "table.opened" : "table.saved")}</th>
         </tr></thead>
         <tbody>
@@ -1396,7 +1396,7 @@ export default function App() {
                   <div className="flex items-center gap-2">
                     <div className="min-w-0"><div className="truncate font-medium">{entry.title}</div><div className="text-[10.5px] text-muted-foreground">{entry.author || entry.key}{isCurrent ? ` · ${t("history.current")}` : ""}</div>
                       <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-muted-foreground md:hidden"><span>{statusLabel(entry.status)}</span><span>·</span><span>{entry.steps_count || 0} {t("table.steps")}</span></div></div>
-                    <div className="ml-auto flex items-center gap-1.5">
+                    <div className="ml-auto flex w-16 shrink-0 items-center justify-end gap-3">
                       <button className={`${entry.favorite ? "text-amber-500" : "text-muted-foreground"}`} title={t("history.favorite")} onClick={(e) => { e.stopPropagation(); toggleFavorite(entry); }}><Star className="h-3.5 w-3.5" fill={entry.favorite ? "currentColor" : "none"} /></button>
                       <button className="text-rose-500 hover:text-rose-600" title={isCurrent ? t("history.deleteCurrentConfirm", { title: entry.title }) : t("history.deletePuzzle")} onClick={(e) => { e.stopPropagation(); removeEntry(entry); }}><Trash2 className="h-3.5 w-3.5" /></button>
                     </div>
@@ -1405,10 +1405,10 @@ export default function App() {
                 <td className="hidden px-2 py-2.5 md:table-cell"><Badge className="whitespace-nowrap" variant={["solved", "solved-global", "solved-search"].includes(entry.status) ? "success" : "outline"}>{statusLabel(entry.status)}</Badge></td>
                 <td className="hidden px-2 py-2.5 font-mono text-[11px] text-muted-foreground md:table-cell">{entry.steps_count || 0}</td>
                 <td className="overflow-hidden px-2 py-2.5">
-                  <div className="flex min-w-0 flex-nowrap items-center gap-1 whitespace-nowrap">
+                  <div className="flex min-w-0 flex-col items-stretch gap-0.5">
                     {["rules", "steps", "frames"].map((layer) => entry.layers?.[layer] && (
-                      <span key={layer} title={`${t(`layers.${layer}`)} ${fmtBytes(entry.sizes?.[layer])}`} className="inline-flex shrink-0 items-center gap-0 whitespace-nowrap rounded border px-0.5 py-0 text-[9px] text-muted-foreground">
-                        {{ rules: lang === "zh" ? "规" : "R", steps: lang === "zh" ? "步" : "S", frames: lang === "zh" ? "图" : "F" }[layer]} {fmtBytes(entry.sizes?.[layer])}
+                      <span key={layer} title={`${t(`layers.${layer}`)} ${fmtBytes(entry.sizes?.[layer])}`} className="inline-flex items-center justify-between gap-1 whitespace-nowrap rounded border px-1.5 py-0.5 text-[9px] text-muted-foreground">
+                        {t(`layers.${layer}`)} {fmtBytes(entry.sizes?.[layer])}
                         <button className="text-rose-500 hover:text-rose-600" title={isCurrent ? t("history.confirmDeleteCurrentLayer", { title: entry.title, layer: t(`layers.${layer}`) }) : t("history.delete", { layer: t(`layers.${layer}`) })} onClick={(e) => { e.stopPropagation(); removeLayer(entry, layer); }}><X className="h-2.5 w-2.5" /></button>
                       </span>
                     ))}
