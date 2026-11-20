@@ -66,6 +66,12 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
             pass
     key = store.key_for(target)
     lang = str(body.get("lang") or "zh").lower()[:2]
+    if not demo:
+        meta = store._meta(key)
+        if not meta.get("title"):
+            store._update_meta(key, title=target, author="", target=target,
+                               at=time.time(), opened_at=time.time(),
+                               status="running", steps_count=0)
     if opened_at is not None:
         store.record_open(key, opened_at)
 
