@@ -5,6 +5,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
@@ -65,13 +66,17 @@ class RepairTest(unittest.TestCase):
     def tearDownClass(cls):
         cls.server.shutdown()
 
-    def test_repair_after_stuck(self):
+    # The local fixture has no SudokuPad URL. Supply an image to the mock API.
+    @patch("ysudoku.pipeline._rule_image", return_value="data:image/png;base64,"
+           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=")
+    def test_repair_after_stuck(self, rule_image):
         config = LLMConfig(base_url=f"http://127.0.0.1:{self.port}", api_key="test", model="mock")
         analysis = analyze(
             str(ROOT / "fixtures" / "demo-killer-repair.json"), llm_config=config
         )
         self.assertEqual(analysis.source, "llm-repair")
         self.assertEqual(analysis.status, "solved")
+        self.assertEqual(rule_image.call_count, 2)
         self.assertEqual(_Handler.calls, 2, "one compile + one repair call expected")
 
 

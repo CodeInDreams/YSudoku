@@ -5,6 +5,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
@@ -68,13 +69,19 @@ class LLMPipelineTest(unittest.TestCase):
     def tearDownClass(cls):
         cls.server.shutdown()
 
-    def test_llm_rule_compilation(self):
+    # The local fixture has no SudokuPad URL. Supply an image to the mock API.
+    @patch("ysudoku.pipeline._rule_image", return_value="data:image/png;base64,"
+           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=")
+    def test_llm_rule_compilation(self, rule_image):
         config = LLMConfig(base_url=f"http://127.0.0.1:{self.port}", api_key="test", model="mock")
         analysis = analyze(str(ROOT / "fixtures" / "demo-killer.json"), llm_config=config)
         self.assertEqual(analysis.source, "llm")
         self.assertEqual(analysis.status, "solved")
         self.assertEqual(analysis.solution_check, "与题面内置答案一致")
         self.assertEqual(_Handler.calls, 1)
+
+        self.assertTrue(_Handler.image)
+        rule_image.assert_called_once()
 
         cached = analyze(str(ROOT / "fixtures" / "demo-killer.json"), llm_config=config)
         self.assertEqual(cached.source, "cache")

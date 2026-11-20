@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from .narrate import Step, build_step
 from .search import count_solutions, satisfiable
 from .state import Contradiction, Event, Reason, State, bits, build_units, cell_name
+from .simplify import can_simplify, simplify
 from .sum_links import compile_links
 from .techniques import TECHNIQUES, TRIGGERS
 
@@ -28,6 +29,7 @@ class Solver:
                                  chaos=puzzle.is_chaos)
         self.state = State(puzzle.size, self.units)
         self.constraints = list(rules.constraints)
+        self._rewrite_inputs = {}
         self.sum_links = compile_links(self.constraints, puzzle.size)
         self.state.constraints = self.constraints
         self.allow_chains = allow_chains
@@ -139,6 +141,32 @@ class Solver:
         elims = sum(1 for e in events if e.kind == "elim")
         return (copies * 50 + elims, len(events))
 
+    def _simplification_step(self):
+        for index, rule in enumerate(self.constraints):
+            if not can_simplify(rule):
+                continue
+            signature = tuple((self.state.dom[c], self.state.vals[c]) for c in rule.cells())
+            if self._rewrite_inputs.get(index) == signature:
+                continue
+            self._rewrite_inputs[index] = signature
+            replacement = simplify(rule, self.state)
+            if replacement is None:
+                continue
+            target, detail = replacement
+            self.constraints[index] = target
+            result = self._constraint_step(target)
+            if isinstance(result, tuple):
+                return result
+            if result is None:
+                result = Step(len(self.steps), "constraint_simplify", 1, "", "", [])
+                result.pre_dom, result.pre_vals = self._pre()
+            result.technique = "constraint_simplify"
+            result.title = "约束简化"
+            result.detail = detail + ("\n" + result.detail if result.events else "")
+            result.visual.update(focus=target.cells(), premise=rule.cells())
+            return result, None
+        return None
+
     def next_step(self):
         # Explicit user/predicate constraints are authoritative and run first.
         for constraint in self.constraints:
@@ -160,6 +188,10 @@ class Solver:
                 return result
             if result is not None:
                 return result, None
+
+        replacement = self._simplification_step()
+        if replacement is not None:
+            return replacement
 
         # Then constraints, preferring ones around the last step and ones whose
         # cells have the fewest remaining candidates.

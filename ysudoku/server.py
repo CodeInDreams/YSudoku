@@ -17,13 +17,14 @@ import time
 import uuid
 
 from . import history, live, store, sudokupad
-from .pipeline import analyze
+from .pipeline import analyze, initial_screenshot
+from .llm import LLMError
 
 STATIC_DIR = Path(__file__).parent / "static"
 DIST_DIR = Path(__file__).parent.parent / "web" / "dist"
 def _stored_analysis(target: str, body: dict, demo: bool = False,
                      force_rules: bool = False, force_steps: bool = False,
-                     on_rules=None, on_step=None):
+                     on_rules=None, on_step=None, on_preview=None, opened_at=None):
     if "logic-masters.de" in target:
         try:
             data = sudokupad.load(target)
@@ -34,6 +35,19 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
             pass
     key = store.key_for(target)
     lang = str(body.get("lang") or "zh").lower()[:2]
+    if opened_at is not None:
+        store.record_open(key, opened_at)
+
+    def preview(url, size, existing=""):
+        path = Path(".cache/rulesheets") / Path(existing).name
+        try:
+            if not existing or not path.is_file():
+                path = Path(initial_screenshot(url, size, store.frame_path(key, -1)))
+        except (OSError, LLMError):
+            return ""
+        on_preview(f"/api/rulesheet/{path.name}")
+        return str(path)
+
     if force_rules:
         for layer in ("rules", "steps", "frames"):
             store.delete_layer(key, layer)
@@ -50,6 +64,8 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
         if (cached and cached.get("lang", "zh") == lang
                 and cached.get("algo_version") == ANALYSIS_VERSION
                 and meta.get("rules_hash") == rules.get("hash")):
+            if on_preview:
+                preview(cached.get("source_url", ""), cached["puzzle"]["size"], cached.get("rule_sheet", ""))
             cached["notes"] = meta.get("notes", "")
             if isinstance(cached.get("rules"), dict):
                 cached["rules"]["notes"] = meta.get("notes", "")
@@ -86,6 +102,7 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
         lang=lang,
         on_rules=on_rules,
         on_step=on_step,
+        on_puzzle=preview if on_preview else None,
     )
     payload = analysis.to_json()
     payload["notes"] = notes
@@ -156,6 +173,7 @@ def _start_job(target: str, body: dict, demo: bool) -> str:
         try:
             key, payload = _stored_analysis(
                 target, body, demo=demo, on_rules=on_rules, on_step=on_step,
+                on_preview=lambda url: _job_update(job_id, preview=url), opened_at=job["started"],
             )
             _job_update(
                 job_id, phase="done", status="done", key=key, payload=payload,
@@ -226,7 +244,7 @@ class Handler(BaseHTTPRequestHandler):
                 "id": job["id"], "phase": job["phase"], "status": job["status"],
                 "rules": job.get("rules", []), "steps": job.get("steps", []),
                 "error": job.get("error"), "key": job.get("key"),
-                "count": len(job.get("steps", [])),
+                "count": len(job.get("steps", [])), "preview": job.get("preview", ""),
             }
             if job.get("payload") is not None:
                 payload["payload"] = job["payload"]

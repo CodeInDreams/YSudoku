@@ -339,7 +339,7 @@ class Quadruple(Constraint):
         return f"四格提示 {''.join(map(str, self.digits))}"
 
     def to_dict(self) -> dict:
-        return {"kind": "quadruple", "cells": self._cells, "digits": self.digits}
+        return {"kind": self.kind, "cells": self._cells, "digits": self.digits}
 
     def check(self, values: list[int]) -> bool:
         present = [values[c] for c in self._cells]
@@ -354,7 +354,7 @@ class Quadruple(Constraint):
         return True
 
     def prune(self, st: State) -> bool:
-        reason = Reason("quadruple", {"cells": self._cells, "digits": self.digits})
+        reason = Reason(self.kind, {"cells": self._cells, "digits": self.digits})
         changed = False
         needs = list(self.digits)
 
@@ -388,6 +388,20 @@ class Quadruple(Constraint):
             if len(hosts) == 1 and self.digits.count(digit) == 1:
                 changed |= st.place(hosts[0], digit, reason)
         return changed
+
+
+class ExactDigits(Quadruple):
+    """Every digit, including its multiplicity, occupies one scope cell."""
+
+    kind = "exact_digits"
+
+    def __init__(self, cells, digits):
+        if len(cells) != len(digits):
+            raise ValueError("exact digits must cover the entire scope")
+        super().__init__(cells, digits)
+
+    def describe(self):
+        return "固定数字组合 " + "、".join(map(str, self.digits))
 
 
 class Palindrome(Constraint):

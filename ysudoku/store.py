@@ -8,6 +8,7 @@ import os
 import re
 import shutil
 import time
+from threading import RLock
 from pathlib import Path
 
 LAYERS = ("rules", "steps", "frames")
@@ -85,12 +86,22 @@ def _meta(key: str) -> dict:
     return _read_json(_meta_path(key), {})
 
 
+_META_LOCK = RLock()
+
+
 def _update_meta(key: str, **values) -> dict:
-    meta = _meta(key)
-    meta.update(values)
-    meta["key"] = key
-    _write_json(_meta_path(key), meta)
-    return meta
+    with _META_LOCK:
+        meta = _meta(key)
+        meta.update(values)
+        meta["key"] = key
+        _write_json(_meta_path(key), meta)
+        return meta
+
+
+def record_open(key, timestamp):
+    with _META_LOCK:
+        if timestamp > _meta(key).get("opened_at", 0):
+            _update_meta(key, opened_at=timestamp)
 
 
 def save_rules(key: str, spec: dict, meta: dict) -> str:
@@ -204,7 +215,7 @@ def list_entries() -> list[dict]:
             continue
         key = directory.name
         meta = _meta(key)
-        if not meta:
+        if not meta or "title" not in meta:
             continue
         layers = entry_layers(key)
         out.append({
@@ -214,6 +225,7 @@ def list_entries() -> list[dict]:
             "title": meta.get("title", key),
             "author": meta.get("author", ""),
             "at": meta.get("at", 0),
+            "opened_at": meta.get("opened_at", meta.get("at", 0)),
             "favorite": bool(meta.get("favorite")),
             "status": meta.get("status", ""),
             "steps_count": meta.get("steps_count", 0),

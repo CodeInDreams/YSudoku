@@ -38,6 +38,7 @@ TITLES = {
     "kropki": "黑白点",
     "xv": "XV",
     "quadruple": "四格提示",
+    "exact_digits": "固定数字组合",
     "palindrome": "回文线",
     "renban": "Renban",
     "german_whisper": "德式 Whisper",
@@ -794,6 +795,11 @@ def _explain_xv(events, data, n):
     visual["groups"].append({"cells": [a, b], "kind": "pair"})
     visual["chips"].append({"cell": a, "text": str(total), "kind": "sum"})
     return detail, visual
+
+
+def _explain_exact_digits(events, data, n):
+    detail = f"{_names(data['cells'], n)} 必须恰好填入 {_values(data['digits'])}。"
+    return "\n".join([detail, *_effect_lines(events, n)]), _basic_visual(events, n)
 
 
 def _explain_quadruple(events, data, n):

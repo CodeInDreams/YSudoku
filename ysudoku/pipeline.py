@@ -18,7 +18,7 @@ from .narrate import Step
 
 
 # Invalidate cached results when the solver's proof strategy changes.
-ANALYSIS_VERSION = 13
+ANALYSIS_VERSION = 14
 
 
 @dataclass
@@ -242,6 +242,7 @@ def analyze(
     notes: str = "",
     on_rules=None,
     on_step=None,
+    on_puzzle=None,
 ) -> Analysis:
     from .sudokupad import load
 
@@ -251,6 +252,8 @@ def analyze(
         puzzle.source_url = target
     elif not puzzle.source_url and target.isalnum():
         puzzle.source_url = "https://sudokupad.app/" + target
+    if on_puzzle:
+        puzzle.rule_sheet = on_puzzle(puzzle.source_url, puzzle.size) or ""
     inventory = build_inventory(puzzle)
 
     warnings: list[str] = []
@@ -539,25 +542,30 @@ def _llm_repair(puzzle, inventory, config, spec, diagnostics, warnings):
     return new_spec, new_rules
 
 
-def _rule_image(puzzle):
+def initial_screenshot(url, size, frame):
     from urllib.parse import urlsplit
-    from . import live, store
-
-    url = puzzle.source_url
+    from . import live
     if urlsplit(url).hostname != "sudokupad.app" or urlsplit(url).scheme != "https":
         raise llm.LLMError("缺少可用于截取初始盘面的 SudokuPad 链接")
-    frame = store.frame_path(store.key_for(url), -1)
     try:
-        png = frame.read_bytes() if frame.is_file() else live.initial_frame(url, puzzle.size)
+        png = frame.read_bytes() if frame.is_file() else live.initial_frame(url, size)
         if not png.startswith(b"\x89PNG\r\n\x1a\n") or not png.endswith(b"IEND\xaeB`\x82"):
             raise ValueError("初始帧 PNG 不完整")
         path = Path(".cache/rulesheets") / (hashlib.sha256(png).hexdigest() + ".png")
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(png)
-        puzzle.rule_sheet = str(path)
-        return "data:image/png;base64," + base64.b64encode(png).decode()
+        return str(path)
     except (OSError, ValueError, live.LiveError) as exc:
         raise llm.LLMError(f"无法取得 SudokuPad 初始盘面截图：{exc}") from exc
+
+
+def _rule_image(puzzle):
+    from . import store
+    if not puzzle.rule_sheet:
+        url = puzzle.source_url
+        puzzle.rule_sheet = initial_screenshot(url, puzzle.size, store.frame_path(store.key_for(url), -1))
+    png = Path(puzzle.rule_sheet).read_bytes()
+    return "data:image/png;base64," + base64.b64encode(png).decode()
 
 
 def _apply_arrow_geometry(puzzle, spec, warnings):

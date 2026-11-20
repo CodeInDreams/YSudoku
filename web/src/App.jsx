@@ -399,6 +399,7 @@ export default function App() {
   const [speed, setSpeed] = useState(() => Number(persisted.speed) || 1100);
   const [session, setSession] = useState(null);
 
+  const [previewSrc, setPreviewSrc] = useState("");
   const [frameSrc, setFrameSrc] = useState("");
   const [frameStep, setFrameStep] = useState(-2);
   const [ready, setReady] = useState(false);
@@ -674,6 +675,7 @@ export default function App() {
   }
 
   async function startLive(nextAnalysis) {
+    const token = streamToken.current;
     setReady(false);
     setSession(null);
     setFrameSrc("");
@@ -692,10 +694,11 @@ export default function App() {
         key: nextAnalysis.storage?.key || "",
         steps_hash: (hash >>> 0).toString(16),
       });
+      if (token !== streamToken.current) return;
       setSession(data.session);
       setRetry((v) => v + 1);
     } catch (err) {
-      setError(`${t("error.build")}: ${err.message}`);
+      if (token === streamToken.current) setError(`${t("error.build")}: ${err.message}`);
     }
   }
 
@@ -730,6 +733,11 @@ export default function App() {
 
   async function streamSolve(body, targetUrl) {
     const token = ++streamToken.current;
+    setPreviewSrc("");
+    setSession(null);
+    setFrameSrc("");
+    setReady(false);
+    setIdx(-1);
     if (frameTimer.current) clearInterval(frameTimer.current);
     setBusy(true); setError(""); setPlaying(false);
     setAnalysis(null); setStreamRules([]); setStreamSteps([]); setStreamTarget([]); finalPayload.current = null;
@@ -742,6 +750,7 @@ export default function App() {
         const job = await res.json().catch(() => ({}));
         if (token !== streamToken.current) return;
         if (!res.ok) throw new Error(job.error || "job failed");
+        if (job.preview) setPreviewSrc(job.preview);
         setStreamRules(job.rules || []);
         setStreamTarget(job.steps || []);
         if (job.phase === "solving") setPhase("solving");
@@ -799,6 +808,7 @@ export default function App() {
     setIdx(-1);
     setDeleted(false);
     setReady(false);
+    setPreviewSrc("");
     setPhase("idle");
     setView("solve");
   }
@@ -969,7 +979,7 @@ export default function App() {
       <CardContent className="p-5">
         <div className="relative mx-auto flex w-full max-w-[540px] items-center justify-center overflow-hidden rounded-[2px] border bg-white dark:border-border dark:bg-neutral-800"
           style={{ aspectRatio: gridRect ? `${gridRect.imageWidth} / ${gridRect.imageHeight}` : "1 / 1" }}>
-          {!ready && !deleted && <div className="absolute inset-0 z-10 grid place-items-center gap-2 bg-white/80 text-xs text-slate-500 dark:bg-neutral-800/90 dark:text-neutral-300"><Loader2 className="h-5 w-5 animate-spin text-primary" />{phase === "rendering" ? t("phase.rendering") : t("board.loading")}</div>}
+          {!ready && !previewSrc && !deleted && <div className="absolute inset-0 z-10 grid place-items-center gap-2 bg-white/80 text-xs text-slate-500 dark:bg-neutral-800/90 dark:text-neutral-300"><Loader2 className="h-5 w-5 animate-spin text-primary" />{phase === "rendering" ? t("phase.rendering") : t("board.loading")}</div>}
           {deleted && (
             <div className="absolute inset-0 z-20 grid place-items-center bg-background/90 p-6 text-center">
               <div className="max-w-xs space-y-2">
@@ -978,6 +988,9 @@ export default function App() {
                 <p className="text-xs text-muted-foreground">{t("step.deleted")}</p>
               </div>
             </div>
+          )}
+          {previewSrc && !frameSrc && !deleted && (
+            <img src={previewSrc} alt={t("board.initial")} className="h-full w-full object-contain" />
           )}
           {frameSrc && !deleted && (
             <img src={frameSrc} alt="SudokuPad"
@@ -1170,7 +1183,7 @@ export default function App() {
     </Card>
   );
 
-  const entryTable = (entries, compact = false) => (
+  const entryTable = (entries, byOpened = false) => (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse text-xs">
         <thead><tr className="text-left text-muted-foreground">
@@ -1178,11 +1191,12 @@ export default function App() {
           <th className="border-b px-3 py-2 font-medium">{t("table.status")}</th>
           <th className="border-b px-3 py-2 font-medium">{t("table.steps")}</th>
           <th className="border-b px-3 py-2 font-medium">{t("history.layers")}</th>
-          <th className="border-b px-3 py-2 font-medium">{t("table.saved")}</th>
+          <th className="border-b px-3 py-2 font-medium">{t(byOpened ? "table.opened" : "table.saved")}</th>
         </tr></thead>
         <tbody>
           {entries.map((entry) => {
             const isCurrent = entry.key === analysis?.storage?.key;
+            const timestamp = byOpened ? entry.opened_at : entry.at;
             return (
               <tr key={entry.key} className={`cursor-pointer border-b last:border-0 hover:bg-muted/40 ${isCurrent ? "bg-muted/30" : ""}`} onClick={() => loadEntry(entry)}>
                 <td className="px-3 py-2.5">
@@ -1206,7 +1220,7 @@ export default function App() {
                     ))}
                   </div>
                 </td>
-                <td className="px-3 py-2.5 text-[10.5px] text-muted-foreground">{entry.at ? new Date(entry.at * 1000).toLocaleDateString(lang === "zh" ? "zh-CN" : "en-US") : ""}</td>
+                <td className="px-3 py-2.5 text-[10.5px] text-muted-foreground">{timestamp ? new Date(timestamp * 1000).toLocaleDateString(lang === "zh" ? "zh-CN" : "en-US") : ""}</td>
               </tr>
             );
           })}
@@ -1375,7 +1389,11 @@ export default function App() {
                 {phaseHint && <div className="mt-1 text-[11px] text-muted-foreground">{phaseHint}</div>}
               </div>
             )}
-            {!analysis ? (phase === "idle" ? emptySolve : (
+            {!analysis ? (phase === "idle" ? emptySolve : previewSrc ? (
+              <Card><CardContent className="p-5">
+                <img src={previewSrc} alt={t("board.initial")} className="mx-auto w-full max-w-[540px] object-contain" />
+              </CardContent></Card>
+            ) : (
               <Card>
                 <CardContent className="flex min-h-[320px] flex-col items-center justify-center gap-4 text-center">
                   <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -1391,13 +1409,16 @@ export default function App() {
                   <div className="min-w-0 space-y-6">{boardCard}</div>
                   <div className="min-w-0 space-y-6">{inspector}{stepsCard}</div>
                 </div>
+
+              </>
+            )}
+            {!!store?.entries?.length && (
                 <div className="mt-6">
                   <Card>
-                    <CardHeader className="flex-row items-center justify-between space-y-0 py-3.5"><div><CardTitle className="text-sm">{t("history.recentSolves")}</CardTitle><p className="mt-0.5 text-xs text-muted-foreground">{t("history.recentDesc")}</p></div><Button variant="outline" size="sm" onClick={() => setView("history")}>{t("history.openAll")}</Button></CardHeader>
-                    <CardContent className="p-0">{entryTable((store?.entries || []).slice(0, 4))}</CardContent>
+                    <CardHeader className="flex-row items-center justify-between space-y-0 py-3.5"><div><CardTitle className="text-sm">{t("history.recentOpens")}</CardTitle><p className="mt-0.5 text-xs text-muted-foreground">{t("history.recentDesc")}</p></div><Button variant="outline" size="sm" onClick={() => setView("history")}>{t("history.openAll")}</Button></CardHeader>
+                    <CardContent className="p-0">{entryTable([...(store?.entries || [])].sort((a, b) => b.opened_at - a.opened_at).slice(0, 4), true)}</CardContent>
                   </Card>
                 </div>
-              </>
             )}
           </>
         )}
