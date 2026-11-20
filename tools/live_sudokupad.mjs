@@ -482,6 +482,25 @@ async function act(action) {
       await page.keyboard.type(String(digit));
       await page.waitForTimeout(20);
     }
+  } else if (action.op === "pen") {
+    await clearSelection();
+    await page.click("#control-pen");
+    await page.click("#control-colour");
+    const swatches = page.locator(".palettebutton");
+    const index = Number(action.index);
+    if (index >= 0 && index < await swatches.count()) {
+      await swatches.nth(index).click({ force: true });
+    }
+    const a = action.cells?.[0], b = action.cells?.[1];
+    if (a != null && b != null) {
+      const [x1, y1] = await cellPoint(Math.floor(a / board.n), a % board.n);
+      const [x2, y2] = await cellPoint(Math.floor(b / board.n), b % board.n);
+      await page.mouse.move(x1, y1);
+      await page.mouse.down();
+      await page.mouse.move(x2, y2, { steps: 8 });
+      await page.mouse.up();
+    }
+    await page.waitForTimeout(40);
   } else if (action.op === "colour") {
     await clearSelection();
     const r = Math.floor(action.cell / board.n);

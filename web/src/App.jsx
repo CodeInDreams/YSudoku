@@ -142,6 +142,7 @@ function buildStepActions(analysis) {
   const marked = new Set();
   const values = new Map();
   const colourState = new Map();
+  const penState = new Set();
   (analysis.puzzle?.givens || []).forEach((value, cell) => { if (value) values.set(cell, value); });
   let inBranch = false;
   let branchBase = null;
@@ -234,6 +235,14 @@ function buildStepActions(analysis) {
       update(cell, desired, placeByCell.get(cell));
     }
     state = nextState;
+    for (const edge of step.visual?.region_edges || []) {
+      const cells = edge.cells || [];
+      if (cells.length !== 2) continue;
+      const key = `${cells[0]}-${cells[1]}`;
+      if (penState.has(key)) continue;
+      penState.add(key);
+      actions.push({ op: "pen", cells, index: edge.fixed ? 4 : 6 });
+    }
     for (const item of step.visual?.colours || []) {
       for (const cell of item.cells || []) {
         const applied = colourState.get(cell) || new Set();
