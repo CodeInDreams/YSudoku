@@ -555,8 +555,16 @@ def serve(host: str = "127.0.0.1", port: int = 8765):
     return httpd
 
 
+def _warm_live() -> None:
+    try:
+        live.ensure()
+    except Exception:
+        pass
+
+
 def run(host: str = "127.0.0.1", port: int = 8765, open_browser: bool = True):
     httpd = serve(host, port)
+    threading.Thread(target=_warm_live, daemon=True).start()
     url = f"http://{host}:{port}/"
     print(f"YSudoku 正在运行：{url}")
     if open_browser:
