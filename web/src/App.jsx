@@ -236,8 +236,10 @@ function buildStepActions(analysis) {
     state = nextState;
     for (const item of step.visual?.colours || []) {
       for (const cell of item.cells || []) {
-        if (colourState.get(cell) === item.colour) continue;
-        colourState.set(cell, item.colour);
+        const applied = colourState.get(cell) || new Set();
+        if (applied.has(item.colour)) continue;
+        applied.add(item.colour);
+        colourState.set(cell, applied);
         actions.push({ op: "colour", cell, index: item.colour });
       }
     }
