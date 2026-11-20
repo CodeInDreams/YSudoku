@@ -31,8 +31,9 @@ class RegionRefutationTest(unittest.TestCase):
         fixture = Path(__file__).resolve().parents[1] / "fixtures/tringle.json"
         analysis = analyze(str(fixture), use_llm=False, chaos_time_limit=0.01)
         steps = analysis.result.steps
-        proof, = [s for s in steps if s.technique == "constraint_simplify"]
         cells = [27, 28, 36, 37]
+        proof, = [s for s in steps if s.technique == "constraint_simplify"
+                  and s.visual["focus"] == cells]
         self.assertEqual(proof.visual["focus"], cells)
         self.assertEqual(proof.visual["colours"], steps[proof.index-1].visual["colours"])
         self.assertIn("R3C3", proof.detail)
@@ -43,3 +44,6 @@ class RegionRefutationTest(unittest.TestCase):
         original = next(c for c in analysis.rules.constraints
                         if c.kind == "region_count" and c.cells() == cells)
         self.assertEqual(original.counts, [1, 4])
+        growth = next(s for s in steps[proof.index+2:] if s.title == "区域形状推理")
+        self.assertTrue(any({1, 2, 3, 4, 5, 10} <= set(g["cells"])
+                            for g in growth.visual["colours"]))

@@ -27,13 +27,16 @@ class CornerRegionTest(unittest.TestCase):
             self.assertEqual(choice["cells"], [corner])
             self.assertEqual(set(choice["colours"]), {fragments.colours[a], fragments.colours[b]})
             self.assertEqual(len(snapshot["colours"]), 3)
-            self.assertEqual(sum(edge["fixed"] for edge in snapshot["region_edges"]), 2)
+            def local_edges(result):
+                return [e for e in result["region_edges"] if set(e["cells"]) <= set(cells)]
+
+            self.assertEqual(sum(edge["fixed"] for edge in local_edges(snapshot)), 2)
             fragments.apart(corner, a)
             self.assertTrue(fragments.propagate_choices())
             self.assertEqual(fragments.owner[corner], fragments.owner[b])
             self.assertFalse(fragments.snapshot()["region_options"])
-            self.assertEqual(len(fragments.snapshot()["region_edges"]), 3)
-            self.assertEqual(len(snapshot["region_edges"]), 4)
+            self.assertEqual(len(local_edges(fragments.snapshot())), 3)
+            self.assertEqual(len(local_edges(snapshot)), 4)
 
     def test_replacement_is_active_and_rejects_two_blocked_exits(self):
         p = parse_puzzle({"cells": [[{} for _ in range(4)] for _ in range(4)],

@@ -5,6 +5,7 @@ from itertools import combinations
 
 from .colour_map import ColourMap, MAX_COLOURS_PER_CELL
 from .narrate import Step
+from .region_shapes import shape_deduction
 from .region_refutation import refute_count, region_growth
 from .state import Contradiction, Reason, cell_name
 from .visual_colours import HEX
@@ -191,7 +192,20 @@ class RegionFragments:
                 edges.append({"cells": [anchor, diagonal], "fixed": True})
                 if self.owner[anchor] != owned:
                     edges.append({"cells": [cell, anchor], "fixed": owned in targets})
-        return {"colours": groups, "region_pairs": pairs, "region_options": list(options.values()), "region_edges": edges}
+        drawn = {tuple(sorted(edge["cells"])) for edge in edges}
+        for cell, root in enumerate(self.owner):
+            for other in (cell + 1, cell + self.n):
+                if (other >= len(self.owner) or not self.expand(1 << cell) & (1 << other)
+                        or (cell, other) in drawn):
+                    continue
+                peer = self.owner[other]
+                if root != peer and (root in self.colours or peer in self.colours) and self.blocked(root, peer):
+                    edges.append({"cells": [cell, other], "fixed": True})
+        progress = {"complete": sum(len(g) == self.n for g in self.groups.values()),
+                    "total": len(self.owner) // self.n,
+                    "coloured": sum(len(self.groups[r]) for r in self.colours if r not in options)}
+        return {"colours": groups, "region_pairs": pairs, "region_options": list(options.values()),
+                "region_edges": edges, "region_progress": progress}
 
     def clue(self, rule):
         cells = rule.cells()
@@ -329,18 +343,24 @@ def region_steps(solver, rules, steps):
                 raise Contradiction(error)
             if step is None:
                 proof = refute_count(fragments, clues)
-                if proof is None:
-                    break
-                index, count, reasons = proof
-                clue = clues[index]
-                clue.counts = [k for k in clue.counts if k != count]
-                cells = clue.cells()
-                remaining = " 或 ".join(map(str, clue.counts))
-                detail = [f"假设以 {cell_name(cells[0], state.n)} 起的圈跨 {count} 个区域，"
-                          f"则每个区域至多占圈内 {len(cells) - count + 1} 格。",
-                          *reasons, f"排除 {count} 区，此圈只剩 {remaining} 区。"]
-                step = Step(len(steps), "constraint_simplify", 2, f"区域数反证：排除 {count} 区",
-                            "\n".join(detail), [], visual={"focus": cells}, pre_dom=pre_dom, pre_vals=pre_vals)
+                if proof:
+                    index, count, reasons = proof
+                    clue = clues[index]
+                    clue.counts = [k for k in clue.counts if k != count]
+                    cells = clue.cells()
+                    remaining = " 或 ".join(map(str, clue.counts))
+                    detail = [f"假设以 {cell_name(cells[0], state.n)} 起的圈跨 {count} 个区域，"
+                              f"则每个区域至多占圈内 {len(cells) - count + 1} 格。",
+                              *reasons, f"排除 {count} 区，此圈只剩 {remaining} 区。"]
+                    step = Step(len(steps), "constraint_simplify", 2, f"区域数反证：排除 {count} 区",
+                                "\n".join(detail), [], visual={"focus": cells}, pre_dom=pre_dom, pre_vals=pre_vals)
+                else:
+                    shape = shape_deduction(fragments, clues)
+                    if not shape:
+                        break
+                    cells, detail = shape
+                    step = Step(len(steps), "chaos_region", 2, "区域形状推理", detail, [],
+                                visual={"focus": cells}, pre_dom=pre_dom, pre_vals=pre_vals)
             step.index = len(steps)
         snapshot = fragments.snapshot()
         # Region labels take one slot; preserve other annotations up to the

@@ -1142,6 +1142,13 @@ export default function App() {
                 <div className="flex items-center gap-2"><h2 className="text-sm font-semibold">{stepTitle(current)}</h2><Badge variant="outline">{t("step.tier", { tier: current.tier })}</Badge></div>
                 <p className="text-[11px] text-muted-foreground">{t("step.of", { i: idx + 1, n: steps.length })}</p>
                 <StepNarrative step={current} lang={lang} n={n} t={t} />
+                {current.visual?.region_progress && (
+                  <p className="text-xs text-muted-foreground">
+                    {lang === "zh"
+                      ? `区域完成 ${current.visual.region_progress.complete}/${current.visual.region_progress.total} · 单色格 ${current.visual.region_progress.coloured}/${n * n}`
+                      : `${current.visual.region_progress.complete}/${current.visual.region_progress.total} regions complete · ${current.visual.region_progress.coloured}/${n * n} single-colour cells`}
+                  </p>
+                )}
                 {current.visual?.region_pairs?.length > 0 && (
                   <details className="text-xs">
                     <summary className="cursor-pointer">{lang === "zh" ? "区域颜色关系" : "Region colour relationships"}</summary>

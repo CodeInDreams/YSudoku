@@ -119,7 +119,7 @@ def load(target: str, use_cache: bool = True) -> dict:
             continue
         if use_cache:
             try:
-                CACHE_DIR.mkdir(parents=True, exist_ok=True)
+                cache_file.parent.mkdir(parents=True, exist_ok=True)
                 cache_file.write_text(json.dumps(data, ensure_ascii=True), encoding="utf-8")
             except OSError:
                 pass

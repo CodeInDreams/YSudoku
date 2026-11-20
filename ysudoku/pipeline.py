@@ -19,7 +19,7 @@ from .narrate import Step
 
 
 # Invalidate cached results when the solver's proof strategy changes.
-ANALYSIS_VERSION = 17
+ANALYSIS_VERSION = 18
 
 
 @dataclass
