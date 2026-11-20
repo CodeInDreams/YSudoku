@@ -1675,19 +1675,6 @@ export default function App() {
               </Card>
             )}
             {store && <>
-            <div className="grid gap-4 sm:grid-cols-3">
-              {[["rules", "layers.rules"], ["steps", "layers.steps"], ["frames", "layers.frames"]].map(([layer, key]) => (
-                <Card key={layer}><CardContent className="p-4"><div className="text-xs text-muted-foreground">{t(key)}</div><div className="mt-1 text-lg font-semibold">{store?.info?.counts?.[layer] || 0} <span className="text-xs font-normal text-muted-foreground">{puzzleUnit(store?.info?.counts?.[layer] || 0)}</span></div><div className="text-xs text-muted-foreground">{fmtBytes(store?.info?.sizes?.[layer])}</div></CardContent></Card>
-              ))}
-            </div>
-            <Card className="mt-4">
-              <CardContent className="flex flex-wrap items-center gap-2 p-3">
-                <Database className="h-4 w-4 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">{t("history.location")}:</span>
-                <code className="break-all text-[11px]">{store?.info?.location || "—"}</code>
-                <span className="ml-auto text-xs text-muted-foreground">{fmtBytes(store?.info?.total)}</span>
-              </CardContent>
-            </Card>
             <Card className="mt-4">
               <CardHeader className="py-3.5"><div className="flex flex-wrap items-center gap-2">
                 <div className="relative min-w-[180px] flex-1"><Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" /><Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("history.search")} className="h-8 pl-8 text-xs" /></div>
@@ -1704,6 +1691,18 @@ export default function App() {
             <Card className="mt-4">
               <CardHeader className="py-3.5"><CardTitle className="text-sm">{t("history.settings")}</CardTitle><p className="text-xs text-muted-foreground">{t("history.settingsDesc")}</p></CardHeader>
               <CardContent className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+                {[["rules", "layers.rules"], ["steps", "layers.steps"], ["frames", "layers.frames"]].map(([layer, key]) => (
+                  <div key={layer} className="rounded-md border px-2.5 py-2">
+                    <div className="text-muted-foreground">{t(key)}</div>
+                    <div className="mt-0.5 font-medium">{store?.info?.counts?.[layer] || 0} <span className="font-normal text-muted-foreground">{puzzleUnit(store?.info?.counts?.[layer] || 0)}</span></div>
+                    <div className="text-[10px] text-muted-foreground">{fmtBytes(store?.info?.sizes?.[layer])}</div>
+                  </div>
+                ))}
+                <div className="col-span-2 flex items-center gap-1.5 rounded-md border px-2.5 py-2 text-[10px] text-muted-foreground sm:col-span-4">
+                  <Database className="h-3.5 w-3.5 shrink-0" />
+                  <code className="truncate">{store?.info?.location || "—"}</code>
+                  <span className="ml-auto shrink-0">{fmtBytes(store?.info?.total)}</span>
+                </div>
                 {[["max_rules", "history.maxRules"], ["max_steps", "history.maxSteps"], ["max_frames", "history.maxFrames"], ["max_mb", "history.maxMb"]].map(([key, label]) => (
                   <label key={key} className="flex items-center justify-between gap-2 rounded-md border px-2.5 py-2"><span className="text-muted-foreground">{t(label)}</span><input type="number" min="0" value={settings[key] ?? ""} onChange={(e) => setSettings((s) => ({ ...s, [key]: Number(e.target.value) }))} className="w-14 bg-transparent text-right outline-none" /></label>
                 ))}
