@@ -1391,7 +1391,7 @@ export default function App() {
             const isCurrent = entry.key === analysis?.storage?.key;
             const timestamp = byOpened ? entry.opened_at : entry.at;
             return (
-              <tr key={entry.key} className={`cursor-pointer border-b last:border-0 hover:bg-muted/40 ${isCurrent ? "bg-muted/30" : ""}`} onClick={() => loadEntry(entry)}>
+              <tr key={entry.key} className={`h-[90px] cursor-pointer border-b last:border-0 hover:bg-muted/40 md:h-auto ${isCurrent ? "bg-muted/30" : ""}`} onClick={() => loadEntry(entry)}>
                 <td className="px-3 py-2.5">
                   <div className="flex items-center gap-2">
                     <div className="min-w-0"><div className="truncate font-medium">{entry.title}</div><div className="text-[10.5px] text-muted-foreground">{entry.author || entry.key}{isCurrent ? ` · ${t("history.current")}` : ""}</div>
@@ -1404,8 +1404,8 @@ export default function App() {
                 </td>
                 <td className="hidden px-2 py-2.5 md:table-cell"><Badge className="whitespace-nowrap" variant={["solved", "solved-global", "solved-search"].includes(entry.status) ? "success" : "outline"}>{statusLabel(entry.status)}</Badge></td>
                 <td className="hidden px-2 py-2.5 font-mono text-[11px] text-muted-foreground md:table-cell">{entry.steps_count || 0}</td>
-                <td className="overflow-hidden px-2 py-2.5">
-                  <div className="flex min-w-0 flex-col items-stretch gap-0.5">
+                <td className="h-[90px] overflow-hidden px-2 py-2 align-middle md:h-auto">
+                  <div className="flex h-full min-w-0 flex-col items-stretch justify-center gap-0.5">
                     {["rules", "steps", "frames"].map((layer) => entry.layers?.[layer] && (
                       <span key={layer} title={`${t(`layers.${layer}`)} ${fmtBytes(entry.sizes?.[layer])}`} className="inline-flex items-center justify-between gap-1 whitespace-nowrap rounded border px-1.5 py-0.5 text-[9px] text-muted-foreground">
                         {t(`layers.${layer}`)} {fmtBytes(entry.sizes?.[layer])}
