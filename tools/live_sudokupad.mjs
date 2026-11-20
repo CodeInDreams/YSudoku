@@ -482,6 +482,19 @@ async function act(action) {
       await page.keyboard.type(String(digit));
       await page.waitForTimeout(20);
     }
+  } else if (action.op === "colour") {
+    await clearSelection();
+    const r = Math.floor(action.cell / board.n);
+    const c = action.cell % board.n;
+    const [x, y] = await cellPoint(r, c);
+    await page.mouse.click(x, y);
+    await page.click("#control-colour");
+    const swatches = page.locator(".palettebutton");
+    const index = Number(action.index);
+    if (index >= 0 && index < await swatches.count()) {
+      await swatches.nth(index).click({ force: true });
+    }
+    await page.waitForTimeout(30);
   } else if (action.op === "place") {
     await clearSelection();
     const r = Math.floor(action.cell / board.n);

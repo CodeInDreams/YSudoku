@@ -141,6 +141,7 @@ function buildStepActions(analysis) {
   let state = new Map();
   const marked = new Set();
   const values = new Map();
+  const colourState = new Map();
   (analysis.puzzle?.givens || []).forEach((value, cell) => { if (value) values.set(cell, value); });
   let inBranch = false;
   let branchBase = null;
@@ -233,6 +234,13 @@ function buildStepActions(analysis) {
       update(cell, desired, placeByCell.get(cell));
     }
     state = nextState;
+    for (const item of step.visual?.colours || []) {
+      for (const cell of item.cells || []) {
+        if (colourState.get(cell) === item.colour) continue;
+        colourState.set(cell, item.colour);
+        actions.push({ op: "colour", cell, index: item.colour });
+      }
+    }
     const nextStep = analysis.steps[stepIndex + 1];
     if (!inBranch && nextStep?.branch && !nextStep.revert) {
       const nextCell = (nextStep.events || []).find((ev) => ev.kind === "place")?.cell ?? null;
