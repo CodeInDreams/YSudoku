@@ -136,8 +136,8 @@ async function open(url, logicalN = 0, crop = false) {
   };
   const pad = Math.max(2, 6 * scale);
   const fullGrid = crop ? {
-    x: grid.x - pad, y: grid.y - pad,
-    width: grid.width + pad * 2, height: grid.height + pad * 2,
+    x: grid.x, y: grid.y,
+    width: grid.width + pad, height: grid.height + pad,
   } : {
     x: box.x,
     y: box.y,
