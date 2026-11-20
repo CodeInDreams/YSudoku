@@ -431,6 +431,47 @@ function boardEqual(a, b) {
   return false;
 }
 
+// Colour keys from SudokuPad's first and second native palette pages.
+// The solver's first six colour IDs are ordered blue, green, yellow,
+// orange, red and purple. The transparent swatches are unused.
+const colourKeys = ["9", "4", "8", "6", "7", "5", ..."bcdefghij"];
+
+async function applyAnnotation(action) {
+  const n = board.n;
+  await page.evaluate(({ action, n, colourKeys }) => {
+    const app = Framework.app;
+    const getCell = index => app.grid.getCell(Math.floor(index / n), index % n);
+    const enabled = action.enabled !== false;
+    if (action.op === "colour") {
+      const key = colourKeys[Number(action.index) - 3];
+      const cell = getCell(action.cell);
+      if (!key || !cell || cell.colours.includes(key) === enabled) return;
+      app.act({ type: "groupstart" });
+      app.act({ type: "deselect" });
+      app.act({ type: "select", arg: [cell] });
+      app.act({ type: "colour", arg: key });
+    } else {
+      const [a, b] = [...action.cells].sort((x, y) => x - y);
+      const side = b - a === n ? "8" : b - a === 1 && a % n !== n - 1 ? "7" : null;
+      const cell = getCell(a);
+      if (!side || !cell) return;
+      const previous = cell.pen.find(value => value[0] === side);
+      const color = String(action.index);
+      if (enabled ? previous === side + color : !previous) return;
+      app.act({ type: "groupstart" });
+      app.act({ type: "deselect" });
+      app.act({ type: "select", arg: [cell] });
+      if (previous) app.act({ type: "pen", arg: side });
+      if (enabled) {
+        app.act({ type: "pencolor", arg: color });
+        app.act({ type: "pen", arg: side });
+      }
+    }
+    app.act({ type: "deselect" });
+    app.act({ type: "groupend" });
+  }, { action, n, colourKeys });
+}
+
 async function act(action) {
   if (action.op === "snapshot_start") {
     branchSnapshot = await readBoard();
@@ -482,38 +523,8 @@ async function act(action) {
       await page.keyboard.type(String(digit));
       await page.waitForTimeout(20);
     }
-  } else if (action.op === "pen") {
-    await clearSelection();
-    await page.click("#control-pen");
-    await page.click("#control-colour");
-    const swatches = page.locator(".palettebutton");
-    const index = Number(action.index);
-    if (index >= 0 && index < await swatches.count()) {
-      await swatches.nth(index).click({ force: true });
-    }
-    const a = action.cells?.[0], b = action.cells?.[1];
-    if (a != null && b != null) {
-      const [x1, y1] = await cellPoint(Math.floor(a / board.n), a % board.n);
-      const [x2, y2] = await cellPoint(Math.floor(b / board.n), b % board.n);
-      await page.mouse.move(x1, y1);
-      await page.mouse.down();
-      await page.mouse.move(x2, y2, { steps: 8 });
-      await page.mouse.up();
-    }
-    await page.waitForTimeout(40);
-  } else if (action.op === "colour") {
-    await clearSelection();
-    const r = Math.floor(action.cell / board.n);
-    const c = action.cell % board.n;
-    const [x, y] = await cellPoint(r, c);
-    await page.mouse.click(x, y);
-    await page.click("#control-colour");
-    const swatches = page.locator(".palettebutton");
-    const index = Number(action.index);
-    if (index >= 0 && index < await swatches.count()) {
-      await swatches.nth(index).click({ force: true });
-    }
-    await page.waitForTimeout(30);
+  } else if (action.op === "pen" || action.op === "colour") {
+    await applyAnnotation(action);
   } else if (action.op === "place") {
     await clearSelection();
     const r = Math.floor(action.cell / board.n);

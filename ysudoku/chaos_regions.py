@@ -11,8 +11,8 @@ from .state import Contradiction, Reason, cell_name
 from .visual_colours import HEX
 
 SWATCHES = {**HEX, **dict(enumerate((
-    "#36b5ae", "#dd87aa", "#6785cd", "#a7b743", "#c38155",
-    "#a87ac0", "#55986b", "#dcaa43", "#568ba1",
+    "#cc3311", "#117733", "#0044c4", "#ee99aa", "#ffff19",
+    "#f046f0", "#a05a1e", "#33bbee", "#911eb4",
 ), 9))}
 
 
@@ -157,7 +157,7 @@ class RegionFragments:
             left, right = (cell_name(c, self.n) for c in exits)
             return (f"{cell_name(corner, self.n)} 在盘角，要连成 {self.n} 格区域，必须与 {left} 或 {right} 同区。"
                     f"四格跨三区，只能有一对同区，所以 {left}、{right}、{cell_name(diagonal, self.n)} 两两异区。"
-                    "角格的两种颜色表示二选一。实线是已确定的边界，两条虚线中恰有一条是边界。")
+                    "角格的两种颜色表示二选一。红线是已确定的边界，两条蓝线中恰有一条会成为边界。")
         return None
 
     def propagate_choices(self):

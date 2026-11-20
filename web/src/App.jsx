@@ -1,3 +1,4 @@
+import { annotationChanges, nativeAnnotations } from "./lib/nativeAnnotations.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle, ArrowUpDown, Check, ChevronDown, ChevronLeft, ChevronRight,
@@ -185,40 +186,13 @@ function StepGroups({ groups = [], n }) {
   });
 }
 
-function CellColours({ visual, n }) {
-  const cells = new Map();
-  const hex = new Map();
-  const choices = new Map();
-  for (const option of visual.region_options || []) {
-    for (const cell of option.cells) choices.set(cell, option.colours);
-  }
-  function add(cell, colour) {
-    if (!cells.has(cell)) cells.set(cell, new Set());
-    cells.get(cell).add(colour);
-  }
-  for (const group of visual.colours || []) {
-    hex.set(group.colour, group.hex);
-    for (const cell of group.cells) {
-      if (!(group.region && choices.has(cell))) add(cell, group.colour);
-    }
-  }
-  for (const [cell, colours] of choices) {
-    for (const colour of colours) add(cell, colour);
-  }
-  return [...cells].map(([cell, colours]) => [...colours].map((colour, i) => (
-    <rect key={cell + "/" + colour} x={cell % n + i / colours.size} y={Math.floor(cell / n)}
-      width={1 / colours.size} height="1" fill={hex.get(colour) || "#8ab4e8"} opacity="0.45" />
-  )));
-}
-
 function buildStepActions(analysis) {
   const n = analysis.puzzle.size;
   const steps = [];
   let state = new Map();
   const marked = new Set();
   const values = new Map();
-  const colourState = new Map();
-  const penState = new Set();
+  let annotations = new Map();
   (analysis.puzzle?.givens || []).forEach((value, cell) => { if (value) values.set(cell, value); });
   let inBranch = false;
   let branchBase = null;
@@ -316,22 +290,10 @@ function buildStepActions(analysis) {
       update(cell, desired, placeByCell.get(cell));
     }
     state = nextState;
-    for (const edge of step.visual?.region_edges || []) {
-      const cells = edge.cells || [];
-      if (cells.length !== 2) continue;
-      const key = `${cells[0]}-${cells[1]}`;
-      if (penState.has(key)) continue;
-      penState.add(key);
-      actions.push({ op: "pen", cells, index: edge.fixed ? 4 : 6 });
-    }
-    for (const item of step.visual?.colours || []) {
-      for (const cell of item.cells || []) {
-        const applied = colourState.get(cell) || new Set();
-        if (applied.has(item.colour)) continue;
-        applied.add(item.colour);
-        colourState.set(cell, applied);
-        actions.push({ op: "colour", cell, index: item.colour });
-      }
+    if (!inBranch) {
+      const next = nativeAnnotations(step.visual || {}, n);
+      actions.push(...annotationChanges(annotations, next));
+      annotations = next;
     }
     steps.push(actions);
   }
@@ -831,7 +793,7 @@ export default function App() {
     try {
       const actions = buildStepActions(nextAnalysis);
       let hash = 2166136261;
-      const text = "frame-v28:" + JSON.stringify(actions);
+      const text = "frame-v29:" + JSON.stringify(actions);
       for (let i = 0; i < text.length; i++) { hash ^= text.charCodeAt(i); hash = Math.imul(hash, 16777619); }
       const data = await postJson("/api/live/build", {
         url: nextAnalysis.source_url || "",
@@ -1202,19 +1164,10 @@ export default function App() {
                 width: `${(gridRect.width / gridRect.imageWidth) * 100}%`,
                 height: `${(gridRect.height / gridRect.imageHeight) * 100}%`,
               }}>
-              <CellColours visual={overlay.visual} n={n} />
               <StepGroups groups={overlay.visual.groups} n={n} />
               <StepGroups groups={(overlay.visual.conflicts || []).map(({ scope }) => (
                 { cells: scope, kind: "conflict" }
               ))} n={n} />
-              {(overlay.visual.region_edges || []).map(({ cells: [a, b], fixed }) => {
-                const vertical = Math.abs(a - b) === 1;
-                const cell = Math.max(a, b);
-                const x = cell % n, y = Math.floor(cell / n);
-                return <line key={a + "/" + b} x1={x} y1={y} x2={x + (vertical ? 0 : 1)}
-                  y2={y + (vertical ? 1 : 0)} stroke="#155e75" strokeWidth="0.065"
-                  strokeDasharray={fixed ? undefined : "0.12 0.10"} />;
-              })}
               {overlay.visual.assumption && (() => {
                 const a = overlay.visual.assumption;
                 const cells = a.cells || [];

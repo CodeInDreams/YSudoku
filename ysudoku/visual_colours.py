@@ -3,12 +3,12 @@
 from . import palette as p
 
 HEX = {
-    p.BLUE: "#8ab4e8",
-    p.GREEN: "#a9d18e",
-    p.YELLOW: "#ffe699",
-    p.ORANGE: "#f4b183",
-    p.RED: "#e06666",
-    p.PURPLE: "#b4a7d6",
+    p.BLUE: "#3d99f5",
+    p.GREEN: "#b3e56a",
+    p.YELLOW: "#fceb3f",
+    p.ORANGE: "#e49632",
+    p.RED: "#f53a37",
+    p.PURPLE: "#e87cf1",
 }
 
 
