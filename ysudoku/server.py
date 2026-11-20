@@ -163,8 +163,7 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
     }
     if analysis.spec:
         store.save_rules(key, analysis.spec, info)
-    if analysis.status != "invalid":
-        store.save_analysis(key, payload, info)
+    store.save_analysis(key, payload, info)
     payload["storage"] = {
         "key": key, "location": store.storage_info()["location"],
         "settings": store.load_settings(),
