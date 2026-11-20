@@ -1380,10 +1380,10 @@ export default function App() {
     <div className="overflow-x-auto">
       <table className="w-full table-fixed border-collapse text-xs">
         <thead><tr className="text-left text-muted-foreground">
-          <th className="w-[58%] border-b px-3 py-2 font-medium md:w-[36%]">{t("table.puzzle")}</th>
+          <th className="w-[70%] border-b px-3 py-2 font-medium md:w-[36%]">{t("table.puzzle")}</th>
           <th className="hidden w-[10%] border-b px-2 py-2 font-medium md:table-cell">{t("table.status")}</th>
           <th className="hidden w-[7%] border-b px-2 py-2 font-medium md:table-cell">{t("table.steps")}</th>
-          <th className="w-[42%] border-b px-2 py-2 font-medium md:w-[31%]">{t("history.layers")}</th>
+          <th className="w-[30%] border-b px-2 py-2 font-medium md:w-[31%]">{t("history.layers")}</th>
           <th className="hidden w-[16%] border-b px-2 py-2 font-medium md:table-cell">{t(byOpened ? "table.opened" : "table.saved")}</th>
         </tr></thead>
         <tbody>

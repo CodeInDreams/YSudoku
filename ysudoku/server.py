@@ -138,8 +138,8 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
         if on_title:
             on_title(puzzle.title)
         if on_preview:
-            return preview(puzzle.source_url, puzzle.size, outside=bool(
-                (analysis.to_json().get("puzzle") or {}).get("outside", True)))
+            return preview(puzzle.source_url, puzzle.size,
+                           outside=bool(puzzle.clues or puzzle.arrows))
         return None
 
     if on_preview_start:
