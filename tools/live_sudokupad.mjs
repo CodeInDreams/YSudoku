@@ -98,7 +98,7 @@ async function open(url, logicalN = 0, crop = false) {
   // otherwise a cropped screenshot captures the dimmed start screen.
   let started = false;
   try {
-    const start = page.getByText("Start Puzzle");
+    const start = page.getByText(/^(Start Puzzle|Resume Puzzle|Continue)$/);
     await start.first().waitFor({ state: "visible", timeout: 2500 });
     await start.first().click();
     started = true;
