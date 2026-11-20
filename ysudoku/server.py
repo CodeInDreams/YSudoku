@@ -106,7 +106,9 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
     if not force_rules and not force_steps and rules:
         cached = store.load_analysis(key)
         from .pipeline import ANALYSIS_VERSION
+        allow_chains = bool(body.get("chains", True))
         if (cached and cached.get("lang", "zh") == lang
+                and (not allow_chains or cached.get("status") != "stuck")
                 and cached.get("algo_version") == ANALYSIS_VERSION
                 and meta.get("rules_hash") == rules.get("hash")):
             if on_preview and not on_preview_start:
