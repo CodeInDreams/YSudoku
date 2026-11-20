@@ -449,6 +449,7 @@ export default function App() {
   const [frameStep, setFrameStep] = useState(-2);
   const [ready, setReady] = useState(false);
   const [retry, setRetry] = useState(0);
+  const [frameVersion, setFrameVersion] = useState(0);
   const [view, setView] = useState(() => persisted.view || "solve");
   const [inspectorTab, setInspectorTab] = useState(() => persisted.inspectorTab || "explain");
   const [store, setStore] = useState(null);
@@ -684,7 +685,7 @@ export default function App() {
   useEffect(() => {
     if (!session || deleted) return undefined;
     let cancelled = false;
-    const src = `/api/live/frame?session=${session}&step=${idx}&t=${retry}`;
+    const src = `/api/live/frame?session=${session}&step=${idx}&t=${frameVersion}-${retry}`;
     const probe = new Image();
     probe.onload = () => {
       if (cancelled) return;
@@ -727,6 +728,7 @@ export default function App() {
     setFrameStep(-2);
     setDeleted(false);
     setFrameErrors(0);
+    setFrameVersion(Date.now());
     try {
       const actions = buildStepActions(nextAnalysis);
       let hash = 2166136261;
