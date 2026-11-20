@@ -81,7 +81,7 @@ async function open(url, logicalN = 0) {
       checkonfinish: false,
       pauseonstart: false,
       selection: "default",
-      multicolour: false,
+      multicolour: true,
       outlinesondigits: false,
       outlinesonlines: false,
       hidesolved: true,

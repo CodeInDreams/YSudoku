@@ -1062,13 +1062,6 @@ export default function App() {
                   y2={y + (vertical ? 1 : 0)} stroke="#155e75" strokeWidth="0.065"
                   strokeDasharray={fixed ? undefined : "0.12 0.10"} />;
               })}
-              {(overlay.visual.groups || []).map((group, i) => {
-                if (!group.cells?.length) return null;
-                const rows = group.cells.map((c) => Math.floor(c / n));
-                const cols = group.cells.map((c) => c % n);
-                const color = ["#2563eb", "#d97706", "#059669", "#dc2626", "#7c3aed", "#0d9488"][i % 6];
-                return <rect key={i} x={Math.min(...cols) + 0.03} y={Math.min(...rows) + 0.03} width={Math.max(...cols) - Math.min(...cols) + 0.94} height={Math.max(...rows) - Math.min(...rows) + 0.94} rx="0.08" fill={color} fillOpacity="0.10" stroke={color} strokeOpacity="0.55" strokeWidth="0.045" />;
-              })}
               {overlay.visual.assumption && (() => {
                 const a = overlay.visual.assumption;
                 const cells = a.cells || [];
