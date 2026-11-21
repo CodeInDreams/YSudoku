@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from . import predicate as predicate_mod
-from .state import Event, cell_name
+from .state import Event, bits, cell_name
 
 TITLES = {
     "naked_single": "唯一候选",
@@ -25,6 +25,7 @@ TITLES = {
     "custom": "自定义规则（L2）",
     "sum_link": "共享格组和数",
     "ir_support": "通用约束支持",
+    "pattern_support": "组合占位",
     "parity": "奇偶",
     "odd": "奇数",
     "even": "偶数",
@@ -65,7 +66,7 @@ TIERS = {
     "subset": 2, "hidden_subset": 2, "x_wing": 3, "xy_wing": 3, "w_wing": 3,
     "forcing_chain": 4, "contradiction": 4, "custom": 2, "coloring": 3, "parity": 1, "odd": 1, "even": 1,
     "clone": 1, "sandwich": 2, "skyscraper": 2, "region_sum": 2,
-    "chaos_pattern": 2, "class_cover": 2,
+    "chaos_pattern": 2, "class_cover": 2, "pattern_support": 2,
 }
 
 
@@ -456,6 +457,42 @@ def _explain_ir_support(events, data, n):
         + ("\n".join(effects) if effects else "（无候选变化）")
     )
     return detail, _basic_visual(events, n)
+
+
+def _explain_pattern_support(events, data, n):
+    visual = _basic_visual(events, n)
+    if data["unit_cells"]:
+        visual["groups"].append({"cells": data["unit_cells"], "kind": "unit"})
+    for scope in data["scopes"]:
+        visual["groups"].append({"cells": scope, "kind": "pair"})
+    if "digits" in data:
+        hosts = data["hosts"]
+        visual["premise"] = hosts
+        detail = (f"按「{data['rules'][0]}」，所有合法组合都让 {_names(hosts, n)} "
+                  f"占用 {_values(list(bits(data['digits'])))}。"
+                  f"{data['unit']}的其他格不能再用这些数字。")
+    else:
+        detail = "比较" + "和".join(
+            f"{_names(scope, n)} 的「{rule}」"
+            for scope, rule in zip(data["scopes"], data["rules"])
+        ) + "。"
+        if data["shared"]:
+            detail += f"两条规则在 {_names(data['shared'], n)} 的取值必须一致。"
+        if data["unit"]:
+            def occupancy(masks):
+                samples = ["{" + _values(list(bits(mask))) + "}" for mask in masks[:4]]
+                return " / ".join(samples) + (f" 等 {len(masks)} 种" if len(masks) > 4 else "")
+
+            left, right = data["hosts"]
+            visual["premise"] = sorted(set(left + right + data["shared"]))
+            left_masks, right_masks = data["occupancy"]
+            detail += (f"在{data['unit']}，{_names(left, n)} 占用 {occupancy(left_masks)}，"
+                       f"{_names(right, n)} 占用 {occupancy(right_masks)}，两边不能占用同一个数字。")
+        else:
+            visual["premise"] = data["shared"]
+        detail += "被排除的候选只出现在无法配对的组合里。"
+    prefix = "【推测规则】" if data["hypothesis"] else ""
+    return prefix + detail + "\n" + "；".join(_effect_lines(events, n)), visual
 
 
 def _explain_region_sum(events, data, n):

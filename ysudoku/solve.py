@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from .intersections import PatternPropagation
 from .narrate import Step, build_step
 from .search import count_solutions, satisfiable
 from .state import Contradiction, Event, Reason, State, bits, build_units, cell_name
@@ -31,6 +32,7 @@ class Solver:
         self.constraints = list(rules.constraints)
         self._rewrite_inputs = {}
         self.sum_links = compile_links(self.constraints, puzzle.size)
+        self.patterns = PatternPropagation()
         self.state.constraints = self.constraints
         self.allow_chains = allow_chains
         self.on_step = on_step
@@ -239,14 +241,35 @@ class Solver:
         for name, _tier, technique in TECHNIQUES:
             if name in ("naked_single", "hidden_single"):
                 continue
-            if name == "forcing_chain" and not self.allow_chains:
-                continue
+            if name == "forcing_chain":
+                result = self._pattern_step()
+                if result is not None:
+                    return result
+                if not self.allow_chains:
+                    continue
             result = self._technique_step(name, technique)
             if isinstance(result, tuple):
                 return result
             if result is not None:
                 return result, None
         return None, None
+
+    def _pattern_step(self):
+        pre_dom, pre_vals = self._pre()
+        self.state.begin()
+        try:
+            found = self.patterns.find(self.state, self.constraints)
+            if found:
+                allowed, reason = found
+                for cell, mask in allowed.items():
+                    self.state.restrict(cell, mask, reason)
+        except Contradiction as exc:
+            self.state.rollback()
+            return None, str(exc)
+        events = self.state.end()
+        if events:
+            return self._commit(events, pre_dom, pre_vals), None
+        return None
 
     def _merge_sibling_singles(self, steps: list[Step]) -> list[Step]:
         """Merge all independent singles directly caused by the same origin.

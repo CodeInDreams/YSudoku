@@ -1,4 +1,10 @@
 import unittest
+from unittest.mock import patch
+
+from ysudoku.constraints import IRSupport
+from ysudoku.constraints_ir import TupleRelation
+from ysudoku.intersections import PatternPropagation
+from ysudoku.state import State, Unit
 
 
 class Constraint:
@@ -52,3 +58,35 @@ class BfsTest(unittest.TestCase):
         found = bfs_unsupported(st, [Unary(0, 1), Unary(0, 2)], max_rules=2)
         self.assertTrue(found)
         self.assertEqual(found[0][0], 0)
+
+
+class PatternTest(unittest.TestCase):
+    def test_house_occupancy_eliminates_incompatible_group(self):
+        state = State(9, [Unit("row", 0, list(range(9)))])
+        left = IRSupport([TupleRelation([0, 1], [(1, 2), (3, 4)])])
+        right = IRSupport([TupleRelation([2, 3], [(1, 3), (5, 6)])])
+        state.dom[:4] = [0b101, 0b1010, 0b10001, 0b100100]
+
+        allowed, reason = PatternPropagation().find(state, [left, right])
+
+        self.assertEqual(allowed, {2: 1 << 4, 3: 1 << 5})
+        self.assertEqual(reason.data["hosts"], [[0, 1], [2, 3]])
+        self.assertEqual(reason.data["unit"], "第1行")
+
+    def test_shared_cells_keep_value_pairing(self):
+        state = State(4, [])
+        left = IRSupport([TupleRelation([0, 5, 10], [(1, 2, 3), (2, 1, 4)])])
+        right = IRSupport([TupleRelation([5, 0, 15], [(2, 1, 3), (1, 1, 4)])])
+        state.dom[0] = state.dom[5] = 0b0011
+        state.dom[10] = state.dom[15] = 0b1100
+
+        allowed, reason = PatternPropagation().find(state, [left, right])
+
+        self.assertEqual(allowed, {0: 1, 5: 2, 10: 4, 15: 4})
+        self.assertEqual(reason.data["shared"], [0, 5])
+
+    def test_incomplete_patterns_cannot_lock_a_digit(self):
+        state = State(4, [Unit("row", 0, list(range(4)))])
+        rule = IRSupport([TupleRelation([0, 1], [(1, 2), (3, 4)])])
+        with patch("ysudoku.intersections.MAX_NODES", 3):
+            self.assertIsNone(PatternPropagation().find(state, [rule]))
