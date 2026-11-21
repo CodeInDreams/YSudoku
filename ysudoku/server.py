@@ -12,7 +12,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from . import history, live, store, sudokupad
-from .pipeline import analyze, initial_screenshot, save_rulesheet
+from .pipeline import ANALYSIS_VERSION, analyze, initial_screenshot, save_rulesheet
 from .llm import LLMError
 from .model import parse_puzzle
 
@@ -87,12 +87,10 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
     if force_rules:
         for layer in ("rules", "steps", "frames"):
             store.delete_layer(key, layer)
-    elif force_steps:
-        for layer in ("steps", "frames"):
-            store.delete_layer(key, layer)
-
     rules = store.load_rules(key)
-    if rules and not rules.get("includes_underlay_markers"):
+    cached = None if force_rules or force_steps else store.load_analysis(key)
+    old_version = bool(cached and cached.get("algo_version") != ANALYSIS_VERSION)
+    if not old_version and rules and not rules.get("includes_underlay_markers"):
         try:
             raw = sudokupad.load_cached(target)
         except sudokupad.LoadError:
@@ -103,13 +101,10 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
     if on_title and meta.get("title"):
         on_title(meta["title"])
     notes = str(body["notes"] if "notes" in body else meta.get("notes", "") or "").strip()
-    if not force_rules and not force_steps and rules:
-        cached = store.load_analysis(key)
-        from .pipeline import ANALYSIS_VERSION
+    if cached:
         allow_chains = bool(body.get("chains", True))
-        if (cached and cached.get("lang", "zh") == lang
+        if old_version or (rules and cached.get("lang", "zh") == lang
                 and (not allow_chains or cached.get("status") != "stuck")
-                and cached.get("algo_version") == ANALYSIS_VERSION
                 and meta.get("rules_hash") == rules.get("hash")):
             if on_preview and not on_preview_start:
                 preview(cached.get("source_url", ""), cached["puzzle"]["size"],
@@ -125,6 +120,11 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
             if isinstance(cached.get("rules"), dict):
                 cached["rules"]["notes"] = meta.get("notes", "")
             cached["cached"] = True
+            if old_version:
+                cached["cache_version"] = {
+                    "saved": cached.get("algo_version"), "current": ANALYSIS_VERSION,
+                    "steps_hash": meta.get("steps_hash"),
+                }
             cached["storage"] = {
                 "key": key, "location": store.storage_info()["location"],
                 "settings": store.load_settings(),
@@ -246,6 +246,7 @@ def _start_job(target: str, body: dict, demo: bool) -> str:
         try:
             key, payload = _stored_analysis(
                 target, body, demo=demo, on_rules=on_rules, on_step=on_step,
+                force_steps=bool(body.get("refresh_steps")),
                 on_preview=on_preview,
                 on_preview_start=lambda: _job_update(job_id, phase="preview"),
                 on_title=lambda title: _job_update(job_id, title=title),
@@ -492,6 +493,8 @@ class Handler(BaseHTTPRequestHandler):
                     size = int(body.get("size") or 0)
                     crop = bool(body.get("crop"))
                     analysis = store.load_analysis(key) if key else None
+                    proof_hash = store.hash_json(analysis["steps"]) if analysis and "steps" in analysis else None
+                    keep_frames_for = body.get("keep_frames_for")
                     canonical = _canonical_frame_actions(steps, analysis)
                     digest = str(body.get("steps_hash") or "")
                     if canonical is not steps:
@@ -499,6 +502,12 @@ class Handler(BaseHTTPRequestHandler):
                                                   "crop": crop, "steps": canonical})
                     steps = canonical
                     if key:
+                        if keep_frames_for and (keep_frames_for != proof_hash
+                                                or len(steps) != len(analysis["steps"])):
+                            self._send(409, json.dumps({
+                                "error": "解题步骤缓存已更新，请重新打开谜题。"
+                            }, ensure_ascii=False).encode(), "application/json")
+                            return
                         directory = store.frames_dir(key)
 
                         def _build():
@@ -506,7 +515,7 @@ class Handler(BaseHTTPRequestHandler):
                                 live.build(url, steps, directory=str(directory), session=key,
                                            size=size, crop=crop, wait=True)
                                 if digest:
-                                    store.set_frames_hash(key, digest)
+                                    store.set_frames_hash(key, digest, proof_hash=proof_hash)
                             except Exception as exc:  # noqa: BLE001
                                 print(f"frame build failed: {exc}", flush=True)
                                 if not (directory / "error.json").is_file():
@@ -526,10 +535,16 @@ class Handler(BaseHTTPRequestHandler):
                                     }, ensure_ascii=False).encode(), "application/json")
                                     return
                             else:
-                                if (digest and store.has_frames(key, digest)
+                                meta = store._meta(key)
+                                retained = (proof_hash and keep_frames_for == proof_hash
+                                            and meta.get("frames_proof_hash") == proof_hash)
+                                matching = store.has_frames(key, digest) if digest else False
+                                if ((matching or retained)
                                         and not (directory / "error.json").exists()
                                         and all(store.frame_path(key, step).is_file()
                                                 for step in range(-1, len(steps)))):
+                                    if matching and proof_hash and meta.get("frames_proof_hash") != proof_hash:
+                                        store.set_frames_hash(key, digest, proof_hash=proof_hash)
                                     result = {"ok": True, "session": key, "cached": True, "complete": True}
                                 else:
                                     store.delete_layer(key, "frames")
@@ -582,6 +597,7 @@ class Handler(BaseHTTPRequestHandler):
             key, payload = _stored_analysis(
                 target, body,
                 demo=(urlparse(self.path).path == "/api/demo"),
+                force_steps=bool(body.get("refresh_steps")),
             )
         except Exception as exc:  # noqa: BLE001 - surfaced to the UI
             payload = {"error": str(exc)}

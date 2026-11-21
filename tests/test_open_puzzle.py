@@ -12,6 +12,30 @@ from ysudoku import server, store
 
 
 class OpenPuzzleTest(unittest.TestCase):
+    def test_old_solver_cache_survives_open_and_failed_refresh(self):
+        fixture = str(Path(__file__).resolve().parents[1] / "fixtures/demo-killer.json")
+        with TemporaryDirectory() as directory, patch.dict(os.environ, YSUDOKU_STORE=directory):
+            key, payload = server._stored_analysis(fixture, {"llm": False})
+            self.assertEqual(payload["algo_version"], server.ANALYSIS_VERSION)
+            payload["algo_version"] -= 1
+            payload["status"] = "stuck"
+            store.save_analysis(key, payload, {})
+            store.frames_dir(key).mkdir()
+            store.frame_path(key, -1).write_bytes(b"previous frame")
+            with patch.object(server, "analyze", side_effect=RuntimeError("stop refresh")) as analyze:
+                _, saved = server._stored_analysis(fixture, {"llm": False, "chains": True, "lang": "en"})
+                self.assertTrue(saved["cached"])
+                self.assertEqual(saved["cache_version"]["saved"], payload["algo_version"])
+                self.assertEqual(saved["cache_version"]["current"], server.ANALYSIS_VERSION)
+                analyze.assert_not_called()
+                with self.assertRaisesRegex(RuntimeError, "stop refresh"):
+                    server._stored_analysis(fixture, {"llm": False}, force_steps=True)
+            self.assertEqual(store.load_analysis(key)["algo_version"], payload["algo_version"])
+            self.assertEqual(store.frame_path(key, -1).read_bytes(), b"previous frame")
+            _, updated = server._stored_analysis(fixture, {"llm": False}, force_steps=True)
+            self.assertEqual(updated["algo_version"], server.ANALYSIS_VERSION)
+            self.assertNotIn("cache_version", updated)
+
     def test_partial_render_cache_rebuilds_and_reports_worker_errors(self):
         def fail_render(_url, _steps, *, wait, **_options):
             self.assertTrue(wait)

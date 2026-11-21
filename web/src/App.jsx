@@ -12,6 +12,7 @@ import { Badge } from "./components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { Textarea } from "./components/ui/textarea";
 import { Switch } from "./components/ui/switch";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "./components/ui/popover";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -558,6 +559,7 @@ export default function App() {
   const stepListRef = useRef(null);
   const stepScrollRef = useRef(0);
   const [phase, setPhase] = useState("idle");
+  const [cacheChoice, setCacheChoice] = useState(null);
   const [streamRules, setStreamRules] = useState([]);
   const [streamSteps, setStreamSteps] = useState([]);
   const [streamTarget, setStreamTarget] = useState([]);
@@ -795,7 +797,7 @@ export default function App() {
     try {
       const actions = buildStepActions(nextAnalysis);
       let hash = 2166136261;
-      const crop = !nextAnalysis.puzzle?.outside;
+      const crop = !(nextAnalysis.puzzle?.outside ?? !!nextAnalysis.puzzle?.clues?.length);
       const text = "frame-v33:" + (crop ? "crop:" : "full:") + JSON.stringify(actions);
       for (let i = 0; i < text.length; i++) { hash ^= text.charCodeAt(i); hash = Math.imul(hash, 16777619); }
       const data = await postJson("/api/live/build", {
@@ -804,6 +806,7 @@ export default function App() {
         steps: actions,
         key: nextAnalysis.storage?.key || "",
         steps_hash: (hash >>> 0).toString(16),
+        keep_frames_for: nextAnalysis.cache_version?.steps_hash,
         crop,
       }, AbortSignal.timeout(15000));
       if (token !== streamToken.current) return;
@@ -881,10 +884,11 @@ export default function App() {
     tick();
   }
 
-  async function streamSolve(body, targetUrl, title = "") {
+  async function streamSolve(body, targetUrl, title = "", fallback = null) {
     const token = ++streamToken.current;
+    setCacheChoice(null);
     setOpeningTitle(title);
-    setPreviewSrc("");
+    setPreviewSrc(fallback?.rule_sheet || "");
     setPreviewJob("");
     setView("solve");
     setSession(null);
@@ -914,7 +918,9 @@ export default function App() {
         if (job.status === "done") {
           setTarget(targetUrl);
           setUrl(targetUrl);
-          if (job.payload?.cached) {
+          if (job.payload?.cache_version) {
+            setCacheChoice({ payload: job.payload, body, targetUrl });
+          } else if (job.payload?.cached) {
             applyAnalysis(job.payload);
           } else {
             finalPayload.current = job.payload;
@@ -926,12 +932,31 @@ export default function App() {
       }
     } catch (err) {
       if (token === streamToken.current) {
-        setPhase("failed");
+        if (fallback) applyAnalysis(fallback);
+        else setPhase("failed");
         setError(`${t("error.solve")}: ${err.message}`);
       }
     } finally {
       if (token === streamToken.current) setBusy(false);
     }
+  }
+
+  function chooseCachedVersion(refresh) {
+    if (!cacheChoice) return;
+    const { payload, body, targetUrl } = cacheChoice;
+    setCacheChoice(null);
+    if (refresh) {
+      streamSolve({ ...body, refresh_steps: true }, targetUrl, payload.puzzle.title, payload);
+    } else {
+      applyAnalysis(payload);
+    }
+  }
+
+  function refreshCachedVersion() {
+    if (!analysis) return;
+    streamSolve({ url: target || analysis.source_url, llm, audit, chains: true,
+                  demo: !!analysis.demo, rule_prompt: rulePrompt, lang, refresh_steps: true },
+                target, analysis.puzzle.title, analysis);
   }
 
   async function submit(payload) {
@@ -960,6 +985,7 @@ export default function App() {
 
   function exitPuzzle() {
     ++streamToken.current;
+    setCacheChoice(null);
     setOpeningTitle("");
     if (frameTimer.current) clearInterval(frameTimer.current);
     setBusy(false);
@@ -1550,6 +1576,24 @@ export default function App() {
       </header>
 
       <main className="mx-auto max-w-[1280px] px-4 py-6 lg:px-6 lg:py-8">
+        <Dialog open={!!cacheChoice} onOpenChange={(open) => { if (!open) chooseCachedVersion(false); }}>
+          {cacheChoice && (
+            <DialogContent className="w-[calc(100%-2rem)] rounded-xl">
+              <DialogTitle className="pr-6 text-base font-semibold">{t("cache.versionTitle")}</DialogTitle>
+              <DialogDescription className="text-sm text-muted-foreground">{t("cache.versionDescription")}</DialogDescription>
+              <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-2 rounded-lg border bg-muted/30 p-3 text-sm">
+                <dt>{t("cache.savedVersion")}</dt>
+                <dd className="font-mono">{cacheChoice.payload.cache_version.saved ?? t("cache.unknownVersion")}</dd>
+                <dt>{t("cache.currentVersion")}</dt>
+                <dd className="font-mono">{cacheChoice.payload.cache_version.current}</dd>
+              </dl>
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button variant="outline" onClick={() => chooseCachedVersion(false)}>{t("cache.keep")}</Button>
+                <Button onClick={() => chooseCachedVersion(true)}>{t("cache.refresh")}</Button>
+              </div>
+            </DialogContent>
+          )}
+        </Dialog>
         {view === "solve" && (
           <>
             <PageHead
@@ -1568,9 +1612,18 @@ export default function App() {
                   {isSolved ? ` · ${statusLabel(analysis.status)}` : ""}
                 </span>
               ) : (phase === "idle" ? t("empty.solve") : null)}
-              badges={analysis ? <><Badge variant="outline">{n}×{n}</Badge><Badge variant={isSolved ? "success" : "outline"}>{statusLabel(analysis.status)}</Badge></> : null}
+              badges={analysis ? <>
+                <Badge variant="outline">{n}×{n}</Badge>
+                <Badge variant={isSolved ? "success" : "outline"}>{statusLabel(analysis.status)}</Badge>
+                {analysis.cache_version && (
+                  <>
+                    <Badge variant="outline">{t("cache.usingVersion", { version: analysis.cache_version.saved ?? t("cache.unknownVersion") })}</Badge>
+                    <Button size="sm" variant="outline" onClick={refreshCachedVersion} disabled={busy}>{t("cache.refresh")}</Button>
+                  </>
+                )}
+              </> : null}
             />
-            {analysis?.conflicts?.length > 0 && !conflictChoice && (
+            {analysis?.conflicts?.length > 0 && !analysis.cache_version && !conflictChoice && (
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
                 <div className="w-full max-w-lg rounded-xl border bg-card p-5 shadow-xl">
                   <h2 className="text-base font-semibold">规则识别冲突</h2>

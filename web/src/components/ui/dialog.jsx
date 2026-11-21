@@ -4,6 +4,8 @@ import { X } from "lucide-react";
 import { cn } from "../../lib/utils";
 const Dialog = DialogPrimitive.Root;
 const DialogTrigger = DialogPrimitive.Trigger;
+const DialogTitle = DialogPrimitive.Title;
+const DialogDescription = DialogPrimitive.Description;
 const DialogContent = React.forwardRef(({ className, children, ...props }, ref) => (
   <DialogPrimitive.Portal>
     <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50" />
@@ -14,4 +16,4 @@ const DialogContent = React.forwardRef(({ className, children, ...props }, ref) 
   </DialogPrimitive.Portal>
 ));
 DialogContent.displayName = "DialogContent";
-export { Dialog, DialogTrigger, DialogContent };
+export { Dialog, DialogTrigger, DialogContent, DialogTitle, DialogDescription };
