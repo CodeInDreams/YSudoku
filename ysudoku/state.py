@@ -37,9 +37,10 @@ class Event:
 
 @dataclass
 class Unit:
-    kind: str  # row / col / region / diagonal
+    kind: str  # row / col / region / diagonal / line / distinct
     index: int
     cells: list[int]
+    hypothesis: bool = False
 
     @property
     def label(self) -> str:
@@ -51,6 +52,10 @@ class Unit:
             return f"区域{self.index + 1}"
         if self.kind == "diagonal":
             return "主对角线" if self.index == 0 else "副对角线"
+        if self.kind == "line":
+            return f"第{self.index + 1}条线"
+        if self.kind == "distinct":
+            return f"互异单元{self.index + 1}"
         return f"单元{self.index + 1}"
 
 

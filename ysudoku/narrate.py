@@ -240,29 +240,26 @@ def _explain_hidden_single(events, data, n):
     )
     visual = _unit_visual(unit_cells, n, focus=[cell])
     visual["chips"].append({"cell": cell, "text": str(value), "kind": "value"})
-    return detail, visual
+    return ("【推测规则】" if data.get("hypothesis") else "") + detail, visual
 
 
 def _explain_locked(events, data, n):
-    reasons = {ev.value: ev.reason.data for ev in events if ev.reason.kind == "locked"}
+    reasons = {(ev.value, ev.reason.data["target_unit"]): ev.reason.data
+               for ev in events if ev.reason.kind == "locked"}
     detail = []
     visual = _unit_visual(data["unit_cells"], n, focus=sorted(_group_elims(events)))
     hosts = set()
     regions = {tuple(data["unit_cells"])}
-    for digit, reason in reasons.items():
+    for (digit, target), reason in reasons.items():
         cells = reason["cells"]
         hosts.update(cells)
-        target = reason["target"]
-        if target in ("row", "col"):
-            target_name = f"第{reason['index'] + 1}{'行' if target == 'row' else '列'}"
-        else:
-            target_name = "同一个区域"
-            region_cells = tuple(reason["region_cells"])
-            if region_cells not in regions:
-                visual["groups"].append({"cells": list(region_cells), "kind": "unit"})
-                regions.add(region_cells)
-        detail.append(f"在{reason['unit']}中，数字 {digit} 只可能出现在 {_names(cells, n)}，"
-                      f"这些格都在{target_name}。因此{target_name}内、{reason['unit']}之外的格子排除 {digit}。")
+        target_cells = tuple(reason["target_cells"])
+        if target_cells not in regions:
+            visual["groups"].append({"cells": list(target_cells), "kind": "unit"})
+            regions.add(target_cells)
+        prefix = "【推测规则】" if reason.get("hypothesis") else ""
+        detail.append(f"{prefix}在{reason['unit']}中，数字 {digit} 只可能出现在 {_names(cells, n)}，"
+                      f"这些格都在{target}。因此{target}内、{reason['unit']}之外的格子排除 {digit}。")
     visual["premise"] = sorted(hosts)
     return "\n".join([*detail, *_effect_lines(events, n)]), visual
 
@@ -277,7 +274,7 @@ def _explain_subset(events, data, n):
     )
     visual = _unit_visual(data.get("unit_cells", []), n, focus=cells)
     visual["groups"].append({"cells": cells, "kind": "pair"})
-    return detail, visual
+    return ("【推测规则】" if data.get("hypothesis") else "") + detail, visual
 
 
 def _explain_hidden_subset(events, data, n):
@@ -289,7 +286,9 @@ def _explain_hidden_subset(events, data, n):
     )
     visual = _unit_visual(data.get("unit_cells", []), n, focus=cells)
     visual["groups"].append({"cells": cells, "kind": "pair"})
-    return detail, visual
+    if data.get("unit_kind") in ("line", "distinct"):
+        detail = f"{data['unit']}有 {n} 格且数字互异，所以每个数字都必须出现一次。\n" + detail
+    return ("【推测规则】" if data.get("hypothesis") else "") + detail, visual
 
 
 def _explain_x_wing(events, data, n):

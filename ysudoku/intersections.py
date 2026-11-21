@@ -142,7 +142,7 @@ class PatternPropagation:
             "rules": [rule.describe()], "scopes": [list(cells)],
             "unit": unit.label, "unit_cells": unit.cells,
             "hosts": hosts, "digits": mandatory,
-            "hypothesis": bool(getattr(rule, "hypothesis", False)),
+            "hypothesis": unit.hypothesis or bool(getattr(rule, "hypothesis", False)),
         })
 
     @staticmethod
@@ -177,7 +177,8 @@ class PatternPropagation:
             "unit": unit.label if unit else "", "unit_cells": unit.cells if unit else [],
             "hosts": [list(left_inside), list(right_inside)],
             "occupancy": [sorted({key[1] for key in g}) for g in (lgroups, rgroups)],
-            "hypothesis": any(getattr(rule, "hypothesis", False) for rule in (lrule, rrule)),
+            "hypothesis": (bool(unit and unit.hypothesis)
+                           or any(getattr(rule, "hypothesis", False) for rule in (lrule, rrule))),
         })
 
     def find(self, state, constraints):

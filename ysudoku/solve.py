@@ -7,10 +7,11 @@ from dataclasses import dataclass, field
 from .intersections import PatternPropagation
 from .narrate import Step, build_step
 from .search import count_solutions, satisfiable
-from .state import Contradiction, Event, Reason, State, bits, build_units, cell_name
+from .state import Contradiction, Event, Reason, State, bits, cell_name
 from .simplify import can_simplify, simplify
 from .sum_links import compile_links
 from .techniques import TECHNIQUES, TRIGGERS
+from .unit_inference import solver_units
 
 
 @dataclass
@@ -26,8 +27,7 @@ class Solver:
     def __init__(self, puzzle, rules, allow_chains: bool = False, on_step=None, solution=None):
         self.puzzle = puzzle
         self.rules = rules
-        self.units = build_units(puzzle, (rules.diagonal_main, rules.diagonal_anti),
-                                 chaos=puzzle.is_chaos)
+        self.units = solver_units(puzzle, rules)
         self.state = State(puzzle.size, self.units)
         self.constraints = list(rules.constraints)
         self._rewrite_inputs = {}
@@ -933,8 +933,7 @@ class Solver:
 
 def check_solution(puzzle, rules, values: list[int]) -> list[str]:
     errors: list[str] = []
-    units = build_units(puzzle, (rules.diagonal_main, rules.diagonal_anti),
-                        chaos=puzzle.is_chaos)
+    units = solver_units(puzzle, rules)
     want = set(range(1, puzzle.size + 1))
     for unit in units:
         vals = [values[c] for c in unit.cells]
@@ -961,8 +960,7 @@ def compare_with_solution(puzzle, values: list[int]) -> str | None:
 
 def audit_steps(puzzle, rules, steps: list[Step], node_limit: int = 12_000,
                 max_checks: int = 240) -> dict:
-    units = build_units(puzzle, (rules.diagonal_main, rules.diagonal_anti),
-                        chaos=puzzle.is_chaos)
+    units = solver_units(puzzle, rules)
     checks = ok = bad = unknown = 0
     for step in steps:
         step_checks = 0

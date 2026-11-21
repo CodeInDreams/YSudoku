@@ -15,7 +15,7 @@ PALETTE = [
     ("#f97316", "#6366f1"),
     ("#06b6d4", "#eab308"),
 ]
-from .state import Reason, State, bits
+from .state import Reason, State, Unit, bits
 
 
 def _wrap(st: State):
@@ -136,6 +136,7 @@ def hidden_single(st: State, constraints=None):
                         "unit": unit.label,
                         "unit_kind": unit.kind,
                         "unit_cells": unit.cells,
+                        "hypothesis": unit.hypothesis,
                     },
                 ),
             )
@@ -149,41 +150,37 @@ def hidden_single(st: State, constraints=None):
 def locked_candidates(st: State, constraints=None):
     st.begin()
     n = st.n
-    regions = [unit for unit in st.units if unit.kind == "region"]
-    for unit in st.units:
-        if unit.kind not in ("region", "row", "col"):
-            continue
+    rows = {unit.index for unit in st.units if unit.kind == "row"}
+    cols = {unit.index for unit in st.units if unit.kind == "col"}
+    for ui, unit in enumerate(st.units):
+        cells = set(unit.cells)
         # Collect independent deductions from the same source unit before
         # changing any candidates. A new premise belongs to a later step.
         pending = []
-        for digit in range(1, n + 1):
+        for digit in range(1, st.n + 1):
             hosts = [c for c in unit.cells if st.has(c, digit)]
             if len(hosts) < 2:
                 continue
-            data = {"digit": digit, "unit": unit.label, "unit_kind": unit.kind,
-                    "unit_cells": unit.cells, "cells": hosts}
-            if unit.kind == "region":
-                rows = {c // n for c in hosts}
-                cols = {c % n for c in hosts}
-                if len(rows) == 1:
-                    row, = rows
-                    data.update(target="row", index=row)
-                    targets = range(row * n, (row + 1) * n)
-                elif len(cols) == 1:
-                    col, = cols
-                    data.update(target="col", index=col)
-                    targets = range(col, n * n, n)
-                else:
-                    continue
-            else:
-                region = next((r for r in regions if all(c in r.cells for c in hosts)), None)
-                if region is None:
-                    continue
-                data.update(target="region", region_cells=region.cells)
-                targets = region.cells
-            removals = [c for c in targets if c not in unit.cells and st.has(c, digit)]
-            if removals:
-                pending.append((digit, removals, Reason("locked", data)))
+            common = set(st.unit_of[hosts[0]])
+            common.intersection_update(*(st.unit_of[cell] for cell in hosts[1:]))
+            common.discard(ui)
+            targets = [st.units[index] for index in sorted(common)]
+            if unit.kind == "region" and (len(rows) < n or len(cols) < n):
+                # A region-only State can still use the board's standard lines.
+                row, col = divmod(hosts[0], n)
+                if row not in rows and all(c // n == row for c in hosts):
+                    targets.append(Unit("row", row, list(range(row * n, (row + 1) * n))))
+                if col not in cols and all(c % n == col for c in hosts):
+                    targets.append(Unit("col", col, list(range(col, n * n, n))))
+            for target in targets:
+                removals = [c for c in target.cells if c not in cells and st.has(c, digit)]
+                if removals:
+                    pending.append((digit, removals, Reason("locked", {
+                        "digit": digit, "unit": unit.label, "unit_kind": unit.kind,
+                        "unit_cells": unit.cells, "cells": hosts,
+                        "target_unit": target.label, "target_cells": target.cells,
+                        "hypothesis": unit.hypothesis or target.hypothesis,
+                    })))
         if pending:
             for digit, removals, reason in pending:
                 for cell in removals:
@@ -207,6 +204,7 @@ def naked_subset(st: State, constraints=None, max_size: int = 3):
                 reason = Reason("subset", {
                     "cells": list(combo), "digits": list(bits(mask)),
                     "unit": unit.label, "unit_kind": unit.kind, "unit_cells": unit.cells,
+                    "hypothesis": unit.hypothesis,
                 })
                 made = False
                 for other in others:
@@ -239,6 +237,7 @@ def hidden_subset(st: State, constraints=None, max_size: int = 2):
                 reason = Reason("hidden_subset", {
                     "cells": sorted(cells), "digits": list(combo),
                     "unit": unit.label, "unit_kind": unit.kind, "unit_cells": unit.cells,
+                    "hypothesis": unit.hypothesis,
                 })
                 made = False
                 for c in cells:
