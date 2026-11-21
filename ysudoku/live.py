@@ -117,7 +117,7 @@ def place(digits: list[list[int]], reset: bool, corners: list | None = None,
 
 
 def build(url: str, steps: list[list[dict]], directory: str | None = None,
-          session: str | None = None, size: int = 0, crop: bool = False) -> dict:
+          session: str | None = None, size: int = 0, crop: bool = False, wait: bool = False) -> dict:
     ensure()
     payload = {"url": url, "steps": steps}
     if size:
@@ -128,6 +128,8 @@ def build(url: str, steps: list[list[dict]], directory: str | None = None,
         payload["dir"] = directory
     if session:
         payload["session"] = session
+    if wait:
+        payload["wait"] = True
     return json.loads(_request("/build", payload, timeout=900))
 
 

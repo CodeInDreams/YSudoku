@@ -559,6 +559,15 @@ def _llm_repair(puzzle, inventory, config, spec, diagnostics, warnings):
     return new_spec, new_rules
 
 
+def save_rulesheet(png):
+    if not png.startswith(b"\x89PNG\r\n\x1a\n") or not png.endswith(b"IEND\xaeB`\x82"):
+        raise ValueError("初始帧 PNG 不完整")
+    path = Path(".cache/rulesheets") / (hashlib.sha256(png).hexdigest() + ".png")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(png)
+    return str(path)
+
+
 def initial_screenshot(url, size, frame, *, crop=False):
     from urllib.parse import urlsplit
     from . import live
@@ -566,12 +575,7 @@ def initial_screenshot(url, size, frame, *, crop=False):
         raise llm.LLMError("缺少可用于截取初始盘面的 SudokuPad 链接")
     try:
         png = frame.read_bytes() if not crop and frame.is_file() else live.initial_frame(url, size, crop=crop)
-        if not png.startswith(b"\x89PNG\r\n\x1a\n") or not png.endswith(b"IEND\xaeB`\x82"):
-            raise ValueError("初始帧 PNG 不完整")
-        path = Path(".cache/rulesheets") / (hashlib.sha256(png).hexdigest() + ".png")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(png)
-        return str(path)
+        return save_rulesheet(png)
     except (OSError, ValueError, live.LiveError) as exc:
         raise llm.LLMError(f"无法取得 SudokuPad 初始盘面截图：{exc}") from exc
 

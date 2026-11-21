@@ -1,15 +1,66 @@
+import json
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from threading import Event
+from threading import Event, Thread
 import time
 import unittest
 from unittest.mock import patch
+from urllib.request import Request, urlopen
 
 from ysudoku import server, store
 
 
 class OpenPuzzleTest(unittest.TestCase):
+    def test_partial_render_cache_rebuilds_and_reports_worker_errors(self):
+        def fail_render(_url, _steps, *, wait, **_options):
+            self.assertTrue(wait)
+            entered.set()
+            release.wait(2)
+            raise server.live.LiveError("failed before initial screenshot")
+
+        entered, release = Event(), Event()
+        with TemporaryDirectory() as directory, patch.dict(os.environ, YSUDOKU_STORE=directory):
+            key = "partial"
+            frames = store.frames_dir(key)
+            frames.mkdir(parents=True)
+            for step in (-1, 1):
+                store.frame_path(key, step).write_bytes(b"old frame")
+            store.set_frames_hash(key, "digest")
+            with server.serve("127.0.0.1", 0) as httpd:
+                thread = Thread(target=httpd.serve_forever, daemon=True)
+                thread.start()
+                base = f"http://127.0.0.1:{httpd.server_port}"
+
+                def request(path, body=None):
+                    data = json.dumps(body).encode() if body is not None else None
+                    with urlopen(Request(base + path, data=data), timeout=2) as response:
+                        return json.load(response)
+
+                try:
+                    with patch.object(server.live, "build", side_effect=fail_render) as build:
+                        body = {"key": key, "url": "https://sudokupad.app/example",
+                                "steps": [[], []], "steps_hash": "digest"}
+                        self.assertTrue(request("/api/live/build", body)["building"])
+                        self.assertTrue(entered.wait(1))
+                        self.assertTrue(request("/api/live/build", body)["building"])
+                        build.assert_called_once()
+                        progress_url = "/api/live/progress?session=partial&total=2"
+                        self.assertFalse(request(progress_url)["complete"])
+                        self.assertFalse(store.has_frames(key, "digest"))
+                        release.set()
+                        progress = request(progress_url)
+                        for _ in range(50):
+                            if progress["error"]:
+                                break
+                            time.sleep(0.02)
+                            progress = request(progress_url)
+                        self.assertEqual(progress["error"]["message"], "failed before initial screenshot")
+                finally:
+                    release.set()
+                    httpd.shutdown()
+                    thread.join()
+
     def test_preview_precedes_solving_and_reopening_updates_only_open_time(self):
         fixture = str(Path(__file__).resolve().parents[1] / "fixtures/demo-killer.json")
         with TemporaryDirectory() as directory, patch.dict(os.environ, YSUDOKU_STORE=directory):

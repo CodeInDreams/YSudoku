@@ -3,27 +3,24 @@
 from __future__ import annotations
 
 import json
-import threading
-
-_BUILDING: set[str] = set()
-import threading
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
-from urllib.parse import parse_qs, urlparse
-
 import math
 import threading
 import time
 import uuid
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 from . import history, live, store, sudokupad
-from .pipeline import analyze, initial_screenshot
+from .pipeline import analyze, initial_screenshot, save_rulesheet
 from .llm import LLMError
 from .model import parse_puzzle
 
 STATIC_DIR = Path(__file__).parent / "static"
 DIST_DIR = Path(__file__).parent.parent / "web" / "dist"
 PEN_COLOURS = {"confirmed": 1, "candidate": 5, "excluded": 4}
+_BUILDING: dict[str, str] = {}
+_BUILDING_LOCK = threading.Lock()
 
 
 def _canonical_frame_actions(steps, analysis):
@@ -118,6 +115,12 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
                 preview(cached.get("source_url", ""), cached["puzzle"]["size"],
                         cached.get("rule_sheet", ""),
                         bool(cached.get("puzzle", {}).get("outside", True)))
+            elif not cached.get("rule_sheet"):
+                try:
+                    path = save_rulesheet(store.frame_path(key, -1).read_bytes())
+                    cached["rule_sheet"] = f"/api/rulesheet/{Path(path).name}"
+                except (OSError, ValueError):
+                    pass
             cached["notes"] = meta.get("notes", "")
             if isinstance(cached.get("rules"), dict):
                 cached["rules"]["notes"] = meta.get("notes", "")
@@ -327,15 +330,18 @@ class Handler(BaseHTTPRequestHandler):
             query = parse_qs(urlparse(self.path).query)
             session = (query.get("session") or [""])[0]
             total = int((query.get("total") or ["0"])[0] or 0)
+            with _BUILDING_LOCK:
+                building = session in _BUILDING
             directory = store.frames_dir(session)
-            numbers = []
+            numbers = set()
             if directory.exists():
                 for file in directory.glob("*.png"):
                     try:
-                        numbers.append(int(file.stem))
+                        numbers.add(int(file.stem))
                     except ValueError:
                         pass
-            complete = bool(total) and (total - 1) in numbers
+            frames = sum(0 <= n < total for n in numbers)
+            complete = -1 in numbers and frames == total
             error = None
             error_file = store.frames_dir(session) / "error.json"
             if error_file.exists():
@@ -344,8 +350,9 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception:
                     error = {"message": "frame build failed"}
             self._send(200, json.dumps({
-                "frames": len([n for n in numbers if n >= 0]),
+                "frames": frames,
                 "complete": complete, "total": total, "error": error,
+                "interrupted": not building and not complete and not error,
             }).encode(), "application/json")
             return
         if path == "/api/live/health":
@@ -491,32 +498,45 @@ class Handler(BaseHTTPRequestHandler):
                         digest = store.hash_json({"renderer": 33, "url": url, "size": size,
                                                   "crop": crop, "steps": canonical})
                     steps = canonical
-                    if key and digest and store.has_frames(key, digest):
-                        last = len(steps) - 1
-                        complete = store.frame_path(key, -1).is_file() and store.frame_path(key, last).is_file()
-                        result = {"ok": True, "session": key, "cached": True, "complete": complete}
+                    if key:
+                        directory = store.frames_dir(key)
+
+                        def _build():
+                            try:
+                                live.build(url, steps, directory=str(directory), session=key,
+                                           size=size, crop=crop, wait=True)
+                                if digest:
+                                    store.set_frames_hash(key, digest)
+                            except Exception as exc:  # noqa: BLE001
+                                print(f"frame build failed: {exc}", flush=True)
+                                if not (directory / "error.json").is_file():
+                                    directory.mkdir(parents=True, exist_ok=True)
+                                    (directory / "error.json").write_text(
+                                        json.dumps({"message": str(exc)}), encoding="utf-8")
+                            finally:
+                                with _BUILDING_LOCK:
+                                    _BUILDING.pop(key, None)
+
+                        with _BUILDING_LOCK:
+                            result = {"ok": True, "session": key, "building": True}
+                            if key in _BUILDING:
+                                if _BUILDING[key] != digest:
+                                    self._send(409, json.dumps({
+                                        "error": "正在生成这道题的另一组截图，请稍后重试。"
+                                    }, ensure_ascii=False).encode(), "application/json")
+                                    return
+                            else:
+                                if (digest and store.has_frames(key, digest)
+                                        and not (directory / "error.json").exists()
+                                        and all(store.frame_path(key, step).is_file()
+                                                for step in range(-1, len(steps)))):
+                                    result = {"ok": True, "session": key, "cached": True, "complete": True}
+                                else:
+                                    store.delete_layer(key, "frames")
+                                    _BUILDING[key] = digest
+                                    threading.Thread(target=_build, daemon=True).start()
                     else:
-                        directory = str(store.frames_dir(key)) if key else None
-                        if key and key in _BUILDING:
-                            result = {"ok": True, "session": key, "building": True}
-                        elif key:
-                            store.delete_layer(key, "frames")
-                            _BUILDING.add(key)
-                            def _build():
-                                try:
-                                    live.build(url, steps, directory=directory, session=key, size=size, crop=crop)
-                                    if digest:
-                                        store.set_frames_hash(key, digest)
-                                except Exception as exc:  # noqa: BLE001
-                                    print(f"frame build failed: {exc}", flush=True)
-                                finally:
-                                    _BUILDING.discard(key)
-                            threading.Thread(target=_build, daemon=True).start()
-                            result = {"ok": True, "session": key, "building": True}
-                        else:
-                            result = live.build(url, steps, directory=directory, session=None, size=size, crop=crop)
-                            if digest:
-                                store.set_frames_hash(key, digest)
+                        result = live.build(url, steps, size=size, crop=crop)
                 elif urlparse(self.path).path == "/api/live/start":
                     result = live.start(str(body.get("url") or ""))
                 else:

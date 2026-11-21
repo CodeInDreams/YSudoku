@@ -162,6 +162,7 @@ async function open(url, logicalN = 0, crop = false) {
 }
 
 async function shot() {
+  touch();
   latest = await page.screenshot({
     clip: board.capture,
     type: "png",
@@ -605,65 +606,65 @@ async function ensureCellValue(cell, value, known = null) {
 }
 
 async function buildSession(url, steps, session, targetDir, size = 0, crop = false) {
-  await open(url, size, crop);
   const dir = targetDir || path.join(process.cwd(), ".cache", "frames", session);
   fs.mkdirSync(dir, { recursive: true });
-  const initial = await shot();
-  const rect = { ...board.rect, imageWidth: initial.readUInt32BE(16), imageHeight: initial.readUInt32BE(20) };
-  fs.writeFileSync(path.join(dir, "grid.json"), JSON.stringify(rect));
-  fs.writeFileSync(path.join(dir, "-1.png"), initial);
   try {
-  const initialBoard = await readBoard();
-  let expected = new Map();
-  initialBoard.values.forEach((value, cell) => { if (value) expected.set(cell, value); });
-  for (let i = 0; i < steps.length; i++) {
-    let valueTouched = false;
-    for (const action of steps[i] || []) {
-      if (["place", "clear", "undo", "redo", "undo_to_snapshot", "reload_base"].includes(action.op)) {
-        valueTouched = true;
-      }
-      await act(action);
-      if (["undo", "redo", "undo_to_snapshot", "reload_base"].includes(action.op)) {
-        const base = await readBoard();
-        expected = new Map();
-        base.values.forEach((value, cell) => { if (value) expected.set(cell, value); });
-      }
-      if (action.op === "place") expected.set(action.cell, Number(action.value));
-    }
-    if (valueTouched) {
-      // One reconciliation pass per step: missing, wrong, then stray values.
-      let actual = await readBoard();
-      for (const [cell, value] of expected.entries()) {
-        if (actual.values[cell] !== value) {
-          const ok = await ensureCellValue(cell, value, actual);
-          if (!ok) console.error(JSON.stringify({event:"restore-warning", cell, value}));
+    await open(url, size, crop);
+    const initial = await shot();
+    const rect = { ...board.rect, imageWidth: initial.readUInt32BE(16), imageHeight: initial.readUInt32BE(20) };
+    fs.writeFileSync(path.join(dir, "grid.json"), JSON.stringify(rect));
+    fs.writeFileSync(path.join(dir, "-1.png"), initial);
+    const initialBoard = await readBoard();
+    let expected = new Map();
+    initialBoard.values.forEach((value, cell) => { if (value) expected.set(cell, value); });
+    for (let i = 0; i < steps.length; i++) {
+      let valueTouched = false;
+      for (const action of steps[i] || []) {
+        if (["place", "clear", "undo", "redo", "undo_to_snapshot", "reload_base"].includes(action.op)) {
+          valueTouched = true;
         }
+        await act(action);
+        if (["undo", "redo", "undo_to_snapshot", "reload_base"].includes(action.op)) {
+          const base = await readBoard();
+          expected = new Map();
+          base.values.forEach((value, cell) => { if (value) expected.set(cell, value); });
+        }
+        if (action.op === "place") expected.set(action.cell, Number(action.value));
       }
-      const wrong = actual.values
-        .map((value, cell) => (value && expected.has(cell) && value !== expected.get(cell) ? cell : -1))
-        .filter((cell) => cell >= 0);
-      for (const cell of wrong) await setCellValue(cell, expected.get(cell));
-      const stray = actual.values
-        .map((value, cell) => (value && !expected.has(cell) ? cell : -1))
-        .filter((cell) => cell >= 0);
-      for (const cell of stray) await clearCellValue(cell);
-      if (wrong.length || stray.length) {
-        actual = await readBoard();
-        const left = actual.values
+      if (valueTouched) {
+        // One reconciliation pass per step: missing, wrong, then stray values.
+        let actual = await readBoard();
+        for (const [cell, value] of expected.entries()) {
+          if (actual.values[cell] !== value) {
+            const ok = await ensureCellValue(cell, value, actual);
+            if (!ok) console.error(JSON.stringify({event:"restore-warning", cell, value}));
+          }
+        }
+        const wrong = actual.values
+          .map((value, cell) => (value && expected.has(cell) && value !== expected.get(cell) ? cell : -1))
+          .filter((cell) => cell >= 0);
+        for (const cell of wrong) await setCellValue(cell, expected.get(cell));
+        const stray = actual.values
           .map((value, cell) => (value && !expected.has(cell) ? cell : -1))
           .filter((cell) => cell >= 0);
-        if (left.length) throw new Error(`stray values remain: ${left.join(",")}`);
-      }
-      for (const [cell, value] of expected.entries()) {
-        if (actual.values[cell] !== value) {
-          const ok = await ensureCellValue(cell, value, actual);
-          if (!ok) console.error(JSON.stringify({event:"final-restore-warning", cell, value}));
+        for (const cell of stray) await clearCellValue(cell);
+        if (wrong.length || stray.length) {
+          actual = await readBoard();
+          const left = actual.values
+            .map((value, cell) => (value && !expected.has(cell) ? cell : -1))
+            .filter((cell) => cell >= 0);
+          if (left.length) throw new Error(`stray values remain: ${left.join(",")}`);
+        }
+        for (const [cell, value] of expected.entries()) {
+          if (actual.values[cell] !== value) {
+            const ok = await ensureCellValue(cell, value, actual);
+            if (!ok) console.error(JSON.stringify({event:"final-restore-warning", cell, value}));
+          }
         }
       }
+      await clearSelection();
+      fs.writeFileSync(path.join(dir, `${i}.png`), await shot());
     }
-    await clearSelection();
-    fs.writeFileSync(path.join(dir, `${i}.png`), await shot());
-  }
   } catch (err) {
     fs.writeFileSync(path.join(dir, "error.json"), JSON.stringify({
       message: String(err?.message || err), stack: String(err?.stack || ""),
@@ -731,10 +732,12 @@ const server = http.createServer((req, res) => {
         const session = String(body.session || Date.now().toString(36));
         const steps = body.steps || [];
         const targetDir = body.dir || null;
-        work = work.then(
+        const build = work.then(
           () => buildSession(body.url, steps, session, targetDir, Number(body.size) || 0, Boolean(body.crop)),
           () => buildSession(body.url, steps, session, targetDir, Number(body.size) || 0, Boolean(body.crop)),
-        ).catch(() => {});
+        );
+        work = build.catch(() => {});
+        if (body.wait) await build;
         return json(res, 200, { ok: true, session, count: steps.length });
       }
       if (url.pathname === "/start") {
