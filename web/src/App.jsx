@@ -1,4 +1,3 @@
-import { annotationChanges, nativeAnnotations } from "./lib/nativeAnnotations.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle, ArrowUpDown, Check, ChevronDown, ChevronLeft, ChevronRight,
@@ -26,7 +25,7 @@ import logoDark from "./assets/logo-dark.svg";
 
 const RULE_EN = {
   killer: "Killer cages", cage: "Killer cages", whisper: "Whispers", renban: "Renbans",
-  arrow: "Arrows", thermo: "Thermometers", sandwich: "Sandwiches", xsum: "X-Sums",
+  arrow: "Arrows", thermo: "Thermometers", sandwich: "Sandwiches", xsum: "X-Sums", x_sums: "X-Sums",
   region: "Regions", skyscraper: "Skyscrapers", consecutive: "Consecutive",
   modular: "Global modularity (2×2: 1/4/7, 2/5/8, 3/6/9)",
   entropy: "Global entropy (2×2: low/mid/high)",
@@ -39,7 +38,7 @@ function digitsOf(mask, n) {
 }
 
 const PERSIST_KEY = "ysudoku.ui.v1";
-const DEFAULT_SETTINGS = { max_rules: 100, max_steps: 100, max_frames: 10, max_mb: 500 };
+const DEFAULT_SETTINGS = { max_rules: 1000, max_steps: 1000, max_frames: 100, max_mb: 500 };
 
 function cacheDifference(data, lang) {
   if (!data) return null;
@@ -190,124 +189,10 @@ function StepGroups({ groups = [], n }) {
   });
 }
 
-function buildStepActions(analysis) {
-  const n = analysis.puzzle.size;
-  const steps = [];
-  let state = new Map();
-  const marked = new Set();
-  const values = new Map();
-  let annotations = new Map();
-  (analysis.puzzle?.givens || []).forEach((value, cell) => { if (value) values.set(cell, value); });
-  let inBranch = false;
-  let branchBase = null;
-  let branchCell = null;
-  const MAX_POSITIVE = 5;
-  const digits = (mask) => digitsOf(mask || 0, n);
-  const same = (a, b) => a.size === b.size && [...a].every((d) => b.has(d));
-
-  for (let stepIndex = 0; stepIndex < analysis.steps.length; stepIndex++) {
-    const step = analysis.steps[stepIndex];
-    const actions = [];
-    if (step.branch && !step.revert && !inBranch) {
-      inBranch = true;
-      branchCell = (step.events || []).find((ev) => ev.kind === "place")?.cell ?? null;
-      branchBase = { state: new Map(state), marked: new Set(marked), values: new Map(values) };
-      actions.push({ op: "snapshot_start", cell: branchCell });
-    }
-    if (step.revert) {
-      actions.push({ op: "undo_to_snapshot", cell: branchCell });
-      if (branchBase) {
-        state = new Map(branchBase.state);
-        marked.clear();
-        branchBase.marked.forEach((cell) => marked.add(cell));
-        values.clear();
-        branchBase.values.forEach((value, cell) => values.set(cell, value));
-      }
-      inBranch = false;
-      branchBase = null;
-      branchCell = null;
-      // Previously saved rollback steps may have no conclusion events.
-      if (!step.events?.length) {
-        steps.push(actions);
-        continue;
-      }
-    }
-    const pre = step.pre_dom || [];
-    const elimsByCell = new Map();
-    const placeByCell = new Map();
-    for (const ev of step.events || []) {
-      if (ev.kind === "elim") {
-        if (!elimsByCell.has(ev.cell)) elimsByCell.set(ev.cell, new Set());
-        elimsByCell.get(ev.cell).add(ev.value);
-      } else if (ev.kind === "place") {
-        placeByCell.set(ev.cell, ev.value);
-      }
-    }
-    const affected = new Set([...elimsByCell.keys(), ...placeByCell.keys()]);
-    const nextState = new Map();
-
-    const update = (cell, desired, place) => {
-      const current = state.get(cell);
-      const isMarked = marked.has(cell);
-      if (place !== undefined) {
-        if (isMarked || current?.size) actions.push({ op: "candidates", cell, digits: [] });
-        actions.push({ op: "place", cell, value: place });
-        values.set(cell, place);
-        marked.delete(cell);
-        return;
-      }
-      if (desired.size === 1) {
-        if (!current || !isMarked || !same(current, desired)) {
-          actions.push({ op: "candidates", cell, digits: [...desired] });
-          marked.add(cell);
-        }
-        nextState.set(cell, desired);
-        return;
-      }
-      if (desired.size === 0) {
-        if (isMarked || current?.size) actions.push({ op: "candidates", cell, digits: [] });
-        marked.delete(cell);
-        return;
-      }
-      if (desired.size > MAX_POSITIVE) {
-        if (isMarked) actions.push({ op: "candidates", cell, digits: [] });
-        marked.delete(cell);
-        nextState.set(cell, desired);
-        return;
-      }
-      if (!current || !isMarked || !same(current, desired)) {
-        actions.push({ op: "candidates", cell, digits: [...desired] });
-        marked.add(cell);
-      }
-      nextState.set(cell, desired);
-    };
-
-    const refreshCells = step.technique === "candidate_map"
-      ? Array.from({ length: n * n }, (_, i) => i)
-      : [...state.keys()];
-    for (const cell of refreshCells) {
-      if (!affected.has(cell)) update(cell, new Set(digits(pre[cell])));
-    }
-    for (const cell of affected) {
-      const desired = new Set(digits(pre[cell]));
-      for (const value of elimsByCell.get(cell) || []) desired.delete(value);
-      update(cell, desired, placeByCell.get(cell));
-    }
-    state = nextState;
-    if (!inBranch) {
-      const next = nativeAnnotations(step.visual || {}, n);
-      actions.push(...annotationChanges(annotations, next));
-      annotations = next;
-    }
-    steps.push(actions);
-  }
-  return steps;
-}
-
 async function postJson(url, body, signal) {
   const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  if (!res.ok) throw Object.assign(new Error(data.error || `HTTP ${res.status}`), { data });
   return data;
 }
 
@@ -496,6 +381,9 @@ export default function App() {
   const [sort, setSort] = useState("recent");
   const [favOnly, setFavOnly] = useState(false);
   const [error, setError] = useState("");
+  const [quota, setQuota] = useState(null);
+  const [serviceNotice, setServiceNotice] = useState(null);
+  const [llmFallback, setLlmFallback] = useState(false);
   const [notes, setNotes] = useState("");
   const [deleted, setDeleted] = useState(false);
   const [sessionGrid, setSessionGrid] = useState(null);
@@ -504,7 +392,7 @@ export default function App() {
   const [dark, setDark] = useState(() => {
     try { return localStorage.getItem("ysudoku.theme") === "dark"; } catch { return false; }
   });
-  const [rulePrompt, setRulePrompt] = useState(() => readPersisted().rulePrompt || "");
+  const [rulePrompt, setRulePrompt] = useState(() => (readPersisted().rulePrompt || "").slice(0, 1000));
   const [conflictChoice, setConflictChoice] = useState(() => readPersisted().conflictChoice || "");
   const [settings, setSettings] = useState(() => ({
     ...DEFAULT_SETTINGS,
@@ -553,7 +441,15 @@ export default function App() {
   }, [session, frameVersion, frameProgress.complete]);
   const frameTimer = useRef(null);
   const streamToken = useRef(0);
-  const buildingKey = useRef(null);
+  useEffect(() => {
+    function refreshQuota() {
+      fetch("/api/quota").then((res) => res.ok ? res.json() : null)
+        .then((data) => { if (data) setQuota(data); }).catch(() => {});
+    }
+    refreshQuota();
+    const interval = setInterval(refreshQuota, 60000);
+    return () => clearInterval(interval);
+  }, []);
   const activeLang = useRef(lang);
 
   const t = (key, vars) => translate(lang, key, vars);
@@ -727,21 +623,26 @@ export default function App() {
     setDeleted(false);
     setError("");
     if (data.rule_sheet) setPreviewSrc((current) => current || data.rule_sheet);
-    setNotes(data.notes || data.rules?.notes || "");
+    setNotes((data.notes || data.rules?.notes || "").slice(0, 1000));
     setPhase(data.cached ? "opening" : "rendering");
     startLive(data);
+    if (data.render_blocked) showServiceError({ data: data.render_blocked }, "error.build");
     refreshStore();
   }
 
-  async function startLive(nextAnalysis) {
+  function showServiceError(err, fallback) {
+    if (err.data?.quota) setQuota(err.data.quota);
+    if (["server_busy", "puzzle_busy", "daily_solves_exceeded", "ip_banned", "prompt_too_long", "invalid_puzzle", "storage_limit_exceeded", "count_reduction_disabled"].includes(err.data?.code)) {
+      setServiceNotice({ ...err.data, used: fmtBytes(err.data.used_bytes), limitBytes: fmtBytes(err.data.limit_bytes) });
+    } else {
+      setError(`${t(fallback)}: ${err.message}`);
+    }
+  }
+
+  async function startLive(nextAnalysis, rebuild = false) {
     const token = streamToken.current;
-    const buildKey = nextAnalysis?.storage?.key || nextAnalysis?.source_url || "";
-    if (buildingKey.current?.token === token && buildingKey.current.key === buildKey) return;
-    const request = { token, key: buildKey };
-    buildingKey.current = request;
     if (frameTimer.current) clearInterval(frameTimer.current);
     frameTimer.current = null;
-    setError("");
     setReady(false);
     setSession(null);
     setSessionGrid(null);
@@ -749,41 +650,25 @@ export default function App() {
     setFrameStep(-2);
     setDeleted(false);
     setFrameVersion(Date.now());
-    setFrameProgress({ frames: 0, total: nextAnalysis.steps?.length || 0, complete: false });
+    const total = nextAnalysis.steps?.length || 0;
+    setFrameProgress({ frames: 0, total, complete: false });
     try {
-      const actions = buildStepActions(nextAnalysis);
-      let hash = 2166136261;
-      const crop = !(nextAnalysis.puzzle?.outside ?? !!nextAnalysis.puzzle?.clues?.length);
-      const frameLang = nextAnalysis.content_lang || "zh";
-      const text = "frame-v34:" + (frameLang === "zh" ? "" : frameLang + ":")
-        + (crop ? "crop:" : "full:") + JSON.stringify(actions);
-      for (let i = 0; i < text.length; i++) { hash ^= text.charCodeAt(i); hash = Math.imul(hash, 16777619); }
-      const data = await postJson("/api/live/build", {
-        url: nextAnalysis.source_url || "",
-        size: nextAnalysis.puzzle?.size || 0,
-        steps: actions,
-        key: nextAnalysis.storage?.key || "",
-        steps_hash: (hash >>> 0).toString(16),
-        keep_frames_for: cacheDifference(nextAnalysis, activeLang.current)
-          ? nextAnalysis.storage?.steps_hash || nextAnalysis.cache_version?.steps_hash
-          : undefined,
-        crop,
-      }, AbortSignal.timeout(15000));
+      const data = rebuild
+        ? await postJson("/api/live/build", { key: nextAnalysis.storage?.key })
+        : nextAnalysis.frames;
       if (token !== streamToken.current) return;
-      setSession(data.session);
-      if (data.cached && data.complete) {
+      setSession(data?.session || null);
+      if (!data?.session || data.complete) {
         setPhase("done");
       } else {
         setPhase("rendering");
-        startFrameProgress(data.session, actions.length);
+        startFrameProgress(data.session, total);
       }
     } catch (err) {
       if (token === streamToken.current) {
         setPhase("failed");
-        setError(`${t("error.build")}: ${err.message}`);
+        showServiceError(err, "error.build");
       }
-    } finally {
-      if (buildingKey.current === request) buildingKey.current = null;
     }
   }
 
@@ -817,7 +702,7 @@ export default function App() {
         if (res.ok) {
           const data = await res.json();
           if (!current()) return;
-          if (data.frames > lastFrames) {
+          if (data.frames > lastFrames || data.building) {
             lastFrames = data.frames;
             lastProgress = Date.now();
           }
@@ -844,9 +729,11 @@ export default function App() {
     tick();
   }
 
-  async function streamSolve(body, targetUrl, title = "", fallback = null) {
+  async function streamSolve(body, targetUrl, title = "", fallback = null,
+                             endpoint = "/api/solve/start") {
     const token = ++streamToken.current;
     setCacheChoice(null);
+    setLlmFallback(false);
     setOpeningTitle(title);
     setPreviewSrc(fallback?.rule_sheet || "");
     setPreviewJob("");
@@ -862,13 +749,13 @@ export default function App() {
     setAnalysis(null); setStreamRules([]); setStreamSteps([]); setStreamTarget([]); finalPayload.current = null;
     setPhase("opening");
     try {
-      const { id } = await postJson("/api/solve/start", { ...body, wait_for_preview: true });
+      const { id } = await postJson(endpoint, { ...body, stream: true, wait_for_preview: true });
       while (token === streamToken.current) {
         await new Promise((resolve) => setTimeout(resolve, 300));
         const res = await fetch(`/api/job?id=${encodeURIComponent(id)}`);
         const job = await res.json().catch(() => ({}));
         if (token !== streamToken.current) return;
-        if (!res.ok) throw new Error(job.error || "job failed");
+        if (!res.ok) throw Object.assign(new Error(job.error || "job failed"), { data: job });
         if (job.title) setOpeningTitle(job.title);
         if (job.preview) { setPreviewJob(id); setPreviewSrc(job.preview); }
         if (job.phase === "preview" || job.phase === "rules") setPhase(job.phase);
@@ -876,6 +763,8 @@ export default function App() {
         setStreamTarget(job.steps || []);
         if (job.phase === "solving") setPhase("solving");
         if (job.status === "done") {
+          setLlmFallback(!!job.payload?.llm_quota_exceeded);
+          if (job.payload?.quota) setQuota(job.payload.quota);
           setTarget(targetUrl);
           setUrl(targetUrl);
           if (cacheDifference(job.payload, activeLang.current)) {
@@ -895,10 +784,15 @@ export default function App() {
       if (token === streamToken.current) {
         if (fallback) applyAnalysis(fallback);
         else setPhase("failed");
-        setError(`${t("error.solve")}: ${err.message}`);
+        showServiceError(err, "error.solve");
+        if (err.data?.code === "storage_limit_exceeded") refreshStore();
       }
     } finally {
-      if (token === streamToken.current) setBusy(false);
+      if (token === streamToken.current) {
+        setBusy(false);
+        fetch("/api/quota").then((res) => res.ok ? res.json() : null)
+          .then((data) => { if (data && token === streamToken.current) setQuota(data); }).catch(() => {});
+      }
     }
   }
 
@@ -946,14 +840,9 @@ export default function App() {
 
   async function refreshRules() {
     if (!analysis) return;
-    setBusy(true); setPlaying(false);
-    try {
-      const data = await postJson("/api/store/refresh_rules", { target: target || "", demo: !!analysis.demo, notes, lang: activeLang.current });
-      if (cacheDifference(data, activeLang.current)) setCacheChoice({ payload: data, targetUrl: target });
-      else applyAnalysis(data, true);
-      setInspectorTab("explain");
-    } catch (err) { setError(`${t("error.refresh")}: ${err.message}`); }
-    finally { setBusy(false); }
+    await streamSolve({ target, demo: !!analysis.demo, notes, llm, audit, lang: activeLang.current },
+      target, analysis.puzzle.title, analysis, "/api/store/refresh_rules");
+    setInspectorTab("explain");
   }
 
   async function toggleFavorite(entry) {
@@ -1014,7 +903,11 @@ export default function App() {
   }
 
   async function saveSettings() {
-    await postJson("/api/store/settings", settings);
+    try {
+      await postJson("/api/store/settings", settings);
+    } catch (err) {
+      showServiceError(err, "history.save");
+    }
     refreshStore();
   }
 
@@ -1431,20 +1324,20 @@ export default function App() {
                   <div className="flex items-center gap-2">
                     <div className="min-w-0"><div className="truncate font-medium">{entry.title}</div><div className="text-[10.5px] text-muted-foreground">{entry.author || entry.key}{isCurrent ? ` · ${t("history.current")}` : ""}</div>
                       <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-muted-foreground md:hidden"><span>{statusLabel(entry.status)}</span><span>·</span><span>{entry.steps_count || 0} {t("table.steps")}</span></div></div>
-                    <div className="ml-auto flex w-16 shrink-0 items-center justify-end gap-3">
-                      <button className={`${entry.favorite ? "text-amber-500" : "text-muted-foreground"}`} title={t("history.favorite")} onClick={(e) => { e.stopPropagation(); toggleFavorite(entry); }}><Star className="h-3.5 w-3.5" fill={entry.favorite ? "currentColor" : "none"} /></button>
-                      <button className="text-rose-500 hover:text-rose-600" title={isCurrent ? t("history.deleteCurrentConfirm", { title: entry.title }) : t("history.deletePuzzle")} onClick={(e) => { e.stopPropagation(); removeEntry(entry); }}><Trash2 className="h-3.5 w-3.5" /></button>
-                    </div>
+                    {(store?.can_delete || store?.can_favorite) && <div className="ml-auto flex w-16 shrink-0 items-center justify-end gap-3">
+                      {store?.can_favorite && <button className={`${entry.favorite ? "text-amber-500" : "text-muted-foreground"}`} title={t("history.favorite")} onClick={(e) => { e.stopPropagation(); toggleFavorite(entry); }}><Star className="h-3.5 w-3.5" fill={entry.favorite ? "currentColor" : "none"} /></button>}
+                      {store?.can_delete && <button className="text-rose-500 hover:text-rose-600" title={isCurrent ? t("history.deleteCurrentConfirm", { title: entry.title }) : t("history.deletePuzzle")} onClick={(e) => { e.stopPropagation(); removeEntry(entry); }}><Trash2 className="h-3.5 w-3.5" /></button>}
+                    </div>}
                   </div>
                 </td>
                 <td className="hidden px-2 py-2.5 md:table-cell"><Badge className="whitespace-nowrap" variant={["solved", "solved-global", "solved-search"].includes(entry.status) ? "success" : "outline"}>{statusLabel(entry.status)}</Badge></td>
                 <td className="hidden px-2 py-2.5 font-mono text-[11px] text-muted-foreground md:table-cell">{entry.steps_count || 0}</td>
                 <td className="h-[90px] overflow-hidden px-2 py-2 align-middle md:h-auto">
                   <div className="flex h-full min-w-0 flex-col items-stretch justify-center gap-0.5">
-                    {["rules", "steps", "frames"].map((layer) => entry.layers?.[layer] && (
+                    {["puzzle", "rules", "steps", "frames"].map((layer) => entry.layers?.[layer] && (
                       <span key={layer} title={`${t(`layers.${layer}`)} ${fmtBytes(entry.sizes?.[layer])}`} className="inline-flex items-center justify-between gap-1 whitespace-nowrap rounded border px-1.5 py-0.5 text-[9px] text-muted-foreground">
                         {t(`layers.${layer}`)} {fmtBytes(entry.sizes?.[layer])}
-                        <button className="text-rose-500 hover:text-rose-600" title={isCurrent ? t("history.confirmDeleteCurrentLayer", { title: entry.title, layer: t(`layers.${layer}`) }) : t("history.delete", { layer: t(`layers.${layer}`) })} onClick={(e) => { e.stopPropagation(); removeLayer(entry, layer); }}><X className="h-2.5 w-2.5" /></button>
+                        {store?.can_delete && <button className="text-rose-500 hover:text-rose-600" title={isCurrent ? t("history.confirmDeleteCurrentLayer", { title: entry.title, layer: t(`layers.${layer}`) }) : t("history.delete", { layer: t(`layers.${layer}`) })} onClick={(e) => { e.stopPropagation(); removeLayer(entry, layer); }}><X className="h-2.5 w-2.5" /></button>}
                       </span>
                     ))}
                   </div>
@@ -1498,6 +1391,8 @@ export default function App() {
               )}
             </div>
             <Button type="submit" size="sm" className="whitespace-nowrap" disabled={busy}>{busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : t("header.solve")}</Button>
+            {quota?.limit > 0 && <span role="status" className="shrink-0 whitespace-nowrap text-[10px] text-muted-foreground"
+              title={t("quota.remaining", quota)} aria-label={t("quota.remaining", quota)}>{quota.remaining}/{quota.limit}</span>}
             <Button type="button" size="sm" variant="outline" className="whitespace-nowrap" onClick={demo} disabled={busy}>{t("header.demo")}</Button>
           </form>
           <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
@@ -1554,6 +1449,20 @@ export default function App() {
       </header>
 
       <main className="mx-auto max-w-[1280px] px-4 py-6 lg:px-6 lg:py-8">
+        <Dialog open={!!serviceNotice} onOpenChange={(open) => { if (!open) setServiceNotice(null); }}>
+          {serviceNotice && <DialogContent className="w-[calc(100%-2rem)] rounded-xl">
+            <DialogTitle>{t(`quota.${serviceNotice.code}`)}</DialogTitle>
+            <DialogDescription>{t(`quota.${serviceNotice.code}Description`, serviceNotice.quota || serviceNotice)}</DialogDescription>
+            {!!serviceNotice.jobs?.length && <ul className="max-h-64 space-y-2 overflow-auto text-sm">
+              {serviceNotice.jobs.map((job, index) => <li key={index} className="flex justify-between gap-3 rounded border p-2">
+                <span className="break-all">{job.title}</span>
+                <span className="shrink-0 text-muted-foreground">{t("quota.elapsed", { minutes: Math.floor(job.seconds / 60), seconds: job.seconds % 60 })}</span>
+              </li>)}
+            </ul>}
+            <Button className="justify-self-end" onClick={() => setServiceNotice(null)}>{t("quota.close")}</Button>
+          </DialogContent>}
+        </Dialog>
+        {llmFallback && <p role="status" className="mb-4 rounded-lg border px-3 py-2 text-sm">{t("quota.llmFallback")}</p>}
         <Dialog open={!!choiceMismatch} onOpenChange={(open) => { if (!open) chooseCachedAnalysis(false); }}>
           {cacheChoice && choiceMismatch && (
             <DialogContent className="w-[calc(100%-2rem)] rounded-xl">
@@ -1634,7 +1543,7 @@ export default function App() {
                       </button>
                     ))}
                   </div>
-                  <textarea value={rulePrompt} onChange={(e) => setRulePrompt(e.target.value)}
+                  <textarea maxLength={1000} value={rulePrompt} onChange={(e) => setRulePrompt(e.target.value)}
                     placeholder="补充规则说明（可选）"
                     className="mt-3 w-full resize-y rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-primary" rows={3} />
                   <div className="mt-4 flex justify-end">
@@ -1686,7 +1595,7 @@ export default function App() {
 
         {view === "rules" && (
           <>
-            <PageHead title={t("rules.title")} description={analysis ? t("rules.desc", { model: "deepseek-flash" }) : (phaseHint || t("empty.solve"))}
+            <PageHead title={t("rules.title")} description={analysis ? t("rules.desc") : (phaseHint || t("empty.solve"))}
               badges={phase !== "idle" && phase !== "done" ? <Badge variant="outline">{phaseLabel}</Badge> : null} />
             {!analysis ? (phase === "idle" ? emptySolve : (
               <Card>
@@ -1714,7 +1623,7 @@ export default function App() {
                     </div>
                   </CardHeader>
                   <CardContent className="pt-4">
-                    <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={4} placeholder={t("rules.notesPlaceholder")} className="min-h-[104px] resize-y bg-muted/30 text-sm leading-6" />
+                    <Textarea maxLength={1000} value={notes} onChange={(e) => setNotes(e.target.value)} rows={4} placeholder={t("rules.notesPlaceholder")} className="min-h-[104px] resize-y bg-muted/30 text-sm leading-6" />
                     <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                       <span className="text-[11px] text-muted-foreground">{t("rules.saveHint")}</span>
                       <Button size="sm" onClick={refreshRules} disabled={busy}><Save className="mr-1 h-3.5 w-3.5" />{t("rules.save")}</Button>
@@ -1775,7 +1684,11 @@ export default function App() {
               <CardContent className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
                 <div className="col-span-2 flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[10px] text-muted-foreground sm:col-span-4">
                   <Database className="h-3.5 w-3.5 shrink-0" />
-                  <code className="truncate">{store?.info?.location || "—"}</code>
+                  <span>{t("quota.sharedCache")}</span>
+                </div>
+                <div className="col-span-2 rounded-md border px-2.5 py-2">
+                  <div className="text-[11px] font-medium">{t("layers.puzzle")}</div>
+                  <div className="text-[10px] text-muted-foreground">{t("history.puzzleSpace", { count: store?.info?.counts?.puzzle || 0, size: fmtBytes(store?.info?.sizes?.puzzle) })}</div>
                 </div>
                 {[
                   ["rules", "layers.rules", "max_rules", store?.info?.counts?.rules || 0, store?.info?.sizes?.rules],
@@ -1787,7 +1700,7 @@ export default function App() {
                       <div className="text-[11px] font-medium">{t(label)}</div>
                       <div className="text-[10px] text-muted-foreground">{t("history.usedLimit", { used: count, limit: settings[key] ?? 0, size: fmtBytes(size) })}</div>
                     </div>
-                    <input type="number" min="0" value={settings[key] ?? ""} onChange={(e) => setSettings((s) => ({ ...s, [key]: Number(e.target.value) }))} className="w-14 rounded border bg-transparent px-1 py-0.5 text-right text-[11px] outline-none" />
+                    <input type="number" min={store?.can_delete ? 0 : store?.info?.settings?.[key]} disabled={!store?.can_update_settings} value={settings[key] ?? ""} onChange={(e) => setSettings((s) => ({ ...s, [key]: Number(e.target.value) }))} className="w-14 rounded border bg-transparent px-1 py-0.5 text-right text-[11px] outline-none" />
                   </div>
                 ))}
                 <div className="col-span-2 flex items-center gap-2 rounded-md border px-2.5 py-2">
@@ -1795,9 +1708,9 @@ export default function App() {
                     <div className="text-[11px] font-medium">{t("history.totalSpace")}</div>
                     <div className="text-[10px] text-muted-foreground">{t("history.spaceUsed", { used: fmtBytes(store?.info?.total), limit: settings.max_mb ?? 0 })}</div>
                   </div>
-                  <input type="number" min="0" value={settings.max_mb ?? ""} onChange={(e) => setSettings((s) => ({ ...s, max_mb: Number(e.target.value) }))} className="w-14 rounded border bg-transparent px-1 py-0.5 text-right text-[11px] outline-none" />
+                  <input type="number" min="0" disabled={!store?.can_update_settings} value={settings.max_mb ?? ""} onChange={(e) => setSettings((s) => ({ ...s, max_mb: Number(e.target.value) }))} className="w-14 rounded border bg-transparent px-1 py-0.5 text-right text-[11px] outline-none" />
                 </div>
-                <Button size="sm" className="col-span-2 sm:col-span-4" onClick={saveSettings}>{t("history.save")}</Button>
+                {store?.can_update_settings && <Button size="sm" className="col-span-2 sm:col-span-4" onClick={saveSettings}>{t("history.save")}</Button>}
               </CardContent>
             </Card>
             </>}
@@ -1805,7 +1718,14 @@ export default function App() {
         )}
 
         {error && <div className="mt-4 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-200">{error}</div>}
-        <p className="mt-8 text-center text-[11px] text-muted-foreground">{t("footer.local")}</p>
+        <footer className="mt-8 space-y-1.5 border-t pt-4 text-center text-xs text-muted-foreground">
+          <p>{t("footer.local")}</p>
+          <p className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+            <span className="font-medium">{t("footer.thanks")}</span>
+            <a className="underline-offset-2 hover:underline" href="https://logic-masters.de/Verein/index.php" target="_blank" rel="noreferrer">Logic Masters Deutschland e.V.</a>
+            <a className="underline-offset-2 hover:underline" href="https://sudokupad.app/" target="_blank" rel="noreferrer">Sven’s SudokuPad · Cracking The Cryptic</a>
+          </p>
+        </footer>
         {currentEntry && deleted && <div className="sr-only">{t("step.deleted")}</div>}
       </main>
     </div>

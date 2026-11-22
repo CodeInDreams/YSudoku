@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import subprocess
 import time
+from threading import Lock
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -25,10 +27,16 @@ MIN_CLEAN_FRAME_VERSION = 34
 _ROOT = Path(__file__).resolve().parents[1]
 _SCRIPT = _ROOT / "tools" / "live_sudokupad.mjs"
 _proc: subprocess.Popen | None = None
+_WORKER_TOKEN = secrets.token_urlsafe(32)
+_START_LOCK = Lock()
 
 
 def _env() -> dict:
-    env = os.environ.copy()
+    env = {key: value for key, value in os.environ.items() if key in
+           ("PATH", "HOME", "LANG", "NODE_PATH", "PLAYWRIGHT_BROWSERS_PATH",
+            "YSUDOKU_LIVE_PORT", "YSUDOKU_LIVE_IDLE_SECONDS", "YSUDOKU_LIVE_MIN_IDLE", "YSUDOKU_CHROME")}
+    env["YSUDOKU_WORKER_TOKEN"] = _WORKER_TOKEN
+    env["YSUDOKU_WORKER_PARENT"] = str(os.getpid())
     if not env.get("NODE_PATH"):
         for candidate in (_ROOT / "tools" / "node_modules", Path("/tmp/pw/node_modules")):
             if candidate.exists():
@@ -39,12 +47,12 @@ def _env() -> dict:
     return env
 
 
-def _request(path: str, payload: dict | None = None, timeout: float = 120.0) -> bytes:
+def _request(path: str, payload: dict | None = None, timeout: float | None = 120.0) -> bytes:
     data = None if payload is None else json.dumps(payload).encode()
     req = urllib.request.Request(
         f"http://127.0.0.1:{PORT}{path}",
         data=data,
-        headers={"Content-Type": "application/json"} if data else {},
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {_WORKER_TOKEN}"},
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as response:
@@ -67,6 +75,16 @@ def _healthy() -> bool:
 
 
 def ensure() -> None:
+    with _START_LOCK:
+        _ensure()
+
+
+def stop() -> None:
+    if _proc is not None and _proc.poll() is None:
+        _proc.terminate()
+
+
+def _ensure() -> None:
     global _proc
     if _healthy():
         return
@@ -119,9 +137,12 @@ def place(digits: list[list[int]], reset: bool, corners: list | None = None,
 
 
 def build(url: str, steps: list[list[dict]], directory: str | None = None,
-          session: str | None = None, size: int = 0, crop: bool = False, wait: bool = False) -> dict:
+          session: str | None = None, size: int = 0, crop: bool = False, wait: bool = False,
+          analysis: dict | None = None) -> dict:
     ensure()
     payload = {"url": url, "steps": steps}
+    if analysis is not None:
+        payload["analysis"] = analysis
     if size:
         payload["size"] = int(size)
     if crop:
@@ -132,7 +153,7 @@ def build(url: str, steps: list[list[dict]], directory: str | None = None,
         payload["session"] = session
     if wait:
         payload["wait"] = True
-    return json.loads(_request("/build", payload, timeout=900))
+    return json.loads(_request("/build", payload, timeout=None if wait else 120))
 
 
 def grid(session: str | None = None) -> dict | None:

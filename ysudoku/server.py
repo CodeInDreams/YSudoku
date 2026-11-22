@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import hmac
 import json
+import os
+import re
 import math
 import threading
 import time
@@ -11,15 +14,15 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import history, live, store, sudokupad
-from .pipeline import ANALYSIS_VERSION, analyze, initial_screenshot, save_rulesheet
+from . import history, live, llm, store, sudokupad
+from .service_limits import Limits, PROMPT_LIMIT, Rejected, Work
+from .pipeline import ANALYSIS_VERSION, analyze, initial_screenshot, rulesheet_dir, save_rulesheet
 from .llm import LLMError
 from .model import parse_puzzle
 
 STATIC_DIR = Path(__file__).parent / "static"
 DIST_DIR = Path(__file__).parent.parent / "web" / "dist"
-PEN_COLOURS = {"confirmed": 1, "candidate": 5, "excluded": 4}
-_BUILDING: dict[str, str] = {}
+_BUILDING: set[str] = set()
 _BUILDING_LOCK = threading.Lock()
 
 
@@ -30,34 +33,6 @@ def _content_language(body):
 def _clean_frames(meta):
     version = meta.get("frames_renderer")
     return isinstance(version, int) and version >= live.MIN_CLEAN_FRAME_VERSION
-
-
-def _canonical_frame_actions(steps, analysis):
-    """Use the saved proof to make boundary rendering independent of client version."""
-    if not analysis or len(analysis.get("steps", ())) != len(steps):
-        return steps
-    visuals = [step.get("visual", {}) for step in analysis["steps"]]
-    if not any("region_edges" in visual for visual in visuals):
-        return steps
-
-    frames = []
-    previous = {}
-    for actions, proof_step, visual in zip(steps, analysis["steps"], visuals):
-        frame = [action for action in actions if action.get("op") != "pen"]
-        if not proof_step.get("branch"):
-            current = {}
-            for edge in visual.get("region_edges", ()):
-                status = edge.get("status") or ("confirmed" if edge.get("fixed") else "candidate")
-                current[tuple(sorted(edge["cells"]))] = PEN_COLOURS[status]
-            for cells, index in previous.items():
-                if cells not in current:
-                    frame.append({"op": "pen", "cells": list(cells), "index": index, "enabled": False})
-            for cells, index in current.items():
-                if previous.get(cells) != index:
-                    frame.append({"op": "pen", "cells": list(cells), "index": index, "enabled": True})
-            previous = current
-        frames.append(frame)
-    return frames
 
 
 def _hide_legacy_refutation_controls(payload):
@@ -72,28 +47,24 @@ def _hide_legacy_refutation_controls(payload):
 
 def _stored_analysis(target: str, body: dict, demo: bool = False,
                      force_rules: bool = False, force_steps: bool = False,
-                     on_rules=None, on_step=None, on_preview=None, on_preview_start=None, on_title=None, opened_at=None):
-    if "logic-masters.de" in target:
+                     on_rules=None, on_step=None, on_preview=None, on_preview_start=None, on_title=None,
+                     opened_at=None, work=None):
+    if work is None and urlparse(target).hostname in ("logic-masters.de", "www.logic-masters.de"):
         try:
             data = sudokupad.load(target)
             canonical = (data.get("metadata") or {}).get("source_url")
             if canonical:
-                target = canonical
+                target = _web_target(canonical)
         except Exception:
             pass
     key = store.key_for(target)
     lang = _content_language(body)
-    if not demo:
-        meta = store._meta(key)
-        if not meta.get("title"):
-            store._update_meta(key, title=target, author="", target=target,
-                               at=time.time(), opened_at=time.time(),
-                               status="running", steps_count=0)
-    if opened_at is not None:
-        store.record_open(key, opened_at)
+    def opened():
+        if opened_at is not None:
+            store.record_open(key, opened_at)
 
     def preview(url, size, existing="", outside=True):
-        path = Path(".cache/rulesheets") / Path(existing).name
+        path = rulesheet_dir() / Path(existing).name
         try:
             if not path.name.startswith(f"r{live.FRAME_RENDERER_VERSION}-") or not path.is_file():
                 frame = store.frame_path(key, -1) if _clean_frames(store._meta(key)) else None
@@ -104,17 +75,14 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
         on_preview(f"/api/rulesheet/{path.name}")
         return str(path)
 
-    if force_rules:
-        for layer in ("rules", "steps", "frames"):
-            store.delete_layer(key, layer)
-    rules = store.load_rules(key)
+    rules = None if force_rules else store.load_rules(key)
     cached = None if force_rules or force_steps else store.load_analysis(key)
     old_version = bool(cached and cached.get("algo_version") != ANALYSIS_VERSION)
     saved_language = "en" if cached and cached.get("content_lang") == "en" else "zh"
     different_language = bool(cached and saved_language != lang)
     if not (old_version or different_language) and rules and not rules.get("includes_underlay_markers"):
         try:
-            raw = sudokupad.load_cached(target)
+            raw = store.load_puzzle(key) or sudokupad.load_cached(target)
         except sudokupad.LoadError:
             raw = None
         if raw and any(marker.layer == "underlay" for marker in parse_puzzle(raw).markers):
@@ -123,10 +91,12 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
     if on_title and meta.get("title"):
         on_title(meta["title"])
     notes = str(body["notes"] if "notes" in body else meta.get("notes", "") or "").strip()
+    if work:
+        prompt = body.get("rule_prompt", "")
+        notes = notes[:max(0, PROMPT_LIMIT - len(prompt))]
     if cached:
-        if old_version or different_language or (rules
-                and cached.get("status") != "stuck"
-                and meta.get("rules_hash") == rules.get("hash")):
+        if old_version or different_language or (rules and meta.get("rules_hash") == rules.get("hash")):
+            opened()
             if not Path(cached.get("rule_sheet") or "").name.startswith(f"r{live.FRAME_RENDERER_VERSION}-"):
                 cached["rule_sheet"] = ""
             if on_preview and not on_preview_start:
@@ -152,7 +122,7 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
                     "steps_hash": meta.get("steps_hash"),
                 }
             cached["storage"] = {
-                "key": key, "location": store.storage_info()["location"],
+                "key": key,
                 "settings": store.load_settings(),
                 "steps_hash": meta.get("steps_hash"),
             }
@@ -177,13 +147,29 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
                            outside=puzzle.has_outside_clues)
         return None
 
+    def load_source(url):
+        raw = store.load_puzzle(key)
+        if raw is None:
+            raw = sudokupad.load_cached(url) or sudokupad.load(url, use_cache=False)
+            store.save_puzzle(key, raw)
+        return raw
+
+    if work:
+        work.acquire(solve=True)
+        if body.get("llm", True) and not rules and llm.available() and work.limits.exhausted():
+            work.llm_fallback = True
+    if not demo and not meta.get("title"):
+        store._update_meta(key, title=target[:160], author="", target=target,
+                           at=time.time(), status="running", steps_count=0)
+    opened()
     if on_preview_start:
         on_preview_start()
     analysis = analyze(
         target,
         demo=demo,
-        use_llm=bool(body.get("llm", True)) and (force_rules or not rules),
+        use_llm=bool(body.get("llm", True)) and not rules and not (work and work.llm_fallback),
         spec_override=rules["spec"] if rules and not force_rules else None,
+        use_cache=not force_rules,
         do_audit=bool(body.get("audit", False)),
         allow_chains=True,
         use_global=False,
@@ -195,6 +181,7 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
         on_rules=on_rules,
         on_step=on_step,
         on_puzzle=on_puzzle if on_preview or on_title else None,
+        load_puzzle=load_source if work else None,
     )
     payload = analysis.to_json(lang=lang)
     payload["notes"] = notes
@@ -214,7 +201,7 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
         store.save_rules(key, analysis.spec, info)
     steps_hash = store.save_analysis(key, payload, info)
     payload["storage"] = {
-        "key": key, "location": store.storage_info()["location"],
+        "key": key,
         "settings": store.load_settings(),
         "steps_hash": steps_hash,
     }
@@ -232,7 +219,8 @@ def _job_update(job_id: str, **values) -> None:
             job.update(values)
 
 
-def _start_job(target: str, body: dict, demo: bool) -> str:
+def _start_job(target: str, body: dict, demo: bool, limits=None, ip=None, *, synchronous=False):
+    work = Work(limits, ip, store.key_for(target), "Demo" if demo else target[:160]) if limits else None
     job_id = uuid.uuid4().hex[:12]
     preview_ready = threading.Event()
     job = {
@@ -243,8 +231,13 @@ def _start_job(target: str, body: dict, demo: bool) -> str:
     }
     with _JOBS_LOCK:
         _JOBS[job_id] = job
-        while len(_JOBS) > 20:
-            _JOBS.pop(next(iter(_JOBS)))
+        now = time.time()
+        completed = [key for key, value in _JOBS.items() if value["status"] != "running"]
+        for key in completed[:-200]:
+            del _JOBS[key]
+        for key in completed[-200:]:
+            if now - _JOBS[key].get("finished", now) > 600:
+                del _JOBS[key]
 
     def on_preview(url):
         if url:
@@ -270,26 +263,127 @@ def _start_job(target: str, body: dict, demo: bool) -> str:
         with _JOBS_LOCK:
             _JOBS[job_id]["steps"].append(data)
 
+    def on_title(title):
+        if work:
+            work.title = str(title)[:160]
+        _job_update(job_id, title=title)
+
     def run():
+        render = None
+        token = llm.web_request.set(work.llm_request) if work else None
         try:
             key, payload = _stored_analysis(
                 target, body, demo=demo, on_rules=on_rules, on_step=on_step,
+                force_rules=bool(body.get("refresh_rules")),
                 force_steps=bool(body.get("refresh_steps")),
-                on_preview=on_preview,
-                on_preview_start=lambda: _job_update(job_id, phase="preview"),
-                on_title=lambda title: _job_update(job_id, title=title),
-                opened_at=job["started"],
+                on_preview=None if synchronous else on_preview,
+                on_preview_start=None if synchronous else lambda: _job_update(job_id, phase="preview"),
+                on_title=on_title, opened_at=job["started"], work=work,
             )
+            if work:
+                if work.llm_fallback:
+                    payload["llm_quota_exceeded"] = True
+                try:
+                    render = _prepare_render(key, payload, work)
+                except Rejected as exc:
+                    if not payload.get("cached") or exc.payload["code"] != "storage_limit_exceeded":
+                        raise
+                    payload["render_blocked"] = exc.payload
+                payload["quota"] = limits.usage(ip)
             _job_update(
-                job_id, phase="done", status="done", key=key, payload=payload,
+                job_id, phase="done", status="done", key=key, payload=payload, finished=time.time(),
                 rules=payload.get("rules", {}).get("resolved", []),
                 steps=payload.get("steps", []),
             )
+        except Rejected as exc:
+            _job_update(job_id, phase="failed", status="failed", rejection=exc, error=exc.payload["error"], finished=time.time())
         except Exception as exc:  # noqa: BLE001
-            _job_update(job_id, phase="failed", status="failed", error=str(exc))
+            _job_update(job_id, phase="failed", status="failed", error=str(exc), finished=time.time())
+        finally:
+            if token is not None:
+                llm.web_request.reset(token)
+            if work:
+                work.log()
+                if render is None:
+                    work.release()
+        if render is not None:
+            if synchronous:
+                threading.Thread(target=render, daemon=True).start()
+            else:
+                render()
 
+    if synchronous:
+        run()
+        return job
     threading.Thread(target=run, daemon=True).start()
     return job_id
+
+
+def _web_target(value, render=False):
+    """Only accept puzzle identifiers and approved HTTPS origins from HTTP clients."""
+    if not isinstance(value, str):
+        raise Rejected(400, "invalid_puzzle")
+    value = value.strip()
+    if re.fullmatch(r"[A-Za-z0-9_-]{1,128}", value) and not render:
+        return "https://sudokupad.app/" + value
+    if len(value) > 131072 or any(ord(ch) <= 32 or ord(ch) == 127 for ch in value):
+        raise Rejected(400, "invalid_puzzle")
+    try:
+        url = urlparse(value)
+        if url.scheme == "https" and not url.username and not url.password and url.port in (None, 443):
+            if url.hostname == "sudokupad.app" and re.fullmatch(r"/[A-Za-z0-9_.~=+%$!(),;-]+/?", url.path):
+                return "https://sudokupad.app/" + url.path.strip("/")
+            if (not render and url.hostname in ("logic-masters.de", "www.logic-masters.de")
+                    and url.path in ("/Raetselportal/Raetsel/zeigen.php", "/Raetselportal/Raetsel/zeigen.php/")
+                    and re.fullmatch(r"[A-Za-z0-9]+", parse_qs(url.query).get("id", [""])[0])):
+                return f"https://{url.hostname}/Raetselportal/Raetsel/zeigen.php?id=" + parse_qs(url.query)["id"][0]
+    except ValueError:
+        pass
+    raise Rejected(400, "invalid_puzzle")
+
+
+def _prepare_render(key, payload, work):
+    steps = payload.get("steps") or []
+    try:
+        url = _web_target(payload.get("source_url"), render=True)
+    except Rejected:
+        return None
+    meta = store._meta(key)
+    proof = store.hash_json(steps)
+    directory = store.frames_dir(key)
+    with _BUILDING_LOCK:
+        if key in _BUILDING:
+            payload["frames"] = {"session": key, "building": True}
+            return None
+        if (_clean_frames(meta) and meta.get("frames_proof_hash") == proof
+                and not (directory / "error.json").exists()
+                and all(store.frame_path(key, index).is_file() for index in range(-1, len(steps)))):
+            payload["frames"] = {"session": key, "complete": True}
+            return None
+        if work.started is None:
+            work.acquire(solve=False)
+        store.delete_layer(key, "frames")
+        _BUILDING.add(key)
+        payload["frames"] = {"session": key, "building": True}
+
+    def render():
+        try:
+            puzzle = payload["puzzle"]
+            analysis = {"steps": steps, "puzzle": {"size": puzzle["size"]}}
+            live.build(url, [], analysis=analysis, directory=str(directory), session=key,
+                       size=puzzle["size"], crop=not puzzle.get("outside", True), wait=True)
+            store.set_frames_hash(key, proof, proof_hash=proof, renderer=live.FRAME_RENDERER_VERSION)
+        except Exception as exc:  # noqa: BLE001
+            print(f"frame build failed: {exc}", flush=True)
+            if not (directory / "error.json").is_file():
+                directory.mkdir(parents=True, exist_ok=True)
+                (directory / "error.json").write_text(json.dumps({"message": str(exc)}), encoding="utf-8")
+        finally:
+            with _BUILDING_LOCK:
+                _BUILDING.discard(key)
+            work.release()
+
+    return render
 
 
 _CONTENT_TYPES = {
@@ -316,25 +410,68 @@ def _safe_static(base, relative: str):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "YSudoku/0.1"
+    server_version = "YSudoku"
     last_analysis = None
+
+    def _json(self, status, data):
+        self._send(status, json.dumps(data, ensure_ascii=False).encode(), "application/json")
+
+    def _ip(self):
+        ip = self.server.limits.client_ip(self.client_address[0], self.headers)
+        if self.server.limits.banned(ip):
+            raise Rejected(403, "ip_banned")
+        return ip
+
+    def _permissions(self):
+        protected = bool(os.environ.get("YSUDOKU_ADMIN_TOKEN"))
+        admin = self._admin()
+        return {
+            "can_update_settings": self.server.limits.allow_settings and (not protected or admin),
+            "can_delete": self.server.limits.allow_delete and (not protected or admin),
+            "can_favorite": not protected or admin,
+        }
+
+    def _admin(self):
+        token = os.environ.get("YSUDOKU_ADMIN_TOKEN", "")
+        return bool(token and hmac.compare_digest(
+            self.headers.get("Authorization", "").encode(), ("Bearer " + token).encode()
+        ))
 
     def log_message(self, fmt, *args):  # quiet
         return
+
+    def setup(self):
+        super().setup()
+        self.connection.settimeout(30)
 
     def _send(self, status: int, payload: bytes, content_type: str):
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(payload)))
         self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
         self.wfile.write(payload)
 
     def do_GET(self):
+        try:
+            ip = self._ip()
+            self._get(ip)
+        except Rejected as exc:
+            self._json(exc.status, exc.payload)
+        except ValueError:
+            self._json(400, {"error": "invalid request"})
+
+    def _get(self, ip):
         path = urlparse(self.path).path
+        if path == "/api/quota":
+            self._json(200, self.server.limits.usage(ip))
+            return
         if path == "/api/store":
             entries = store.list_entries()
-            payload = {"info": store.storage_info(entries), "entries": entries}
+            info = store.storage_info(entries)
+            info.pop("location", None)
+            payload = {"info": info, "entries": entries, **self._permissions()}
             self._send(200, json.dumps(payload, ensure_ascii=False).encode(), "application/json")
             return
         if path == "/api/job":
@@ -345,6 +482,9 @@ class Handler(BaseHTTPRequestHandler):
             if not job:
                 self._send(404, b'{"error":"job not found"}', "application/json")
                 return
+            if job.get("rejection"):
+                exc = job["rejection"]
+                raise exc
             payload = {
                 "id": job["id"], "phase": job["phase"], "status": job["status"],
                 "rules": job.get("rules", []), "steps": job.get("steps", []),
@@ -370,7 +510,7 @@ class Handler(BaseHTTPRequestHandler):
                     except ValueError:
                         pass
             frames = sum(0 <= n < total for n in numbers)
-            complete = -1 in numbers and frames == total
+            complete = not building and -1 in numbers and frames == total
             error = None
             error_file = store.frames_dir(session) / "error.json"
             if error_file.exists():
@@ -380,7 +520,7 @@ class Handler(BaseHTTPRequestHandler):
                     error = {"message": "frame build failed"}
             self._send(200, json.dumps({
                 "frames": frames,
-                "complete": complete, "total": total, "error": error,
+                "complete": complete, "total": total, "error": error, "building": building,
                 "interrupted": not building and not complete and not error,
             }).encode(), "application/json")
             return
@@ -397,7 +537,7 @@ class Handler(BaseHTTPRequestHandler):
                     except (FileNotFoundError, json.JSONDecodeError):
                         rect = None
                 else:
-                    rect = live.grid()
+                    rect = None
                 self._send(200, json.dumps(rect).encode(), "application/json")
             except Exception as exc:  # noqa: BLE001
                 self._send(500, json.dumps({"error": str(exc)}).encode(), "application/json")
@@ -414,15 +554,15 @@ class Handler(BaseHTTPRequestHandler):
                     else:
                         self._send(404, b'{"error":"frame not ready"}', "application/json")
                     return
-                self._send(200, live.frame(), "image/png")
+                self._send(404, b"frame not ready", "text/plain")
             except live.LiveError as exc:
                 self._send(503, json.dumps({"error": str(exc)}, ensure_ascii=False).encode(),
                            "application/json")
             return
         if path.startswith("/api/rulesheet/"):
             name = Path(path.split("/")[-1]).name
-            file = Path(".cache") / "rulesheets" / name
-            if file.exists() and file.suffix == ".png":
+            file = _safe_static(rulesheet_dir(), name)
+            if file and file.is_file() and file.suffix == ".png":
                 self._send(200, file.read_bytes(), "image/png")
             else:
                 self._send(404, b"not found", "text/plain")
@@ -450,8 +590,8 @@ class Handler(BaseHTTPRequestHandler):
             file = _safe_static(DIST_DIR, path.lstrip("/"))
         elif path.startswith("/mockups/") and DIST_DIR.exists():
             file = _safe_static(DIST_DIR, path.lstrip("/"))
-            if file.is_dir():
-                file = file / "index.html"
+            if file and file.is_dir():
+                file = _safe_static(DIST_DIR, path.lstrip("/") + "/index.html")
         elif path in ("/", "/index.html"):
             file = STATIC_DIR / "index.html"
         elif path.startswith("/static/"):
@@ -465,184 +605,142 @@ class Handler(BaseHTTPRequestHandler):
         self._send(200, file.read_bytes(), _CONTENT_TYPES.get(file.suffix, "application/octet-stream"))
 
     def do_POST(self):
+        try:
+            self._post(self._ip())
+        except Rejected as exc:
+            self._json(exc.status, exc.payload)
+        except (ValueError, TypeError):
+            self._json(400, {"error": "invalid request"})
+        except Exception as exc:  # noqa: BLE001
+            self._json(500, {"error": str(exc)})
+
+    def _post(self, ip):
         path = urlparse(self.path)
+        if self.headers.get("Sec-Fetch-Site") == "cross-site":
+            raise Rejected(403, "cross_site_write")
         if path.path == "/api/job/preview-ready":
             job_id = parse_qs(path.query).get("id", [""])[0]
             with _JOBS_LOCK:
                 job = _JOBS.get(job_id)
                 if job:
                     job["preview_ready"].set()
-            self._send(200, b'{}', "application/json")
+            self._json(200, {})
             return
-        if path.path not in (
-            "/api/solve", "/api/solve/start", "/api/demo", "/api/live/start", "/api/live/place",
-            "/api/live/build", "/api/history/clear",
-            "/api/store/settings", "/api/store/delete", "/api/store/favorite",
-            "/api/store/refresh_rules",
-        ):
-            self._send(404, b'{"error":"not found"}', "application/json")
-            return
+
         length = int(self.headers.get("Content-Length") or 0)
-        if urlparse(self.path).path.startswith("/api/store/"):
-            try:
-                body = json.loads(self.rfile.read(length) or b"{}")
-                path = urlparse(self.path).path
-                if path == "/api/store/settings":
-                    result = store.save_settings(**body)
-                elif path == "/api/store/delete":
-                    store.delete_layer(str(body.get("key") or ""), str(body.get("layer") or ""))
-                    result = {"ok": True}
-                elif path == "/api/store/favorite":
-                    store.set_favorite(str(body.get("key") or ""), bool(body.get("favorite")))
-                    result = {"ok": True}
-                elif path == "/api/store/refresh_rules":
-                    target = str(body.get("target") or "")
-                    demo = bool(body.get("demo"))
-                    if demo and not target:
-                        target = str(STATIC_DIR.parent.parent / "fixtures" / "demo-globosite.json")
-                    key, payload = _stored_analysis(
-                        target, body, demo=demo, force_rules=True,
-                    )
-                    result = payload
-                else:
-                    result = {"error": "unknown store action"}
-                self._send(200, json.dumps(result, ensure_ascii=False).encode(), "application/json")
-            except Exception as exc:  # noqa: BLE001
-                self._send(500, json.dumps({"error": str(exc)}, ensure_ascii=False).encode(),
-                           "application/json")
-            return
-        if urlparse(self.path).path in ("/api/live/start", "/api/live/place", "/api/live/build"):
-            try:
-                body = json.loads(self.rfile.read(length) or b"{}")
-                if urlparse(self.path).path == "/api/live/build":
-                    key = str(body.get("key") or "")
-                    steps = body.get("steps") or []
-                    url = str(body.get("url") or "")
-                    size = int(body.get("size") or 0)
-                    crop = bool(body.get("crop"))
-                    analysis = store.load_analysis(key) if key else None
-                    proof_hash = store.hash_json(analysis["steps"]) if analysis and "steps" in analysis else None
-                    keep_frames_for = body.get("keep_frames_for")
-                    canonical = _canonical_frame_actions(steps, analysis)
-                    digest = str(body.get("steps_hash") or "")
-                    if canonical is not steps:
-                        frame_spec = {"renderer": live.FRAME_RENDERER_VERSION, "url": url, "size": size,
-                                      "crop": crop, "steps": canonical}
-                        content_lang = (analysis or {}).get("content_lang", "zh")
-                        if content_lang != "zh":
-                            frame_spec["lang"] = content_lang
-                        digest = store.hash_json(frame_spec)
-                    steps = canonical
-                    if key:
-                        if keep_frames_for and (keep_frames_for != proof_hash
-                                                or len(steps) != len(analysis["steps"])):
-                            self._send(409, json.dumps({
-                                "error": "解题步骤缓存已更新，请重新打开谜题。"
-                            }, ensure_ascii=False).encode(), "application/json")
-                            return
-                        directory = store.frames_dir(key)
-
-                        def _build():
-                            try:
-                                live.build(url, steps, directory=str(directory), session=key,
-                                           size=size, crop=crop, wait=True)
-                                if digest:
-                                    store.set_frames_hash(key, digest, proof_hash=proof_hash,
-                                                          renderer=live.FRAME_RENDERER_VERSION)
-                            except Exception as exc:  # noqa: BLE001
-                                print(f"frame build failed: {exc}", flush=True)
-                                if not (directory / "error.json").is_file():
-                                    directory.mkdir(parents=True, exist_ok=True)
-                                    (directory / "error.json").write_text(
-                                        json.dumps({"message": str(exc)}), encoding="utf-8")
-                            finally:
-                                with _BUILDING_LOCK:
-                                    _BUILDING.pop(key, None)
-
-                        with _BUILDING_LOCK:
-                            result = {"ok": True, "session": key, "building": True}
-                            if key in _BUILDING:
-                                if _BUILDING[key] != digest:
-                                    self._send(409, json.dumps({
-                                        "error": "正在生成这道题的另一组截图，请稍后重试。"
-                                    }, ensure_ascii=False).encode(), "application/json")
-                                    return
-                            else:
-                                meta = store._meta(key)
-                                retained = (proof_hash and keep_frames_for == proof_hash
-                                            and meta.get("frames_proof_hash") == proof_hash)
-                                matching = store.has_frames(key, digest) if digest else False
-                                if ((matching or retained) and _clean_frames(meta)
-                                        and not (directory / "error.json").exists()
-                                        and all(store.frame_path(key, step).is_file()
-                                                for step in range(-1, len(steps)))):
-                                    if matching and proof_hash and meta.get("frames_proof_hash") != proof_hash:
-                                        store.set_frames_hash(key, digest, proof_hash=proof_hash,
-                                                              renderer=meta["frames_renderer"])
-                                    result = {"ok": True, "session": key, "cached": True, "complete": True}
-                                else:
-                                    store.delete_layer(key, "frames")
-                                    _BUILDING[key] = digest
-                                    threading.Thread(target=_build, daemon=True).start()
+        if not 0 <= length <= 262144:
+            raise Rejected(413, "request_too_large")
+        if length and self.headers.get_content_type() != "application/json":
+            raise Rejected(415, "json_required")
+        body = json.loads(self.rfile.read(length) or b"{}")
+        if not isinstance(body, dict):
+            raise Rejected(400, "invalid_request")
+        if path.path in ("/api/store/settings", "/api/store/favorite", "/api/store/delete", "/api/history/clear"):
+            permission = {
+                "/api/store/settings": "can_update_settings",
+                "/api/store/favorite": "can_favorite",
+                "/api/store/delete": "can_delete",
+                "/api/history/clear": "can_delete",
+            }[path.path]
+            if not self._permissions()[permission]:
+                raise Rejected(403, "write_disabled")
+            key = str(body.get("key") or "")
+            title = store._meta(key).get("title", key) if key else ""
+            if path.path == "/api/store/settings":
+                values = {key: body[key] for key in store.DEFAULT_SETTINGS if key in body}
+                try:
+                    result = store.save_settings(allow_count_reduction=self._permissions()["can_delete"], **values)
+                except store.CountReductionDisabled:
+                    raise Rejected(403, "count_reduction_disabled") from None
+            elif path.path == "/api/history/clear":
+                history.clear()
+                result = {"ok": True}
+            else:
+                with self.server.limits.lock:
+                    if key in self.server.limits.active:
+                        raise Rejected(409, "puzzle_busy")
+                    if path.path == "/api/store/delete":
+                        store.delete_layer(key, str(body.get("layer") or ""))
                     else:
-                        result = live.build(url, steps, size=size, crop=crop)
-                elif urlparse(self.path).path == "/api/live/start":
-                    result = live.start(str(body.get("url") or ""))
-                else:
-                    result = live.place(body.get("digits") or body.get("places") or [],
-                                        bool(body.get("reset")),
-                                        body.get("corners") or [],
-                                        body.get("pen") or [])
-                self._send(200, json.dumps(result).encode(), "application/json")
-            except live.LiveGone as exc:
-                self._send(410, json.dumps({"error": str(exc), "restart": True},
-                                           ensure_ascii=False).encode(), "application/json")
-            except Exception as exc:  # noqa: BLE001
-                self._send(500, json.dumps({"error": str(exc)}, ensure_ascii=False).encode(),
-                           "application/json")
+                        store.set_favorite(key, bool(body.get("favorite")))
+                result = {"ok": True}
+            Work(self.server.limits, ip, key, title).log()
+            self._json(200, result)
             return
-        if urlparse(self.path).path == "/api/history/clear":
-            history.clear()
-            self._send(200, b'{"ok":true}', "application/json")
+        if path.path == "/api/live/build":
+            key = body.get("key", "")
+            analysis = store.load_analysis(key)
+            if not analysis:
+                raise Rejected(404, "puzzle_not_cached")
+            work = Work(self.server.limits, ip, key, analysis["puzzle"]["title"])
+            try:
+                render = _prepare_render(key, analysis, work)
+                if render:
+                    threading.Thread(target=render, daemon=True).start()
+            except Exception:
+                work.release()
+                raise
+            finally:
+                work.log()
+            self._json(200, analysis.get("frames") or {})
             return
-        try:
-            body = json.loads(self.rfile.read(length) or b"{}")
-        except json.JSONDecodeError:
-            self._send(400, b'{"error":"bad json"}', "application/json")
+        if path.path not in ("/api/solve", "/api/solve/start", "/api/demo", "/api/store/refresh_rules"):
+            self._json(404, {"error": "not found"})
             return
-        target = (body.get("url") or "").strip()
-        demo = urlparse(self.path).path == "/api/demo"
-        if urlparse(self.path).path == "/api/solve/start":
-            demo = bool(body.get("demo"))
-            if demo:
-                target = str(STATIC_DIR.parent.parent / "fixtures" / "demo-globosite.json")
-            if not target:
-                self._send(400, b'{"error":"missing url"}', "application/json")
-                return
-            job_id = _start_job(target, body, demo)
-            self._send(200, json.dumps({"id": job_id}).encode(), "application/json")
-            return
-        if urlparse(self.path).path == "/api/demo":
+        prompts = [body.get(field, "") for field in ("notes", "rule_prompt")]
+        if any(not isinstance(value, str) for value in prompts) or sum(map(len, prompts)) > PROMPT_LIMIT:
+            raise Rejected(400, "prompt_too_long", limit=PROMPT_LIMIT)
+        demo = path.path == "/api/demo" or (path.path != "/api/solve" and bool(body.get("demo")))
+        if demo:
             target = str(STATIC_DIR.parent.parent / "fixtures" / "demo-globosite.json")
-        if not target:
-            self._send(400, b'{"error":"missing url"}', "application/json")
-            return
+        else:
+            target = _web_target(body.get("url") if path.path != "/api/store/refresh_rules" else body.get("target"))
+        if path.path == "/api/store/refresh_rules":
+            body["refresh_rules"] = True
+        else:
+            body["refresh_rules"] = body.get("rule_mode") in ("llm", "heuristic")
+        if path.path == "/api/solve/start" or body.get("stream"):
+            self._json(200, {"id": _start_job(target, body, demo, self.server.limits, ip)})
+        else:
+            job = _start_job(target, body, demo, self.server.limits, ip, synchronous=True)
+            if job.get("rejection"):
+                raise job["rejection"]
+            self._json(200 if job["payload"] is not None else 500, job["payload"] or {"error": job["error"]})
+
+
+class PublicServer(ThreadingHTTPServer):
+    def __init__(self, address):
+        self.limits = Limits(store._root())
+        self._instance_lock = None
+        if os.name == "posix":
+            import fcntl
+
+            file = (store._root() / "service.lock").open("a")
+            try:
+                fcntl.flock(file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError:
+                file.close()
+                raise RuntimeError("The YSudoku data store already has a running web service") from None
+            self._instance_lock = file
         try:
-            key, payload = _stored_analysis(
-                target, body,
-                demo=(urlparse(self.path).path == "/api/demo"),
-                force_steps=bool(body.get("refresh_steps")),
-            )
-        except Exception as exc:  # noqa: BLE001 - surfaced to the UI
-            payload = {"error": str(exc)}
-            self._send(500, json.dumps(payload, ensure_ascii=False).encode("utf-8"), "application/json")
-            return
-        self._send(200, json.dumps(payload, ensure_ascii=False).encode("utf-8"), "application/json")
+            super().__init__(address, Handler)
+        except BaseException:
+            self.server_close()
+            raise
+
+    def service_actions(self):
+        self.limits.refresh_bans()
+
+    def server_close(self):
+        if hasattr(self, "socket"):
+            super().server_close()
+        if self._instance_lock is not None:
+            self._instance_lock.close()
+            self._instance_lock = None
 
 
 def serve(host: str = "127.0.0.1", port: int = 8765):
-    httpd = ThreadingHTTPServer((host, port), Handler)
-    return httpd
+    return PublicServer((host, port))
 
 
 def _warm_live() -> None:
@@ -652,7 +750,29 @@ def _warm_live() -> None:
         pass
 
 
+def _run_as_configured_user():
+    user = os.environ.get("YSUDOKU_RUN_USER")
+    if not user:
+        return
+    import pwd
+    account = pwd.getpwnam(user)
+    if account.pw_uid != os.geteuid() or account.pw_gid != os.getegid():
+        if os.geteuid() != 0:
+            raise PermissionError("Start as YSUDOKU_RUN_USER or use a privileged service manager to switch accounts")
+        os.initgroups(account.pw_name, account.pw_gid)
+        os.setgid(account.pw_gid)
+        os.setuid(account.pw_uid)
+    os.environ.update(HOME=account.pw_dir, USER=account.pw_name, LOGNAME=account.pw_name)
+
+
 def run(host: str = "127.0.0.1", port: int = 8765, open_browser: bool = True):
+    _run_as_configured_user()
+    if data_dir := os.environ.get("YSUDOKU_DATA_DIR"):
+        data = Path(data_dir).resolve()
+        os.environ.setdefault("YSUDOKU_STORE", str(data / "store"))
+        os.environ.setdefault("YSUDOKU_CACHE", str(data))
+        os.environ.setdefault("SUDOKU_EXPLAIN_CACHE", str(data))
+        os.environ.setdefault("YSUDOKU_HISTORY", str(data / "history.json"))
     httpd = serve(host, port)
     threading.Thread(target=_warm_live, daemon=True).start()
     url = f"http://{host}:{port}/"
@@ -669,3 +789,4 @@ def run(host: str = "127.0.0.1", port: int = 8765, open_browser: bool = True):
         pass
     finally:
         httpd.server_close()
+        live.stop()

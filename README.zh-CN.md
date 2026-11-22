@@ -1,283 +1,76 @@
 # YSudoku
 
-中文 | [English](README.md)
+中文 · [English](README.md)
 
-**每一个数字，都有理由。**
-
-[![CI](https://github.com/CodeInDreams/ysudoku/actions/workflows/ci.yml/badge.svg)](https://github.com/CodeInDreams/ysudoku/actions/workflows/ci.yml)
+[![CI](https://github.com/CodeInDreams/YSudoku/actions/workflows/ci.yml/badge.svg)](https://github.com/CodeInDreams/YSudoku/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-> 读音：**WHY-soo-doh-koo**（/ˌwaɪ suːˈdoʊkuː/），即 “why sudoku”。
-> 中文可读作 **Y 数独**（“歪·数独”）。
+YSudoku 把 SudokuPad 变形数独变成可以逐步播放的解题讲解。每一步展示用到的规则、关联区域和候选变化。支持中英文界面和讲解。
 
-YSudoku 把 [SudokuPad](https://sudokupad.app) 上的变形数独链接，变成**一步一步、可播放、可交互的推理动画**，而不是一个黑箱答案。
+![桌面端解题界面。左侧播放 Route 66 的数独盘面，右侧展示步骤、候选和排除理由](docs/ysudoku-desktop-solve.png)
 
-- 不是穷举：每一步都说明「根据什么规则、排除了什么、为什么」
-- 可机械校验：可选穷举反证，对每一步结论做独立检查
-- 可交互：网页里逐步播放高亮、描边、候选数划除、填数动画
+## 使用
 
-维护前先读：[维护要求](docs/REQUIREMENTS.zh-CN.md)。
+1. 在 **解题** 页粘贴 SudokuPad 链接或题目 ID。也可以打开含 SudokuPad 链接的 Logic Masters 题目页，或点击 **示例**。
+2. 提交后先显示原题盘面，再解析规则和求解。用播放按钮、滑条或步骤列表浏览，回到第 0 步即可查看原题。讲解、候选和规则三个面板分别展示推断理由、候选状态和适用规则。
+3. 如需修正规则，到 **规则** 页补充题意并重新生成。播放器旁的反证步骤会展示假设、矛盾与回退后的实际结论。
+4. **历史** 页可以重新打开共享缓存中的题目。切换语言或求解器版本后，可以保留旧讲解，或重新生成当前版本。缓存读取不消耗求解次数。
 
-## 快速开始
+![桌面端规则界面，展示原题规则、识别出的约束和规则补充输入框](docs/ysudoku-desktop-rules.png)
 
-核心零第三方依赖，Python 3.10+：
+## 支持的常见规则与推理
+
+| 类型 | 示例 |
+| --- | --- |
+| 网格 | 标准行列宫、对角线、反马步、反国王、非连续 |
+| 笼、点与箭头 | Killer 和笼、乘积约束、和箭头、Kropki、XV、四角数字、奇偶标记 |
+| 线 | 温度计、Renban、德语和荷兰低语线、回文线、Between、克隆、区域和线 |
+| 盘外 | Sandwich、Skyscraper、Little Killer、X-Sums（含定向斜线）、Full Rank |
+| 复合规则 | 某一区域适用多条候选规则之一，或多个区域按用量分配规则。规则可以从重叠格组传递候选、组合和占位信息 |
+
+支持程度取决于规则文本、图形和组合复杂度。规则能够解析的题目也可能卡在某一步。详见[核心算法与架构](docs/solver-guide.zh-CN.md)。
+
+## 本地运行
+
+需要 Python 3.10+、Node.js 和 Playwright Chromium。先编译网页，再启动服务。
 
 ```bash
-git clone git@github.com:CodeInDreams/ysudoku.git
-cd ysudoku
+git clone https://github.com/CodeInDreams/YSudoku.git
+cd YSudoku
+npm --prefix web ci
+npm --prefix web run build
+npm --prefix tools ci
+(cd tools && npx playwright install chromium)
 python3 -m ysudoku --web
-# 打开 http://127.0.0.1:8765/
 ```
 
-网页里点「示例」会加载真实题 **Globosite**（lgastako，229 步，约 2 秒），并给出 SudokuPad 原题链接。
-输入框支持 SudokuPad 链接、**Logic Masters 题目页**（自动提取其中的 SudokuPad 链接）、裸 id、本地 JSON。
-
-命令行看文字推理：
+在浏览器打开 `http://127.0.0.1:8765/`。命令行也可直接解析题目 ID、本地 JSON，以及输出机器可读的讲解。
 
 ```bash
-python3 -m ysudoku 7v57yvn5vf
-python3 -m ysudoku --audit --json https://sudokupad.app/eynwusqy5l > out.json
+python3 -m ysudoku --no-llm --json fixtures/demo-killer.json
 ```
 
-安装为命令（可选）：
+LLM 可选。设置 `SUDOKU_LLM_API_KEY`、`SUDOKU_LLM_BASE_URL` 和 `SUDOKU_LLM_MODEL` 可接入 OpenAI 兼容接口。发布配置、访问限制和日志见[部署指南](docs/deployment.zh-CN.md)。
+
+### 命令行的可选功能
+
+`--audit` 对适用题目的推断作独立校验。传入 SudokuPad 链接并使用 `--browser` 可让 Playwright 将已求出的答案逐格填入原题页面。
 
 ```bash
-pip install -e .
-ysudoku --web
-```
-
-### 在真实 SudokuPad 里自动填入（可选）
-
-如果想让程序直接操作 SudokuPad 页面（点格子、输入数字），可以用 Playwright 桥接：
-
-```bash
-cd tools
-npm install
-npx playwright install chromium
-cd ..
+python3 -m ysudoku --audit --json fixtures/demo-killer.json
 python3 -m ysudoku --browser https://sudokupad.app/6uhr6irwvd
 ```
 
-会打开一个真实浏览器，按 `Start Puzzle`，然后把解逐格敲进去：
-
-![在真实 SudokuPad 中自动填入](docs/sudokupad-autofill.png)
-
-这是本地自动化工具，不参与 Web UI；它只“写入”页面，不读取 SudokuPad 的内部状态。
-
-## 它怎么工作
-
-```
-链接 → api/puzzle → scl 压缩串 → 自定义 LZW + zipper 解码
-     → 网格 / 笼 / 线 / 圆 / 点 / 箭头
-     → 元素清单 + 官方 rules 文本
-     → LLM 编译成 JSON 约束（用题面答案逐条校验，失败自动回传修正）
-     → 约束传播 + 人类技巧 → 每一步：中文解释 + 动画脚本
-```
-
-SudokuPad 的 JSON 只保存“画了什么”，真正的规则在 `metadata.rules` 里。例如 kropki 黑点只是一块黑色圆形，“三分圆”只是一个粗灰圆——所以必须有一层“图形 → 语义”的编译。YSudoku 用 LLM 做这层编译，并用题目自带答案做闭环校验；没有配置 key 时退回颜色/关键词启发式。
-
-### LLM 配置（可选）
-
-默认走 DeepSeek 的 `deepseek-flash`，也可以指向任何 OpenAI 兼容服务（OpenAI / Ollama / vLLM / OneAPI）：
+## 开发
 
 ```bash
-export SUDOKU_LLM_API_KEY=sk-...
-export SUDOKU_LLM_BASE_URL=https://api.deepseek.com   # 或 https://api.openai.com/v1
-export SUDOKU_LLM_MODEL=deepseek-flash
+python3 -m unittest discover -s tests
+node tests/native_annotations.mjs
+npm --prefix web run build
 ```
 
-本地 Ollama 示例（无需付费 key）：
+## 特别鸣谢
 
-```bash
-ollama run qwen2.5:7b
-export SUDOKU_LLM_BASE_URL=http://localhost:11434/v1
-export SUDOKU_LLM_API_KEY=local
-export SUDOKU_LLM_MODEL=qwen2.5:7b
-```
+感谢 [Logic Masters Deutschland e.V.（LMD）](https://logic-masters.de/Verein/index.php) 的谜题社区，以及 Sven Neumann 开发、Cracking The Cryptic 使用的 [Sven’s SudokuPad](https://sudokupad.app/)。
 
-没有 key 时网页会把「LLM 规则」置灰，并显示“未配置 key · 本地启发式”。
-
-### Web 前端（shadcn/ui）
-
-`web/` 是 Vite + React + Tailwind + shadcn 风格的前端，采用顶部导航的聚焦布局，
-支持浅色/深色与中英文（默认跟随浏览器语言，可在顶栏手动切换）。Python 服务端
-优先托管 `web/dist`，没有构建产物时回退到旧静态界面。
-
-规则、步骤和截图按需生成：打开谜题时只补缺失的层，刷新规则是唯一强制重新编译
-的入口；不再提供手动的“重新解题 / 重新渲染”按钮。
-
-```bash
-cd web
-npm install
-npm run build
-```
-
-### SudokuPad 只读镜像
-
-主视图现在是 **SudokuPad 的只读截图**，不再用自绘棋盘：服务端 Playwright 打开题目，把截图
-裁剪到谜题区域（支持非 9×9），网页只显示图片，不能点击。步骤播放会直接点击 SudokuPad 的格子
-并输入数字，看到的就是 SudokuPad 自己的数字、笼子虚线和渲染效果。
-
-依赖 Node.js + Playwright/Chromium（`tools/` 下 `npm i playwright`，或沿用
-`tools/sudokupad_bridge.mjs` 的路径）。没有依赖时徽标会提示镜像启动失败。
-
-浏览器按单会话池化，默认空闲 10 分钟回收：
-
-```bash
-YSUDOKU_LIVE_IDLE_SECONDS=600   # 默认；0 表示不回收
-YSUDOKU_LIVE_MIN_IDLE=0         # 默认 0，空闲后完全释放浏览器
-```
-
-回收后接口返回 410，前端会自动重启会话。
-
-截图按步骤缓存，并预取后两步；点「下一步」时如果已有截图就直接显示，不再等待 SudokuPad 重渲染。
-
-讲解层（P2/P3/P4）是盖在截图上的透明 SVG 叠层：焦点格、单元/组框、删候选后的候选数字、链线、
-标签和彩色分组。候选只画当前步骤真正推理到的格子，不会一上来把全盘 81 格的候选都填满。这样镜像保持只读，也不受 9×9 限制；SudokuPad 原生的颜色/画线面板不直接脚本化。
-
-### 规则图（视觉）
-
-规则编译器会把一张**规则图**一起发给模型：棋盘坐标、每个图形元素的编号、盘外线索，以及
-“编号 → 元素 id / 格子 / 属性”的文字图例。`deepseek-flash` 支持 PNG data URI，能据此判断
-箭头方向、线索在哪一侧、哪个圆包住哪四格等纯文本容易丢失的空间关系；模型不支持图片时自动
-退回文本规则表。网页里也能在「规则图（视觉）」面板直接查看。
-
-### 全局盘外线索（可选）
-
-有些题把**全局线索**放在盘外：Full Rank（一行/列在 36 个方向数里的排名）、X-Sums，
-甚至“每个线索数字出现两次，一次 Full Rank、一次 X-Sums”。逐格传播处理不了，需要可选的 CP-SAT：
-
-```bash
-pip install "ysudoku[global-clues]"     # 或直接 pip install ortools
-```
-
-YSudoku 会把棋盘、36 个方向数、排名比较、前缀和、未知类型配对一起编码进 CP-SAT。
-Flinty & palpot 的 *Double Take*（`439w9opvs4`）约 **5 秒**解出，并还原 12 条线索的类型分配，
-结果与官方答案一致。没有 OR-Tools 时，这类题会明确报 unsupported 并提示安装，不会假装卡住。
-
-### 规则缓存
-
-编译结果按「题目 id + 规则文本 + 元素清单」的指纹缓存，换机器/改题都会自动失效：
-
-- `.cache/rules/<id>.json`：本地缓存，LLM 编译成功后自动写入（已 gitignore）
-- `rules/<id>.json`：共享缓存，用 `--save-rules` 写入，可随仓库提交、供他人直接复用
-
-```bash
-python3 -m ysudoku --save-rules <sudokupad-url>   # 写入共享规则
-python3 -m ysudoku --no-cache <sudokupad-url>     # 跳过缓存
-```
-
-健康检查：`GET /api/health` 返回 LLM 是否可用、模型名、缓存条目数。
-
-### 卡住后的规则修复
-
-如果规则 spec 编译成功、但求解器半路卡住，YSudoku 会把**诊断信息**（已尝试技巧、未使用的元素、警告）
-回传给 LLM，让它重读规则文本并输出一份修正后的完整 spec；新 spec 仍须通过与官方答案的校验才会被采用。
-这一步只做“重新理解规则”，不会把答案喂给模型，也不会凭空增加约束。
-
-反证默认开启，也可以取消勾选「反证求解」；这类步骤标注为 T4，
-并明确提示不是纯直接推理。
-
-关于“让 LLM 自创规则”的边界、类型化 DSL 与可信性护栏，见
-[docs/rule-dsl.md](docs/rule-dsl.md)。
-
-## 支持的约束
-
-| 类别 | 约束 |
-|---|---|
-| 求和 | 杀手笼（组合 + 逐格匹配）、小杀手、45 法则（innie/outie） |
-| 线 | 温度计、箭头（实验性）、回文、Renban、德式/荷式 Whisper、之间线、连续线 |
-| 点/提示 | 黑白点（连续 / 1:2）、XV、四格提示（圆圈内数字，支持 `?`） |
-| 全局 | 对角线、反骑士、反国王、锯齿区域、6×6、模块 2×2、熵 2×2 |
-| 混沌 | 笼、四格提示、**区域计数**（三分圆/不平衡圆），精确计数 GAC + 连通可达性 |
-| 其他 | 奇偶、克隆、三明治、摩天楼、区域和线 |
-| 盘外线索 | 三明治/摩天楼/X-Sums；Full Rank 与未知类型配对用可选 CP-SAT |
-| L2 自定义 | 类型化谓词（sum/count/ordered/all_different/…），LLM 可组合，标注「推测」|
-
-技巧分层：T1 约束局部 → T2 唯一候选/隐性唯一/区块排除/数组/45 法则 →
-T3 X-Wing / XY-Wing / W-Wing / **染色法**（单数字强链、A/B 双色、同色互见与双色夹击）
-/ **3D Medusa**（格+数字候选、强弱链、同色冲突/双色夹击/同格双色）
-/ **X-Chain**（单数字强弱链交替，两端夹击）/ **ALS-XZ**（两个几乎锁定集、受限共同候选）
-→ 其他技巧卡住时，尝试 T4 反证。
-
-步骤选择是有优先级的：先试与上一步焦点格相关的约束，再试唯一/隐性唯一，再试 T2 的数组/区块，
-只有廉价触发器命中（强链、双值格、X-Wing 行列形态）才进入 T3，最后才是 T4；命中即停，不是每步
-把所有规则无条件扫一遍。
-每一步都带结构化理由与动画脚本；T4 步骤会明确标注“这是反证，不是直接推理”。
-
-## 动画与交互
-
-- 左侧棋盘：候选数、区域边界、约束描边（笼框、箭头线、鱼形连线）
-- 右侧解释卡：结论、规则前提、逐步影响；可展开规则理解与步骤列表
-- 默认浅色（与 SudokuPad 一致），可切深色并记住选择
-- **本地历史记录**：每次求解写入 `.cache/history.json`（标题、时间、状态、步数）；
-  侧栏「历史记录」可重新打开或清空，数据不出本机
-- 手机端响应式布局：头部纵向排列、棋盘占满宽度、触控友好的按钮
-- 控制：上一步 / 下一步 / 播放暂停 / 速度 / 进度条 / 键盘方向键
-- **SudokuPad 原题 + 标注**：左侧嵌入官方页面，高亮/连线直接叠在原题上；
-  可点「校准」用三根滑杆对齐并记住；标注层不拦截点击，可在原题里正常落子。
-  跨域限制：不会读取 SudokuPad 的内部状态，也不会把落子同步回本工具
-- 每步的 `visual` 字段是一份视觉脚本：`focus`、`groups`、`links`、`chips`，前端据此播放高亮、描线、划除与弹出
-
-## 结构
-
-```
-ysudoku/
-  decode.py      SudokuPad LZW + zipper 解码（已与官方实现逐字段比对）
-  model.py       网格 / 区域 / 笼 / 线 / 圆 / 点 / 箭头
-  sudokupad.py   链接解析、API 拉取、本地缓存
-  rules.py       元素清单、LLM/启发式规则 spec、约束编译
-  rulecache.py   规则缓存（本地 + 共享）
-  llm.py         OpenAI 兼容客户端 + 规则编译 prompt
-  predicate.py   L2 自定义规则的类型化谓词
-  state.py       候选域、事件日志、单位
-  constraints.py 各类约束的传播 + 检查
-  techniques.py  人类技巧（45 法则、翅膀、染色、Medusa、链、ALS）
-  chaos.py       混沌构造搜索（区域 + 数字）
-  solve.py       调度器、审计、答案校验
-  search.py      仅作裁判：唯一性、逐步反证、卡住提示
-  narrate.py     中文解释 + 动画脚本生成
-  server.py      标准库 HTTP 服务
-  static/        单页前端（原生 JS/CSS/SVG）
-tests/           解码、引擎、纯数独、LLM mock/修复回归
-fixtures/        示例题与原始数据
-rules/           共享规则 spec（可提交）
-docs/            规则 DSL 与可信性设计
-```
-
-## 已知限制
-
-- **混沌构造**：首个版本是搜索求解，不是逐步人类推理；区域计数规则可在搜索中剪枝，
-  但 *Tringle and Cross*（三分圆+不平衡圆）在约 90 万结点仍会超时；视野/边界遮挡规则暂不支持
-- **Full Rank / 混合盘外线索**：需要可选的 OR-Tools；未安装时会明确报 unsupported（Double Take 是回归用例）
-- **雾战 / 带草稿表的题**：暂不支持（网格数据本身不完整）
-- 作者自定义画法依赖 LLM 编译；无 key 时启发式可能识别错
-- 高难题仍可能卡住：求解器如实报告「卡住」而不是偷偷穷举；反证只能兜底一部分
-- 箭头语义仍在验证，标为实验性
-- 规则修复依赖 LLM；没有 key 时只有启发式 + 本地求解
-
-## 测试
-
-```bash
-python3 -m unittest discover -s tests -v
-```
-
-CI 在每次 push 时跑同一套测试。
-
-## 路线图
-
-- **P2（基本完成）**：XY-Wing / W-Wing / 反证、三明治、摩天楼、区域和线、
-  克隆、奇偶、6×6 已落地；剩 f-puzzles 导入
-- **P2.5（已完成第一版）**：类型化规则 DSL —— LLM 用受控表达式组合出新约束（不写代码），
-  所有“自创规则”标注来源、带「推测」徽章、可用官方答案做否证；详见 [docs/rule-dsl.md](docs/rule-dsl.md)
-- **P3（部分完成）**：混沌搜索与区域计数传播已落地；下一步是可解释的区域归属推理与更强的区域 GAC
-
-## 贡献
-
-欢迎 PR：新增约束/技巧时请附一道可公开访问的 SudokuPad 链接作为回归用例，并确保
-`python3 -m unittest discover -s tests` 通过。共享规则放在 `rules/`，格式见
-[rules/README.md](rules/README.md)。
-
-## License
-
-MIT，见 [LICENSE](LICENSE)。
+[维护要求](docs/REQUIREMENTS.zh-CN.md) · [规则 DSL](docs/rule-dsl.md) · [贡献指南](CONTRIBUTING.md) · [MIT 许可证](LICENSE)

@@ -17,15 +17,24 @@ LEGACY_URL = "https://sudokupad.svencodes.com/ctclegacy/{id}"
 CACHE_DIR = Path(os.environ.get("SUDOKU_EXPLAIN_CACHE", Path.cwd() / ".cache"))
 CACHE_VERSION = 2
 UA = "sudoku-explain/0.1 (+https://logic-masters.de)"
+PUZZLE_HOSTS = {"sudokupad.app", "sudokupad.svencodes.com", "logic-masters.de", "www.logic-masters.de"}
 
 
 class LoadError(RuntimeError):
     pass
 
 
+class PuzzleRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        url = urlparse(newurl)
+        if url.scheme != "https" or url.hostname not in PUZZLE_HOSTS or url.port not in (None, 443):
+            raise LoadError("Puzzle source redirected outside the allowed HTTPS origins")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 def _http_get(url: str, timeout: float = 25.0) -> str:
     request = urllib.request.Request(url, headers={"User-Agent": UA})
-    with urllib.request.urlopen(request, timeout=timeout) as response:
+    with urllib.request.build_opener(PuzzleRedirect()).open(request, timeout=timeout) as response:
         return response.read().decode("utf-8", "replace")
 
 
@@ -52,7 +61,7 @@ def _extract_target(target: str) -> tuple[str, str]:
 
     if target.startswith("http://") or target.startswith("https://"):
         parsed = urlparse(target)
-        if "logic-masters.de" in parsed.netloc:
+        if parsed.hostname in ("logic-masters.de", "www.logic-masters.de"):
             return "lm", target
         query = parse_qs(parsed.query)
         for key in ("puzzle", "id"):
@@ -83,7 +92,8 @@ def _payload_from_raw(raw: str) -> dict:
 
 def _cache_file(puzzle_id: str) -> Path:
     key = re.sub(r"[^A-Za-z0-9_.-]", "_", puzzle_id)
-    return CACHE_DIR / f"v{CACHE_VERSION}" / (key + ".json")
+    root = Path(os.environ.get("SUDOKU_EXPLAIN_CACHE", CACHE_DIR))
+    return root / f"v{CACHE_VERSION}" / (key + ".json")
 
 
 def _read_cached_id(puzzle_id: str) -> dict | None:

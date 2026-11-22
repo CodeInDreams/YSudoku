@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { buildStepActions } from "../web/src/lib/buildStepActions.js";
 /**
  * Read-only SudokuPad mirror for the web UI.
  *
@@ -67,7 +68,32 @@ async function ensurePage({ fresh = false } = {}) {
     context = await browser.newContext({
       viewport: { width: 1200, height: 1000 },
       colorScheme: "light",
+      serviceWorkers: "block",
+      acceptDownloads: false,
     });
+    const allowedHosts = new Set([
+      "sudokupad.app", "sudokupad.svencodes.com", "fonts.googleapis.com", "fonts.gstatic.com",
+    ]);
+    await context.route("**/*", async (route) => {
+      const url = new URL(route.request().url());
+      if (url.protocol !== "https:" || url.port || !allowedHosts.has(url.hostname)) {
+        await route.abort();
+        return;
+      }
+      // Playwright normally intercepts only the first URL in a redirect chain.
+      // Reject redirects here so approved origins cannot forward to other hosts.
+      try {
+        const response = await route.fetch({ maxRedirects: 0, timeout: 15000 });
+        if (response.status() >= 300 && response.status() < 400 && response.headers().location) {
+          await route.abort();
+        } else {
+          await route.fulfill({ response });
+        }
+      } catch {
+        await route.abort().catch(() => {});
+      }
+    });
+    await context.routeWebSocket("**/*", (socket) => socket.close());
     await context.addInitScript(() => {
       const settings = {
         hidesvenpeek: true, hidesupportlinks: true, showplayinsudokupad: false,
@@ -700,6 +726,10 @@ function json(res, code, obj) {
 }
 
 const server = http.createServer((req, res) => {
+  const token = process.env.YSUDOKU_WORKER_TOKEN;
+  if (!token || req.headers.authorization !== `Bearer ${token}`) {
+    return json(res, 403, { error: "forbidden" });
+  }
   const url = new URL(req.url, "http://127.0.0.1");
   if (req.method === "GET" && url.pathname === "/health") {
     return json(res, 200, { ok: true, ready: Boolean(page), browser: Boolean(browser),
@@ -749,7 +779,7 @@ const server = http.createServer((req, res) => {
         if (!body.url) return json(res, 400, { error: "url required" });
         touch();
         const session = String(body.session || Date.now().toString(36));
-        const steps = body.steps || [];
+        const steps = body.analysis ? buildStepActions(body.analysis) : body.steps || [];
         const targetDir = body.dir || null;
         const build = work.then(
           () => buildSession(body.url, steps, session, targetDir, Number(body.size) || 0, Boolean(body.crop)),
@@ -790,6 +820,14 @@ ensurePage().then(() => {
 server.listen(PORT, "127.0.0.1", () => {
   console.log(JSON.stringify({ ok: true, port: PORT }));
 });
+
+const parent = Number(process.env.YSUDOKU_WORKER_PARENT);
+if (parent) {
+  setInterval(() => {
+    try { process.kill(parent, 0); }
+    catch { process.kill(process.pid, "SIGTERM"); }
+  }, 2000).unref();
+}
 
 process.on("SIGTERM", async () => {
   await browser?.close().catch(() => {});

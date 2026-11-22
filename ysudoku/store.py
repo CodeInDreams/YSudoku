@@ -11,7 +11,8 @@ import time
 from threading import RLock
 from pathlib import Path
 
-LAYERS = ("rules", "steps", "frames")
+LAYERS = ("puzzle", "rules", "steps", "frames")
+DEFAULT_SETTINGS = {"max_rules": 1000, "max_steps": 1000, "max_frames": 100, "max_mb": 500}
 
 
 def _root() -> Path:
@@ -59,7 +60,7 @@ def _write_json(path: Path, value) -> None:
 
 
 def key_for(target: str) -> str:
-    return hashlib.sha1(str(target).strip().lower().encode("utf-8")).hexdigest()[:16]
+    return hashlib.sha1(str(target).strip().encode("utf-8")).hexdigest()[:16]
 
 
 def hash_json(value) -> str:
@@ -67,19 +68,25 @@ def hash_json(value) -> str:
 
 
 def load_settings() -> dict:
-    defaults = {"max_rules": 100, "max_steps": 100, "max_frames": 10, "max_mb": 500}
-    defaults.update(_read_json(_settings_path(), {}))
-    return defaults
+    return {**DEFAULT_SETTINGS, **_read_json(_settings_path(), {})}
 
 
-def save_settings(**values) -> dict:
-    settings = load_settings()
-    for name in ("max_rules", "max_steps", "max_frames", "max_mb"):
-        if name in values:
-            settings[name] = max(0, int(values[name]))
-    _write_json(_settings_path(), settings)
-    prune()
-    return settings
+class CountReductionDisabled(ValueError):
+    pass
+
+
+def save_settings(*, allow_count_reduction=True, **values) -> dict:
+    with _META_LOCK:
+        settings = load_settings()
+        for name in DEFAULT_SETTINGS:
+            if name in values:
+                value = max(0, int(values[name]))
+                if not allow_count_reduction and name != "max_mb" and value < settings[name]:
+                    raise CountReductionDisabled()
+                settings[name] = value
+        _write_json(_settings_path(), settings)
+        _prune()
+        return settings
 
 
 def _meta(key: str) -> dict:
@@ -87,6 +94,18 @@ def _meta(key: str) -> dict:
 
 
 _META_LOCK = RLock()
+_PINNED = set()
+
+
+def pin(key):
+    with _META_LOCK:
+        _PINNED.add(key)
+
+
+def unpin(key):
+    with _META_LOCK:
+        _PINNED.discard(key)
+        _prune()
 
 
 def _update_meta(key: str, **values) -> dict:
@@ -102,6 +121,15 @@ def record_open(key, timestamp):
     with _META_LOCK:
         if timestamp > _meta(key).get("opened_at", 0):
             _update_meta(key, opened_at=timestamp)
+
+
+def save_puzzle(key, raw):
+    _write_json(_entry_dir(key) / "puzzle.json", raw)
+
+
+def load_puzzle(key):
+    value = _read_json(_entry_dir(key) / "puzzle.json", None)
+    return value if isinstance(value, dict) else None
 
 
 def save_rules(key: str, spec: dict, meta: dict) -> str:
@@ -136,10 +164,16 @@ def steps_hash(key: str) -> str | None:
 
 
 def frames_dir(key: str) -> Path:
-    return _entry_dir(key) / "frames"
+    entry = _entry_dir(key)
+    frames = (entry / "frames").resolve()
+    if frames.parent != entry:
+        raise ValueError("frames path escapes the store entry")
+    return frames
 
 
 def frame_path(key: str, step: int | str) -> Path:
+    if not re.fullmatch(r"-?\d{1,7}", str(step)):
+        raise ValueError("invalid frame index")
     return frames_dir(key) / f"{step}.png"
 
 
@@ -164,6 +198,8 @@ def delete_layer(key: str, layer: str) -> None:
         raise ValueError("invalid cache layer")
     if layer == "all":
         delete_entry(key)
+    elif layer == "puzzle":
+        (_entry_dir(key) / "puzzle.json").unlink(missing_ok=True)
     elif layer == "rules":
         (_entry_dir(key) / "rules.json").unlink(missing_ok=True)
         _update_meta(key, rules_hash=None, notes="")
@@ -189,12 +225,12 @@ def set_favorite(key: str, favorite: bool) -> None:
 def _dir_size(path: Path) -> int:
     def file_size(file):
         try:
-            return file.stat().st_size if file.is_file() else 0
+            return file.stat().st_size if not file.is_symlink() and file.is_file() else 0
         except FileNotFoundError:
             # A frame or layer may be replaced while a history request is reading it.
             return 0
 
-    if not path.is_dir():
+    if path.is_symlink() or not path.is_dir():
         return file_size(path)
     return sum(file_size(file) for file in path.rglob("*"))
 
@@ -204,6 +240,7 @@ def entry_layers(key: str) -> dict:
     rules = _entry_dir(key) / "rules.json"
     analysis = _entry_dir(key) / "analysis.json"
     return {
+        "puzzle": (_entry_dir(key) / "puzzle.json").is_file(),
         "rules": rules.exists(),
         "steps": analysis.exists(),
         "frames": has_frames(key),
@@ -219,7 +256,7 @@ def list_entries() -> list[dict]:
         return []
     out = []
     for directory in root.iterdir():
-        if not directory.is_dir():
+        if directory.is_symlink() or not directory.is_dir():
             continue
         key = directory.name
         meta = _meta(key)
@@ -239,6 +276,7 @@ def list_entries() -> list[dict]:
             "steps_count": meta.get("steps_count", 0),
             "layers": layers,
             "sizes": {
+                "puzzle": _dir_size(directory / "puzzle.json") if layers["puzzle"] else 0,
                 "rules": _dir_size(_entry_dir(key) / "rules.json") if layers["rules"] else 0,
                 "steps": _dir_size(_entry_dir(key) / "analysis.json") if layers["steps"] else 0,
                 "frames": _dir_size(frames_dir(key)) if layers["frames"] else 0,
@@ -248,27 +286,52 @@ def list_entries() -> list[dict]:
     return out
 
 
+def _storage_total():
+    from . import history, rulecache, sudokupad
+
+    cache = rulecache.cache_dir().parent
+    raw = sudokupad._cache_file("example").parent
+    paths = {_root().resolve(), cache.resolve(), raw.resolve(), history._path().resolve()}
+    return sum(_dir_size(path) for path in paths if not any(parent in paths for parent in path.parents))
+
+
 def storage_info(entries: list[dict] | None = None) -> dict:
     if entries is None:
         entries = list_entries()
-    sizes = {layer: sum(item["sizes"][layer] for item in entries) for layer in ("rules", "steps", "frames")}
+    sizes = {layer: sum(item["sizes"][layer] for item in entries) for layer in LAYERS}
     return {
         "location": str(_root().resolve()),
         "settings": load_settings(),
-        "counts": {layer: sum(1 for item in entries if item["layers"][layer]) for layer in ("rules", "steps", "frames")},
+        "counts": {layer: sum(item["layers"][layer] for item in entries) for layer in LAYERS},
         "sizes": sizes,
-        "total": sum(sizes.values()),
+        "total": _storage_total(),
         "entries": len(entries),
     }
 
 
+def capacity_error():
+    with _META_LOCK:
+        _prune()
+        limit = load_settings()["max_mb"] * 1024 * 1024
+        if limit:
+            used = _storage_total()
+            if used >= limit:
+                return {"used_bytes": used, "limit_bytes": limit}
+    return None
+
+
 def _prunable(entries: list[dict], layer: str) -> list[dict]:
-    candidates = [item for item in entries if item["layers"][layer]]
-    candidates.sort(key=lambda item: (item["favorite"], item["at"]))
+    candidates = [item for item in entries if item["layers"][layer] and item["key"] not in _PINNED]
+    candidates.sort(key=lambda item: (item["opened_at"], item["at"], item["key"]))
     return candidates
 
 
 def prune() -> None:
+    with _META_LOCK:
+        _prune()
+
+
+def _prune() -> None:
     settings = load_settings()
     entries = list_entries()
 
@@ -276,27 +339,12 @@ def prune() -> None:
                               ("rules", "max_rules")):
         limit = settings.get(limit_name, 0)
         carrying = _prunable(entries, layer)
-        while len(carrying) > limit:
+        while carrying and sum(item["layers"][layer] for item in entries) > limit:
             victim = carrying.pop(0)
             delete_layer(victim["key"], layer)
+            if layer in ("rules", "steps") and not any(
+                entry_layers(victim["key"])[name] for name in ("rules", "steps", "frames")
+            ):
+                delete_entry(victim["key"])
             entries = list_entries()
             carrying = _prunable(entries, layer)
-
-    max_bytes = settings.get("max_mb", 0) * 1024 * 1024
-    if max_bytes > 0:
-        entries = list_entries()
-
-        def total() -> int:
-            return sum(sum(item["sizes"].values()) for item in entries)
-
-        while total() > max_bytes:
-            victim = None
-            for layer in ("frames", "steps", "rules"):
-                pool = _prunable(entries, layer)
-                if pool:
-                    victim = (pool[0], layer)
-                    break
-            if victim is None:
-                break
-            delete_layer(victim[0]["key"], victim[1])
-            entries = list_entries()

@@ -29,12 +29,13 @@ def shared_dir() -> Path:
     return Path(os.environ.get("YSUDOKU_RULES", Path.cwd() / "rules"))
 
 
-def fingerprint(puzzle, inventory) -> str:
+def fingerprint(puzzle, inventory, rule_prompt="") -> str:
     payload = json.dumps(
         {
             "size": puzzle.size,
             "rules": puzzle.rules_text,
             "elements": [element.to_json(puzzle.size) for element in inventory],
+            **({"hint": rule_prompt} if rule_prompt else {}),
         },
         ensure_ascii=False,
         sort_keys=True,

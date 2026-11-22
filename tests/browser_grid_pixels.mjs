@@ -1,16 +1,16 @@
 // Pixel-level check: detect the 9x9 grid border in the frame and compare it
 // with the grid_rect returned by the renderer.
-import { chromium } from '/tmp/pw/node_modules/playwright/index.mjs';
+const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || '../tools/node_modules/playwright/index.mjs');
 
 const BASE = process.env.YS_BASE || 'http://127.0.0.1:8765';
-const key = `pixel-${Date.now().toString(36)}`;
 
 async function main() {
-  const build = await fetch(`${BASE}/api/live/build`, {
+  const build = await fetch(`${BASE}/api/solve`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url: 'https://sudokupad.app/ad4xg01xip', steps: [], key, size: 9 }),
+    body: JSON.stringify({ url: 'https://sudokupad.app/ad4xg01xip', llm: false }),
   });
   if (!build.ok) throw new Error(`build ${build.status}`);
+  const key = (await build.json()).frames.session;
   let rect = null;
   for (let i = 0; i < 80 && !rect; i++) {
     await new Promise((r) => setTimeout(r, 500));

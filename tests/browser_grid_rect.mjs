@@ -12,11 +12,11 @@ async function post(path, body) {
 }
 
 async function check(puzzleId, crop) {
-  const key = `test-${puzzleId}-${Date.now().toString(36)}`;
   const url = `https://sudokupad.app/${puzzleId}`;
-  await post("/api/live/build", { url, steps: [[]], key, size: 9, crop });
+  const { frames } = await post("/api/solve", { url, llm: false });
+  const key = frames.session;
   let rect = null;
-  for (let i = 0; i < 60 && !rect; i++) {
+  for (let i = 0; i < 180 && !rect; i++) {
     await new Promise((r) => setTimeout(r, 500));
     const r = await fetch(`${BASE}/api/live/grid?session=${key}`);
     if (r.ok) rect = await r.json();
@@ -39,7 +39,7 @@ async function check(puzzleId, crop) {
 
   for (const step of [-1, 0]) {
     let img;
-    for (let i = 0; i < 60; i++) {
+    for (let i = 0; i < 180; i++) {
       img = await fetch(`${BASE}/api/live/frame?session=${key}&step=${step}`);
       if (img.ok) break;
       await new Promise((r) => setTimeout(r, 500));

@@ -248,10 +248,11 @@ def analyze(
     on_rules=None,
     on_step=None,
     on_puzzle=None,
+    load_puzzle=None,
 ) -> Analysis:
     from .sudokupad import load
 
-    data = load(target)
+    data = (load_puzzle or load)(target)
     puzzle = parse_puzzle(data, puzzle_id=_puzzle_id(target))
     if target.startswith("https://sudokupad.app/"):
         puzzle.source_url = target
@@ -280,7 +281,7 @@ def analyze(
         use_llm = False
     if paired_choices and not notes and rule_mode != "llm":
         use_llm = False
-    fingerprint = rulecache.fingerprint(puzzle, inventory)
+    fingerprint = rulecache.fingerprint(puzzle, inventory, rule_prompt)
     cached = None
     if spec_override is None and use_llm and use_cache:
         cached = rulecache.load(puzzle, inventory, fingerprint)
@@ -302,7 +303,7 @@ def analyze(
             spec = heuristic_spec(puzzle, inventory)
         else:
             try:
-                spec, source, validated = _llm_spec(puzzle, inventory, config, warnings)
+                spec, source, validated = _llm_spec(puzzle, inventory, config, warnings, rule_prompt)
                 if validated:
                     try:
                         rulecache.save(
@@ -568,11 +569,15 @@ def _llm_repair(puzzle, inventory, config, spec, diagnostics, warnings):
     return new_spec, new_rules
 
 
+def rulesheet_dir():
+    return rulecache.cache_dir().parent / "rulesheets"
+
+
 def save_rulesheet(png):
     from .live import FRAME_RENDERER_VERSION
     if not png.startswith(b"\x89PNG\r\n\x1a\n") or not png.endswith(b"IEND\xaeB`\x82"):
         raise ValueError("初始帧 PNG 不完整")
-    path = Path(".cache/rulesheets") / f"r{FRAME_RENDERER_VERSION}-{hashlib.sha256(png).hexdigest()}.png"
+    path = rulesheet_dir() / f"r{FRAME_RENDERER_VERSION}-{hashlib.sha256(png).hexdigest()}.png"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(png)
     return str(path)
@@ -617,7 +622,7 @@ def _apply_arrow_geometry(puzzle, spec, warnings):
         })
 
 
-def _llm_spec(puzzle, inventory, config, warnings: list[str]):
+def _llm_spec(puzzle, inventory, config, warnings: list[str], rule_prompt=""):
     inventory_json = [element.to_json(puzzle.size) for element in inventory]
     raw = puzzle.raw or {}
     if raw.get("arrows"):
@@ -635,7 +640,7 @@ def _llm_spec(puzzle, inventory, config, warnings: list[str]):
     for attempt in range(2):
         spec = llm.compile_rules(
             config, puzzle.rules_text, inventory_json, puzzle.size,
-            previous=feedback, image_uri=image_uri,
+            previous=feedback, image_uri=image_uri, hint=rule_prompt,
         )
         _apply_arrow_geometry(puzzle, spec, warnings)
         spec = with_paired_outside_choices(spec, paired_outside_choices(puzzle, inventory))

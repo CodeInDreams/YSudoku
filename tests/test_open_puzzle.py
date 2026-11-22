@@ -84,11 +84,17 @@ class OpenPuzzleTest(unittest.TestCase):
         entered, release = Event(), Event()
         with TemporaryDirectory() as directory, patch.dict(os.environ, YSUDOKU_STORE=directory):
             key = "partial"
+            analysis = {
+                "source_url": "https://sudokupad.app/example",
+                "puzzle": {"title": "Example", "size": 9}, "steps": [{}, {}],
+            }
+            store.save_analysis(key, analysis, {"title": "Example"})
             frames = store.frames_dir(key)
             frames.mkdir(parents=True)
             for step in (-1, 1):
                 store.frame_path(key, step).write_bytes(b"old frame")
-            store.set_frames_hash(key, "digest", renderer=server.live.FRAME_RENDERER_VERSION)
+            store.set_frames_hash(key, "digest", proof_hash=store.hash_json(analysis["steps"]),
+                                  renderer=server.live.FRAME_RENDERER_VERSION)
             with server.serve("127.0.0.1", 0) as httpd:
                 thread = Thread(target=httpd.serve_forever, daemon=True)
                 thread.start()
@@ -96,13 +102,12 @@ class OpenPuzzleTest(unittest.TestCase):
 
                 def request(path, body=None):
                     data = json.dumps(body).encode() if body is not None else None
-                    with urlopen(Request(base + path, data=data), timeout=2) as response:
+                    with urlopen(Request(base + path, data=data, headers={"Content-Type": "application/json"}), timeout=2) as response:
                         return json.load(response)
 
                 try:
                     with patch.object(server.live, "build", side_effect=fail_render) as build:
-                        body = {"key": key, "url": "https://sudokupad.app/example",
-                                "steps": [[], []], "steps_hash": "digest"}
+                        body = {"key": key}
                         self.assertTrue(request("/api/live/build", body)["building"])
                         self.assertTrue(entered.wait(1))
                         self.assertTrue(request("/api/live/build", body)["building"])
@@ -188,16 +193,3 @@ class OpenPuzzleTest(unittest.TestCase):
                 with server._JOBS_LOCK:
                     job = server._JOBS.pop(job_id)
                     job["preview_ready"].set()
-
-    def test_old_client_pen_actions_are_replaced_by_saved_edge_meaning(self):
-        cells = [7, 8]
-        analysis = {"steps": [
-            {"visual": {"region_edges": [{"cells": cells, "status": "candidate"}]}},
-            {"visual": {"region_edges": [{"cells": cells, "status": "confirmed"}]}},
-            {"visual": {"region_edges": [{"cells": cells, "status": "excluded"}]}},
-            {"visual": {"region_edges": []}},
-        ]}
-        stale = [[{"op": "pen", "cells": cells, "index": 6}]] * 4
-        directions = server._canonical_frame_actions(stale, analysis)
-        self.assertEqual([frame[0]["index"] for frame in directions], [5, 1, 4, 4])
-        self.assertEqual([frame[0]["enabled"] for frame in directions], [True, True, True, False])

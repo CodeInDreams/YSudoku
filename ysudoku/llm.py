@@ -7,6 +7,7 @@ import os
 import time
 import urllib.error
 import urllib.request
+from contextvars import ContextVar
 from dataclasses import dataclass
 
 SYSTEM_PROMPT = """You are a precise rule compiler for variant sudoku puzzles.
@@ -164,6 +165,9 @@ def _post(config: LLMConfig, payload: dict) -> dict:
         raise LLMError(str(exc)) from exc
 
 
+web_request = ContextVar("llm_web_request", default=None)
+
+
 def chat(config: LLMConfig, messages: list[dict], temperature: float = 0.0) -> str:
     payload = {
         "model": config.model,
@@ -171,7 +175,13 @@ def chat(config: LLMConfig, messages: list[dict], temperature: float = 0.0) -> s
         "temperature": temperature,
         "response_format": {"type": "json_object"},
     }
-    data = _post(config, payload)
+    def send(max_tokens=None):
+        if max_tokens is not None and max_tokens < 4096:
+            payload["max_tokens"] = max_tokens
+        return _post(config, payload)
+
+    request = web_request.get()
+    data = request(send) if request else send()
     try:
         return data["choices"][0]["message"]["content"]
     except (KeyError, IndexError) as exc:
@@ -234,6 +244,7 @@ def compile_rules(
     previous: list[dict] | None = None,
     image_uri: str | None = None,
     legend: str | None = None,
+    hint: str = "",
 ) -> dict:
     """Ask the model for a rule spec.  ``previous`` replays repair feedback."""
     text = (
@@ -244,6 +255,8 @@ def compile_rules(
     )
     if legend:
         text += "\n\n=== RULE SHEET LEGEND ===\n" + legend
+    if hint:
+        text += "\n\n=== USER PARSING HINT (verify against the official rules) ===\n" + hint
     content = text
     if image_uri:
         content = [
