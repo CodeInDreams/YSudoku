@@ -514,8 +514,51 @@ def _explain_rule_choice(events, data, n):
                          f"少于这 {len(witness['regions'])} 个区域所需的次数。")
         remaining = "、".join(region["remaining"])
         lines.append(f"{label}只能使用 {remaining}。")
+    labels = [region["label"] for region in data["regions"]]
+
+    def assignment(names):
+        return "、".join(f"{label}用 {name}" for label, name in zip(labels, names))
+
+    for failure in data.get("failures", [])[:4]:
+        lines.append(f"若{assignment(failure['rules'])}，则{failure['reason']}。")
+    for branch in data.get("assignments", [])[:4]:
+        facts = branch["facts"]
+        if not facts:
+            continue
+        premises = []
+        for p in branch["premises"]:
+            if p["kind"] == "rank_head":
+                premises.append(f"排名 {p['rank']} 的首位是 {p['head']}")
+            elif len(p["lengths"]) == 1:
+                length = p["lengths"][0]
+                if 0 < n - length <= 3:
+                    premises.append(f"整组和 {p['sum'] + p['complement']} 减去前缀和 "
+                                    f"{p['sum']}，尾部和为 {p['complement']}")
+                else:
+                    premises.append(f"前 {length} 格之和为 {p['sum']}")
+        fixed = "、".join(f"{cell_name(cell, n)}={value}" for cell, value in facts[:4])
+        if len(facts) > 4:
+            fixed += f" 等 {len(facts)} 格"
+        detail = "，".join(premises)
+        lines.append(f"{assignment(branch['rules'])}时，{detail + '，所以 ' if detail else ''}{fixed}。")
+    for lock in data.get("occupancy", []):
+        hosts = lock["hosts"]
+        digit = lock["digit"]
+        lines.append(f"所有剩余分配都让{lock['unit']}的 {digit} 落在 {_names(hosts, n)}，"
+                     f"所以该单元其他格可以排除 {digit}。")
+        visual["groups"].append({"cells": lock["unit_cells"], "kind": "unit"})
+        visual["premise"] = sorted(set(visual.get("premise", [])) | set(hosts))
     lines.append("排除所有剩余规则都无法支持的候选。")
     return "\n".join([*lines, *_effect_lines(events, n)]), visual
+
+
+def _explain_x_sums(events, data, n):
+    lines = [f"按提示方向读取，首格数字决定前缀长度，前缀和为 {data['sum']}。"]
+    if "complement" in data:
+        lines.append(f"整组数字互异且包含 1–{n}，"
+                     f"因此尾部和为 {data['sum'] + data['complement']} − {data['sum']} = {data['complement']}。")
+    return "\n".join([*lines, *_effect_lines(events, n)]), _unit_visual(
+        data["cells"], n, focus=sorted(_group_elims(events)))
 
 
 def _explain_full_rank(events, data, n):

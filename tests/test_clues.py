@@ -8,6 +8,7 @@ sys.path.insert(0, str(ROOT))
 from ysudoku.constraints import XSums
 from ysudoku.model import parse_puzzle
 from ysudoku.pipeline import analyze
+from ysudoku.state import State, Unit, bits
 
 
 class ClueTest(unittest.TestCase):
@@ -65,6 +66,24 @@ class ClueTest(unittest.TestCase):
         self.assertTrue(rule.check([3, 1, 2, 4, 5, 6, 7, 8, 9]))
         self.assertFalse(rule.check([3, 1, 3, 4, 5, 6, 7, 8, 9]))
         self.assertTrue(rule.check([3, 1, 2, 0, 0, 0, 0, 0, 0]))  # incomplete
+
+    def test_x_sums_uses_the_complement_in_a_full_unit(self):
+        state = State(9, [Unit("row", 0, list(range(9)))])
+        state.place(8, 9)
+        XSums(list(range(9)), 35, "left").prune(state)
+        self.assertEqual(list(bits(state.dom[0])), [7])
+        self.assertEqual(list(bits(state.dom[7])), [1])
+
+    def test_double_take_transfers_common_occupancy_between_pairs(self):
+        deductions = [step for step in self.analysis.result.steps if step.technique == "rule_choice"]
+        self.assertTrue(any(
+            e.cell == 19 and e.value == 1
+            and any(lock["digit"] == 1 and lock["hosts"] == [64, 73]
+                    for lock in e.reason.data.get("occupancy", []))
+            for step in deductions for e in step.events
+        ))
+        expected = {18: 7, 25: 1, 26: 9, 53: 1, 64: 1, 73: 2}
+        self.assertEqual({cell: self.analysis.result.values[cell] for cell in expected}, expected)
 
 
 if __name__ == "__main__":

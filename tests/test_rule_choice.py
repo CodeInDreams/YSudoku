@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from ysudoku.model import parse_puzzle
 from ysudoku.rules import compile_spec
@@ -46,3 +47,13 @@ class RuleChoiceTest(unittest.TestCase):
         self.assertEqual(list(bits(state.dom[10])), [3])
         self.assertTrue(any(e.reason.data["regions"][2]["unmatched"] == ["A", "B"]
                             for e in state.end()))
+
+    def test_matching_still_prunes_when_joint_propagation_exceeds_budget(self):
+        state, choice = self._state([
+            {"options": {"A": _option(0, 1), "B": _option(0, 2)}},
+            {"options": {"A": _option(5, 1), "B": _option(5, 2)}},
+            {"options": {"A": _option(10, 1), "B": _option(10, 2), "C": _option(10, 3)}},
+        ], {"A": 1, "B": 1, "C": 1})
+        with patch("ysudoku.rule_choice.MAX_JOINT_ASSIGNMENTS", 1):
+            choice.prune(state)
+        self.assertEqual(list(bits(state.dom[10])), [3])

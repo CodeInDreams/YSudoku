@@ -28,6 +28,34 @@ def _matchable(combo: tuple[int, ...], doms: list[int]) -> bool:
 
 
 @lru_cache(maxsize=8192)
+def _matching_masks(domains, available):
+    """Supported values at each position of a distinct-digit matching."""
+    order = sorted(range(len(domains)), key=lambda i: (domains[i] & available).bit_count())
+
+    @lru_cache(maxsize=None)
+    def fits(index, remaining):
+        if index == len(order):
+            return remaining == 0
+        return any(fits(index + 1, remaining ^ (1 << (digit - 1)))
+                   for digit in bits(domains[order[index]] & remaining))
+
+    if not fits(0, available):
+        return None
+    masks = [0] * len(domains)
+    reachable = {available}
+    for index, cell in enumerate(order):
+        following = set()
+        for remaining in reachable:
+            for digit in bits(domains[cell] & remaining):
+                bit = 1 << (digit - 1)
+                if fits(index + 1, remaining ^ bit):
+                    masks[cell] |= bit
+                    following.add(remaining ^ bit)
+        reachable = following
+    return tuple(masks)
+
+
+@lru_cache(maxsize=8192)
 def digit_sets(k: int, total: int, n: int) -> tuple[tuple[int, ...], ...]:
     return tuple(c for c in combinations(range(1, n + 1), k) if sum(c) == total)
 
@@ -922,40 +950,47 @@ class XSums(Constraint):
         reason = Reason("x_sums", {"cells": self._cells, "sum": self.total, "side": self.side})
         changed = False
 
-        # If all cells lie in one all-different unit, each feasible prefix is
-        # a matching against a distinct digit set. This also covers straight
-        # omnidirectional arrows within one row, column, or box. The tail is
-        # not part of the sum: a shorter feasible X supports its current
-        # candidates unchanged.
+        # Match the prefix to a digit set. When the clue covers a full unit,
+        # its tail must match exactly the complement of that set.
         line_unit = next((unit for unit in st.units
                           if len(cells) == len(set(cells))
                           and set(cells).issubset(unit.cells)), None)
         if line_unit is not None:
+            full_unit = len(cells) == len(line_unit.cells) == st.n
             supports = [0] * len(cells)
             feasible_x = set()
             for x in bits(st.dom[first]):
                 if not 1 <= x <= len(cells):
                     continue
-                span = cells[:x]
-                domains = [st.dom[cell] for cell in span]
+                domains = [st.dom[cell] for cell in cells[:x]]
                 domains[0] &= 1 << (x - 1)
-                if not domains[0]:
-                    continue
+                prefix_doms = tuple(domains)
+                tail_doms = tuple(st.dom[cell] for cell in cells[x:])
                 for combo in digit_sets(x, self.total, st.n):
-                    if not _matchable(combo, domains):
+                    digits = sum(1 << (digit - 1) for digit in combo)
+                    prefix = _matching_masks(prefix_doms, digits)
+                    if prefix is None:
+                        continue
+                    tail = _matching_masks(tail_doms, st.full ^ digits) if full_unit else tail_doms
+                    if tail is None:
                         continue
                     feasible_x.add(x)
-                    for index, cell in enumerate(span):
-                        for value in bits(domains[index]):
-                            forced = list(domains)
-                            forced[index] = 1 << (value - 1)
-                            if _matchable(combo, forced):
-                                supports[index] |= 1 << (value - 1)
-                    # A shorter X leaves these cells unconstrained by this clue.
-                    for index in range(x, len(cells)):
-                        supports[index] |= st.dom[cells[index]]
+                    for index, mask in enumerate(prefix + tail):
+                        supports[index] |= mask
             if not feasible_x:
+                last = st.dom[cells[-1]]
+                complement = st.n * (st.n + 1) // 2 - self.total
+                if full_unit and len(cells) > 1 and last.bit_count() == 1 and complement == last.bit_length() + 1:
+                    penultimate = cells[-2]
+                    if not st.has(penultimate, 1):
+                        raise Contradiction(
+                            f"尾部和为 {complement}，末格是 {last.bit_length()}，"
+                            f"所以 {cell_name(penultimate, st.n)} 必须是 1，但该格已排除 1"
+                        )
                 raise Contradiction("X-Sum prefix has no feasible digit set")
+            if full_unit:
+                reason.data.update(complement=st.n * (st.n + 1) // 2 - self.total,
+                                   lengths=sorted(feasible_x), ordered=cells)
             for cell, allowed in zip(cells, supports):
                 changed |= st.restrict(cell, allowed, reason)
             return changed
