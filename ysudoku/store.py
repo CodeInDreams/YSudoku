@@ -152,8 +152,10 @@ def has_frames(key: str, digest: str | None = None) -> bool:
     return any(frames_dir(key).glob("*.png"))
 
 
-def set_frames_hash(key: str, digest: str, *, proof_hash: str | None = None) -> None:
-    _update_meta(key, frames_hash=digest, frames_proof_hash=proof_hash, frames_at=time.time())
+def set_frames_hash(key: str, digest: str, *, proof_hash: str | None = None,
+                    renderer: int | None = None) -> None:
+    _update_meta(key, frames_hash=digest, frames_proof_hash=proof_hash,
+                 frames_renderer=renderer, frames_at=time.time())
     prune()
 
 
@@ -170,10 +172,10 @@ def delete_layer(key: str, layer: str) -> None:
         (_entry_dir(key) / "analysis.json").unlink(missing_ok=True)
         _update_meta(key, steps_hash=None)
         shutil.rmtree(frames_dir(key), ignore_errors=True)
-        _update_meta(key, frames_hash=None, frames_proof_hash=None)
+        _update_meta(key, frames_hash=None, frames_proof_hash=None, frames_renderer=None)
     elif layer == "frames":
         shutil.rmtree(frames_dir(key), ignore_errors=True)
-        _update_meta(key, frames_hash=None, frames_proof_hash=None)
+        _update_meta(key, frames_hash=None, frames_proof_hash=None, frames_renderer=None)
 
 
 def delete_entry(key: str) -> None:

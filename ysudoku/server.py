@@ -27,6 +27,11 @@ def _content_language(body):
     return "en" if str(body.get("lang") or "").lower().startswith("en") else "zh"
 
 
+def _clean_frames(meta):
+    version = meta.get("frames_renderer")
+    return isinstance(version, int) and version >= live.MIN_CLEAN_FRAME_VERSION
+
+
 def _canonical_frame_actions(steps, analysis):
     """Use the saved proof to make boundary rendering independent of client version."""
     if not analysis or len(analysis.get("steps", ())) != len(steps):
@@ -90,8 +95,9 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
     def preview(url, size, existing="", outside=True):
         path = Path(".cache/rulesheets") / Path(existing).name
         try:
-            if not outside or not existing or not path.is_file():
-                path = Path(initial_screenshot(url, size, store.frame_path(key, -1), crop=not outside))
+            if not path.name.startswith(f"r{live.FRAME_RENDERER_VERSION}-") or not path.is_file():
+                frame = store.frame_path(key, -1) if _clean_frames(store._meta(key)) else None
+                path = Path(initial_screenshot(url, size, frame, crop=not outside))
         except (OSError, LLMError):
             on_preview("")
             return ""
@@ -121,11 +127,13 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
         if old_version or different_language or (rules
                 and cached.get("status") != "stuck"
                 and meta.get("rules_hash") == rules.get("hash")):
+            if not Path(cached.get("rule_sheet") or "").name.startswith(f"r{live.FRAME_RENDERER_VERSION}-"):
+                cached["rule_sheet"] = ""
             if on_preview and not on_preview_start:
                 preview(cached.get("source_url", ""), cached["puzzle"]["size"],
                         cached.get("rule_sheet", ""),
                         bool(cached.get("puzzle", {}).get("outside", True)))
-            elif not cached.get("rule_sheet"):
+            elif not cached.get("rule_sheet") and _clean_frames(meta):
                 try:
                     path = save_rulesheet(store.frame_path(key, -1).read_bytes())
                     cached["rule_sheet"] = f"/api/rulesheet/{Path(path).name}"
@@ -518,7 +526,7 @@ class Handler(BaseHTTPRequestHandler):
                     canonical = _canonical_frame_actions(steps, analysis)
                     digest = str(body.get("steps_hash") or "")
                     if canonical is not steps:
-                        frame_spec = {"renderer": 33, "url": url, "size": size,
+                        frame_spec = {"renderer": live.FRAME_RENDERER_VERSION, "url": url, "size": size,
                                       "crop": crop, "steps": canonical}
                         content_lang = (analysis or {}).get("content_lang", "zh")
                         if content_lang != "zh":
@@ -539,7 +547,8 @@ class Handler(BaseHTTPRequestHandler):
                                 live.build(url, steps, directory=str(directory), session=key,
                                            size=size, crop=crop, wait=True)
                                 if digest:
-                                    store.set_frames_hash(key, digest, proof_hash=proof_hash)
+                                    store.set_frames_hash(key, digest, proof_hash=proof_hash,
+                                                          renderer=live.FRAME_RENDERER_VERSION)
                             except Exception as exc:  # noqa: BLE001
                                 print(f"frame build failed: {exc}", flush=True)
                                 if not (directory / "error.json").is_file():
@@ -563,12 +572,13 @@ class Handler(BaseHTTPRequestHandler):
                                 retained = (proof_hash and keep_frames_for == proof_hash
                                             and meta.get("frames_proof_hash") == proof_hash)
                                 matching = store.has_frames(key, digest) if digest else False
-                                if ((matching or retained)
+                                if ((matching or retained) and _clean_frames(meta)
                                         and not (directory / "error.json").exists()
                                         and all(store.frame_path(key, step).is_file()
                                                 for step in range(-1, len(steps)))):
                                     if matching and proof_hash and meta.get("frames_proof_hash") != proof_hash:
-                                        store.set_frames_hash(key, digest, proof_hash=proof_hash)
+                                        store.set_frames_hash(key, digest, proof_hash=proof_hash,
+                                                              renderer=meta["frames_renderer"])
                                     result = {"ok": True, "session": key, "cached": True, "complete": True}
                                 else:
                                     store.delete_layer(key, "frames")

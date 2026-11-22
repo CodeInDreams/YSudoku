@@ -360,9 +360,11 @@ function StepNarrative({ step, n, t }) {
       if (digits.length) combos.push(digits);
       continue;
     }
-    if (/^R\d+C\d+\s*[≠=]/.test(line)) continue;
+    // Ordinary effects are already listed in the result cards. The trial
+    // pages have no committed events, so their cell-by-cell proof is the text.
+    if (!step.branch && /^R\d+C\d+\s*[≠=]/.test(line)) continue;
     if (line.includes("按这些组合") || line.includes("当前可行的数字组合")) continue;
-    lead.push(line);
+    lead.push(step.branch ? raw.trimEnd() : line);
   }
   const places = [];
   const elims = new Map();
@@ -753,7 +755,7 @@ export default function App() {
       let hash = 2166136261;
       const crop = !(nextAnalysis.puzzle?.outside ?? !!nextAnalysis.puzzle?.clues?.length);
       const frameLang = nextAnalysis.content_lang || "zh";
-      const text = "frame-v33:" + (frameLang === "zh" ? "" : frameLang + ":")
+      const text = "frame-v34:" + (frameLang === "zh" ? "" : frameLang + ":")
         + (crop ? "crop:" : "full:") + JSON.stringify(actions);
       for (let i = 0; i < text.length; i++) { hash ^= text.charCodeAt(i); hash = Math.imul(hash, 16777619); }
       const data = await postJson("/api/live/build", {
@@ -1460,12 +1462,12 @@ export default function App() {
   return (
     <div className="min-h-screen bg-background">
       <header className={`sticky top-0 z-30 border-b bg-background/95 backdrop-blur transition-transform duration-200 lg:translate-y-0 ${headerHidden ? "-translate-y-full" : "translate-y-0"}`}>
-        <div className="mx-auto flex min-h-14 max-w-[1440px] flex-wrap items-center gap-2 px-4 py-2 lg:flex-nowrap lg:gap-3 lg:px-6 lg:py-0">
-          <div className="flex items-center gap-2.5">
-            <img src={dark ? logoDark : logoLight} alt="YSudoku" className="h-8 w-8 rounded-lg" />
-            <div><div className="text-sm font-semibold leading-tight tracking-tight">YSudoku</div><div className="hidden text-[10.5px] text-muted-foreground sm:block">{t("brand.sub")}</div></div>
+        <div className="mx-auto grid min-h-14 max-w-[1440px] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1.5 px-2 py-2 sm:px-4 lg:grid-cols-[auto_auto_minmax(0,1fr)_auto] lg:gap-3 lg:px-6 lg:py-0">
+          <div className="flex items-center gap-1.5 sm:gap-2.5">
+            <img src={dark ? logoDark : logoLight} alt="YSudoku" className="h-7 w-7 shrink-0 rounded-lg sm:h-8 sm:w-8" />
+            <div className="hidden min-[375px]:block"><div className="text-sm font-semibold leading-tight tracking-tight">YSudoku</div><div className="hidden text-[10.5px] text-muted-foreground sm:block">{t("brand.sub")}</div></div>
           </div>
-          <nav className="flex h-14 items-stretch gap-3 sm:gap-4">
+          <nav className="flex h-10 min-w-0 items-stretch gap-1.5 sm:gap-4 lg:h-14">
             {navItems.map(([value, key]) => (
               <button key={value} onClick={() => { setView(value); setPlaying(false); }}
                 className={`whitespace-nowrap border-b-2 px-0.5 text-[13px] transition-colors sm:text-sm ${view === value ? "border-primary font-semibold text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
@@ -1473,7 +1475,7 @@ export default function App() {
               </button>
             ))}
           </nav>
-          <form className="order-last flex w-full min-w-0 items-center gap-1.5 lg:order-none lg:w-auto lg:flex-1" onSubmit={(e) => {
+          <form className="order-last col-span-3 flex min-w-0 items-center gap-1.5 lg:order-none lg:col-span-1" onSubmit={(e) => {
             e.preventDefault();
             if (looksLikePuzzle(url)) { setSearchOpen(false); submit({ url }); }
             else { setQuery(url); setView("history"); setSearchOpen(false); }
@@ -1498,15 +1500,15 @@ export default function App() {
             <Button type="submit" size="sm" className="whitespace-nowrap" disabled={busy}>{busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : t("header.solve")}</Button>
             <Button type="button" size="sm" variant="outline" className="whitespace-nowrap" onClick={demo} disabled={busy}>{t("header.demo")}</Button>
           </form>
-          <div className="ml-auto flex items-center gap-1">
-            <Button variant="ghost" size="sm" asChild className="gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
+          <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
+            <Button variant="ghost" size="sm" asChild className="h-8 w-7 gap-1.5 whitespace-nowrap px-0 text-xs text-muted-foreground sm:w-auto sm:px-3">
               <a href="https://github.com/CodeInDreams/ysudoku" target="_blank" rel="noreferrer" title="GitHub"><GithubMark className="h-4 w-4 text-foreground" /><span className="hidden sm:inline">{stars ? stars : "Star"}</span></a>
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => setDark((value) => !value)} title={dark ? t("header.light") : t("header.dark")}>
+            <Button variant="ghost" size="icon" className="h-8 w-7 sm:h-9 sm:w-9" onClick={() => setDark((value) => !value)} title={dark ? t("header.light") : t("header.dark")}>
               {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
             <Popover>
-              <PopoverTrigger asChild><Button variant="ghost" size="icon" title={t("settings.title")}><Settings className="h-4 w-4" /></Button></PopoverTrigger>
+              <PopoverTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-7 sm:h-9 sm:w-9" title={t("settings.title")}><Settings className="h-4 w-4" /></Button></PopoverTrigger>
               <PopoverContent align="end" className="w-[min(360px,calc(100vw-24px))] p-0">
                 <div className="border-b px-4 py-3">
                   <div className="text-sm font-semibold">{t("settings.title")}</div>

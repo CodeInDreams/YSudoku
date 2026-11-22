@@ -45,6 +45,7 @@ class OpenPuzzleTest(unittest.TestCase):
             self.assertEqual(payload["algo_version"], server.ANALYSIS_VERSION)
             payload["algo_version"] -= 1
             payload["status"] = "stuck"
+            payload["rule_sheet"] = "/api/rulesheet/old-capture.png"
             payload["message"] = "没有候选可再缩小；可开启「反证」(--allow-chains) 尝试高级试探"
             payload["steps"][0].update(
                 technique="forcing_chain",
@@ -60,6 +61,7 @@ class OpenPuzzleTest(unittest.TestCase):
                 self.assertEqual(saved["cache_version"]["current"], server.ANALYSIS_VERSION)
                 self.assertEqual(saved["message"], "没有候选可再缩小")
                 self.assertEqual(saved["steps"][0]["detail"], "反证结论。")
+                self.assertEqual(saved["rule_sheet"], "")
                 analyze.assert_not_called()
                 with self.assertRaisesRegex(RuntimeError, "stop refresh"):
                     server._stored_analysis(fixture, {"llm": False}, force_steps=True)
@@ -86,7 +88,7 @@ class OpenPuzzleTest(unittest.TestCase):
             frames.mkdir(parents=True)
             for step in (-1, 1):
                 store.frame_path(key, step).write_bytes(b"old frame")
-            store.set_frames_hash(key, "digest")
+            store.set_frames_hash(key, "digest", renderer=server.live.FRAME_RENDERER_VERSION)
             with server.serve("127.0.0.1", 0) as httpd:
                 thread = Thread(target=httpd.serve_forever, daemon=True)
                 thread.start()

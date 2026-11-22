@@ -57,6 +57,9 @@ def _cause(text, conflict, n):
     if match:
         total, end, cell = match.groups()
         return f"The tail totals {total} and ends in {end}, so {cell} must be 1, which has already been excluded."
+    match = re.fullmatch(r"所有后续分支均矛盾（(\d+) 个终端矛盾）", text)
+    if match:
+        return f"All continuations lead to contradictions ({match[1]} conflicting branches)."
     if text and not re.search(r"[\u3400-\u9fff]", text):
         return text.rstrip(".") + "."
     if conflict and conflict.get("cells"):
@@ -124,7 +127,7 @@ def _refutation(payload, evidence, primary, name, n):
         result = f"Place {forced} in {name(cell)}." if forced else f"Eliminate {value} from {name(cell)}."
         return "Restore board", f"Undo the assumption {name(cell)} = {value}. {result}", assumption
     if phase == "trace":
-        lines = [assumption]
+        lines = [f"Continue the same trial with {name(cell)} = {value}. These deductions apply only inside this trial."]
         for row in evidence["rows"]:
             kind = row["kind"]
             if kind == "event":
@@ -138,17 +141,26 @@ def _refutation(payload, evidence, primary, name, n):
                            if digits else f"{partner} has no compatible candidate")
                     label = f"{label}: {why}"
                 elif event["reason"]["kind"] == "unit_peer":
-                    label = f"it sees {name(reason['by'])} in the same unit"
-                lines.append(f"{_event_text(event, name)} ({label}).")
+                    label = f"{name(reason['by'])} already holds {event['value']} in a shared unit"
+                elif event["reason"]["kind"] == "hidden_single":
+                    label = f"only place for {event['value']} in {_unit(reason.get('unit'))}"
+                elif event["reason"]["kind"] == "naked_single":
+                    label = "only remaining candidate"
+                elif event["reason"]["kind"] in ("anti_knight", "anti_king"):
+                    peer = reason.get("b") if reason.get("a") == event["cell"] else reason.get("a")
+                    if peer is not None:
+                        label = f"{label}: {name(peer)} already holds {event['value']}"
+                text = f"{_event_text(event, name)} ({label})."
             elif kind == "cause":
-                lines.append(_cause(row["text"], row.get("conflict"), n))
+                text = _cause(row["text"], row.get("conflict"), n)
             elif kind == "assume":
-                lines.append(f"Now assume {name(row['cell'])} = {row['value']}.")
+                text = f"Inside this trial, test {name(row['cell'])} = {row['value']}."
             elif kind == "branch":
-                lines.append(f"Check the remaining candidates {_lists(row['values'])} at {name(row['cell'])}.")
+                text = f"Check each of {_lists(row['values'])}, the remaining candidates at {name(row['cell'])}."
             else:
-                lines.append("Every candidate in this branch leads to a contradiction.")
-        return f"Refutation evidence {evidence['page']}/{evidence['total']}", "\n".join(lines), assumption
+                text = f"Every candidate at {name(row['cell'])} leads to a contradiction."
+            lines.append("  " * row.get("depth", 0) + text)
+        return f"Refutation evidence {evidence['page']}/{evidence['total']}", "\n".join(lines), f"Trial: {name(cell)} = {value}"
     if phase == "conflict":
         note = _cause(evidence["cause"], evidence.get("conflict"), n)
         return "Contradiction", f"{assumption} {note} The assumption fails.", assumption

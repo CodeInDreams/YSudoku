@@ -35,8 +35,9 @@ class NarrationTest(unittest.TestCase):
         self.assertEqual(english["content_lang"], "en")
         branches = [step for step in english["steps"] if step["title"].startswith("Refutation evidence")]
         self.assertTrue(branches)
-        self.assertIn("Assume R", branches[0]["visual"]["assumption"]["label"])
-        self.assertIn("Assume R", branches[0]["detail"])
+        self.assertIn("Trial: R", branches[0]["visual"]["assumption"]["label"])
+        self.assertIn("Continue the same trial with R", branches[0]["detail"])
+        self.assertIn("only inside this trial", branches[0]["detail"])
         for step in english["steps"]:
             self.assertNotRegex(step["title"] + step["detail"], r"[\u3400-\u9fff]")
 

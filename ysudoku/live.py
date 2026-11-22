@@ -20,6 +20,8 @@ class LiveGone(LiveError):
 
 
 PORT = int(os.environ.get("YSUDOKU_LIVE_PORT", "8791"))
+FRAME_RENDERER_VERSION = 34
+MIN_CLEAN_FRAME_VERSION = 34
 _ROOT = Path(__file__).resolve().parents[1]
 _SCRIPT = _ROOT / "tools" / "live_sudokupad.mjs"
 _proc: subprocess.Popen | None = None

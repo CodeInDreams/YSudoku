@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from . import predicate as predicate_mod
@@ -117,6 +118,22 @@ def _names(cells: list[int], n: int) -> str:
 
 def _values(vals: list[int]) -> str:
     return "、".join(str(v) for v in sorted(vals))
+
+
+def contradiction_zh(text: str) -> str:
+    for pattern, replacement in (
+        (r"(R\d+C\d+) has no candidates left", r"\1 已无剩余候选"),
+        (r"(R\d+C\d+) (?:is )?already filled", r"\1 已经填入数字"),
+        (r"(R\d+C\d+) cannot be (\d+)", r"\1 不能填 \2"),
+        (r"X-Sum prefix has no feasible (?:digit set|assignment)", "X-Sum 前缀与当前候选无法同时满足"),
+        (r"arrow has no feasible sum", "箭身无法凑出圆圈中的数字"),
+        (r"cage (\d+) (?:impossible|has no feasible combination)", r"总和为 \1 的笼没有可行组合"),
+    ):
+        if re.fullmatch(pattern, text):
+            return re.sub(pattern, replacement, text)
+    if re.fullmatch(r"[!-~ ]+", text):
+        return "当前候选无法同时满足相关规则"
+    return text.rstrip("。")
 
 
 def build_step(index: int, events: list[Event], n: int) -> Step:
@@ -512,7 +529,7 @@ def _explain_rule_choice(events, data, n):
         label = region["label"]
         visual["groups"].append({"cells": region["cells"], "kind": "pair"})
         for name, why in region["rejected"].items():
-            lines.append(f"{label}排除 {name}。{why}。")
+            lines.append(f"{label}排除 {name}。{contradiction_zh(why)}。")
         for name, witness in region["witnesses"].items():
             groups = "、".join(data["regions"][index]["label"] for index in witness["regions"])
             lines.append(f"{label}若使用 {name}，{groups} 只能分到 {witness['slots']} 次规则名额，"
@@ -525,7 +542,7 @@ def _explain_rule_choice(events, data, n):
         return "、".join(f"{label}用 {name}" for label, name in zip(labels, names))
 
     for failure in data.get("failures", [])[:4]:
-        lines.append(f"若{assignment(failure['rules'])}，则{failure['reason']}。")
+        lines.append(f"若{assignment(failure['rules'])}，则 {contradiction_zh(failure['reason'])}。")
     for branch in data.get("assignments", [])[:4]:
         facts = branch["facts"]
         if not facts:

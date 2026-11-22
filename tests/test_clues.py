@@ -85,6 +85,11 @@ class ClueTest(unittest.TestCase):
         expected = {18: 7, 25: 1, 26: 9, 53: 1, 64: 1, 73: 2}
         self.assertEqual({cell: self.analysis.result.values[cell] for cell in expected}, expected)
 
+    def test_double_take_localizes_candidate_conflicts(self):
+        details = "\n".join(step.detail for step in self.analysis.result.steps)
+        self.assertIn("R8C1 已无剩余候选", details)
+        self.assertNotIn("has no candidates left", details)
+
 
 if __name__ == "__main__":
     unittest.main()

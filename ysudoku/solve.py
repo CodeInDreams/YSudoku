@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from .intersections import PatternPropagation
-from .narrate import Step, build_step
+from .narrate import Step, build_step, contradiction_zh
 from .search import count_solutions, satisfiable
 from .state import Contradiction, Event, Reason, State, bits, cell_name
 from .simplify import can_simplify, simplify
@@ -688,7 +688,7 @@ class Solver:
                     support_dom[event.cell] &= ~bit
             if node.get("cause"):
                 conflict = node.get("visual_conflict")
-                lines.append((f"{indent}出现矛盾：{node['cause']}。", conflict,
+                lines.append((f"{indent}出现矛盾：{contradiction_zh(node['cause'])}。", conflict,
                               {"kind": "cause", "text": node["cause"], "conflict": conflict}))
             children = node.get("children", ())
             branch_cell = node.get("branch_cell")
@@ -701,12 +701,15 @@ class Solver:
                 )
                 for child in children:
                     lines.extend(proof_lines(child["proof"], indent + "  "))
-                lines.append((f"{indent}该格所有候选都导致矛盾。", None, {"kind": "branch_end"}))
+                lines.append((f"{indent}该格所有候选都导致矛盾。", None,
+                              {"kind": "branch_end", "cell": branch_cell}))
+            for _, _, row in lines:
+                row.setdefault("depth", len(indent) // 2)
             return lines
 
         proof_text = proof_lines(proof)
         if not proof_text:
-            proof_text = [(f"假设 {name} = {value} 后立即矛盾：{cause}。", None,
+            proof_text = [(f"假设 {name} = {value} 后立即矛盾：{contradiction_zh(cause)}。", None,
                            {"kind": "cause", "text": cause})]
         chunks = [proof_text[i:i + chunk_size]
                   for i in range(0, len(proof_text), chunk_size)]
@@ -736,7 +739,7 @@ class Solver:
         refuted = Step(
             index=len(self.steps), technique="contradiction", tier=4,
             title="反证推翻",
-            detail=f"反证推翻：假设 {name} = {value} 的推导出现矛盾：{cause}。",
+            detail=f"反证推翻：假设 {name} = {value} 的推导出现矛盾：{contradiction_zh(cause)}。",
             events=[], visual={"focus": [], "premise": [],
                                "groups": [{"cells": [cell], "kind": "assumption"}],
                                "links": [], "chips": [],

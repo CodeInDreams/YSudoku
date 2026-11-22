@@ -50,7 +50,12 @@ setInterval(async () => {
   if (Date.now() - lastUsed > IDLE_MS) await closeBrowser();
 }, CHECK_MS).unref();
 
-async function ensurePage() {
+async function ensurePage({ fresh = false } = {}) {
+  if (fresh && context) {
+    await context.close();
+    context = null;
+    page = null;
+  }
   if (!browser) {
     browser = await chromium.launch({
       headless: true,
@@ -70,7 +75,7 @@ async function ensurePage() {
         hidetimer: true, dashedgrid: false, hidecolours: false, showseen: false,
         checkonfinish: false, pauseonstart: false, selection: "default",
         multicolour: true, outlinesondigits: false, outlinesonlines: false,
-        hidesolved: true, autocheck: true, conflictchecker: "on",
+        hidesolved: false, autocheck: false, conflictchecker: "on",
         checkpencilmarks: false, repeatundodelay: 700, repeatundointerval: 100,
         toolletter_mode: "altletter", marksolveddigits: "off", uitheme: "monolight",
         cellpaste: false, puzzleevents: "off",
@@ -90,8 +95,11 @@ async function ensurePage() {
 }
 
 async function open(url, logicalN = 0, crop = false) {
-  await ensurePage();
+  // A browser context persists SudokuPad's progress and completion flags.
+  // Each new capture starts with its own origin storage.
+  await ensurePage({ fresh: true });
   ledger = new Map();
+  branchSnapshot = null;
   await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
   await page.waitForSelector("svg.boardsvg", { timeout: 15000 }).catch(() => {});
   // The start overlay darkens the board; click it as soon as it appears,
@@ -150,10 +158,14 @@ async function open(url, logicalN = 0, crop = false) {
   const capture = { x: left, y: top, width: right - left, height: bottom - top };
   const rect = { x: grid.x - left, y: grid.y - top, width: grid.width, height: grid.height,
                  imageWidth: capture.width, imageHeight: capture.height };
-  board = { box, grid, capture, rect, n };
+  board = { box, grid, capture, rect, n, crop };
   lastRect = rect;
 
   const initial = await readBoard();
+  if (initial.values.some(Boolean)
+      || await page.getByText("You've already solved this puzzle.", { exact: true }).isVisible()) {
+    throw new Error("SudokuPad did not open at the original puzzle state");
+  }
   valueState = new Map();
   markState = new Map();
   initial.values.forEach((value, cell) => { if (value) valueState.set(cell, value); });
@@ -163,6 +175,9 @@ async function open(url, logicalN = 0, crop = false) {
 
 async function shot() {
   touch();
+  if (await page.getByText("You've already solved this puzzle.", { exact: true }).isVisible()) {
+    throw new Error("SudokuPad displayed a completed-puzzle dialog during capture");
+  }
   latest = await page.screenshot({
     clip: board.capture,
     type: "png",
@@ -484,7 +499,7 @@ async function act(action) {
     return;
   }
   if (action.op === "reload_base") {
-    await open(action.url);
+    await open(action.url, board.n, board.crop);
     for (const item of action.actions || []) await act(item);
     await page.waitForTimeout(200);
     const now = await readBoard();
@@ -663,6 +678,10 @@ async function buildSession(url, steps, session, targetDir, size = 0, crop = fal
         }
       }
       await clearSelection();
+      const { values } = await readBoard();
+      if (values.some((value, cell) => value !== (expected.get(cell) || 0))) {
+        throw new Error(`SudokuPad values do not match the rendered proof at step ${i + 1}`);
+      }
       fs.writeFileSync(path.join(dir, `${i}.png`), await shot());
     }
   } catch (err) {
