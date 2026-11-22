@@ -133,7 +133,7 @@ describe() / to_dict()
 1. `naked_single`、`hidden_single`
 2. `forty_five`、`hidden_subset`、`locked`、`subset`
 3. `x_wing`、`xy_wing`、`w_wing`、`coloring`、`medusa`、`x_chain`、`als`
-4. `forcing_chain`（需要显式开启反证）
+4. `forcing_chain`（直接推理卡住后尝试）
 
 技巧不直接修改 UI，只产生 `Event`。`Reason` 保存规则种类、作用域和解释所需数据。
 
@@ -222,7 +222,7 @@ Centre 只允许一个候选，这是正常状态。单候选在渲染上会被 
 
 ### 5.5 反证与全局求解
 
-- `forcing_chain` 在开启 `allow_chains` 时尝试。
+- 网页和命令行在直接推理卡住后均会尝试 `forcing_chain`。
 - 全局约束（Full Rank / X-Sums）通过可选 CP-SAT 求解，失败时回退。
 - 反证审计只用于标注，不改变求解路径。
 - 如果规则技巧仍卡住，不使用整盘搜索补全，而是执行反证步骤：

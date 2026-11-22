@@ -51,6 +51,16 @@ def _canonical_frame_actions(steps, analysis):
     return frames
 
 
+def _hide_legacy_refutation_controls(payload):
+    hint = "；可开启「反证」(--allow-chains) 尝试高级试探"
+    if isinstance(payload.get("message"), str):
+        payload["message"] = payload["message"].removesuffix(hint)
+    footer = "\n注意：这一步是反证，不是直接推理；如只想看纯逻辑链，请关闭「反证」开关。"
+    for step in payload.get("steps", []):
+        if step.get("technique") == "forcing_chain" and isinstance(step.get("detail"), str):
+            step["detail"] = step["detail"].removesuffix(footer)
+
+
 def _stored_analysis(target: str, body: dict, demo: bool = False,
                      force_rules: bool = False, force_steps: bool = False,
                      on_rules=None, on_step=None, on_preview=None, on_preview_start=None, on_title=None, opened_at=None):
@@ -102,9 +112,8 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
         on_title(meta["title"])
     notes = str(body["notes"] if "notes" in body else meta.get("notes", "") or "").strip()
     if cached:
-        allow_chains = bool(body.get("chains", True))
         if old_version or (rules and cached.get("lang", "zh") == lang
-                and (not allow_chains or cached.get("status") != "stuck")
+                and cached.get("status") != "stuck"
                 and meta.get("rules_hash") == rules.get("hash")):
             if on_preview and not on_preview_start:
                 preview(cached.get("source_url", ""), cached["puzzle"]["size"],
@@ -117,6 +126,7 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
                 except (OSError, ValueError):
                     pass
             cached["notes"] = meta.get("notes", "")
+            _hide_legacy_refutation_controls(cached)
             if isinstance(cached.get("rules"), dict):
                 cached["rules"]["notes"] = meta.get("notes", "")
             cached["cached"] = True
@@ -158,7 +168,7 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
         use_llm=bool(body.get("llm", True)) and (force_rules or not rules),
         spec_override=rules["spec"] if rules and not force_rules else None,
         do_audit=bool(body.get("audit", False)),
-        allow_chains=True if demo else bool(body.get("chains", True)),
+        allow_chains=True,
         use_global=False,
         global_time_limit=float(body.get("global_timeout", 60)),
         notes=notes,

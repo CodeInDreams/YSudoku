@@ -19,6 +19,11 @@ class OpenPuzzleTest(unittest.TestCase):
             self.assertEqual(payload["algo_version"], server.ANALYSIS_VERSION)
             payload["algo_version"] -= 1
             payload["status"] = "stuck"
+            payload["message"] = "没有候选可再缩小；可开启「反证」(--allow-chains) 尝试高级试探"
+            payload["steps"][0].update(
+                technique="forcing_chain",
+                detail="反证结论。\n注意：这一步是反证，不是直接推理；如只想看纯逻辑链，请关闭「反证」开关。",
+            )
             store.save_analysis(key, payload, {})
             store.frames_dir(key).mkdir()
             store.frame_path(key, -1).write_bytes(b"previous frame")
@@ -27,12 +32,17 @@ class OpenPuzzleTest(unittest.TestCase):
                 self.assertTrue(saved["cached"])
                 self.assertEqual(saved["cache_version"]["saved"], payload["algo_version"])
                 self.assertEqual(saved["cache_version"]["current"], server.ANALYSIS_VERSION)
+                self.assertEqual(saved["message"], "没有候选可再缩小")
+                self.assertEqual(saved["steps"][0]["detail"], "反证结论。")
                 analyze.assert_not_called()
                 with self.assertRaisesRegex(RuntimeError, "stop refresh"):
                     server._stored_analysis(fixture, {"llm": False}, force_steps=True)
             self.assertEqual(store.load_analysis(key)["algo_version"], payload["algo_version"])
             self.assertEqual(store.frame_path(key, -1).read_bytes(), b"previous frame")
-            _, updated = server._stored_analysis(fixture, {"llm": False}, force_steps=True)
+            with patch.object(server, "analyze", wraps=server.analyze) as analyze:
+                _, updated = server._stored_analysis(fixture, {"llm": False, "chains": False},
+                                                     force_steps=True)
+                self.assertTrue(analyze.call_args.kwargs["allow_chains"])
             self.assertEqual(updated["algo_version"], server.ANALYSIS_VERSION)
             self.assertNotIn("cache_version", updated)
 

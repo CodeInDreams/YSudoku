@@ -914,10 +914,9 @@ class Solver:
                                 pass
                     continue
                 tried = sorted({s.technique for s in self.steps})
-                hint = "" if self.allow_chains else "；可开启「反证」(--allow-chains) 尝试高级试探"
                 return SolveResult(
                     "stuck", self.steps, self.state.vals,
-                    f"已对全部约束做固定点检查，没有候选可再缩小{hint}",
+                    "已对全部约束做固定点检查，没有候选可再缩小",
                 )
             self.steps.append(step)
             if self.on_step is not None:

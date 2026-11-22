@@ -36,7 +36,6 @@ python3 -m ysudoku --web
 
 ```bash
 python3 -m ysudoku 7v57yvn5vf
-python3 -m ysudoku --no-chains 7v57yvn5vf          # 关闭反证（默认开启，步骤标注 T4）
 python3 -m ysudoku --audit --json https://sudokupad.app/eynwusqy5l > out.json
 ```
 
@@ -199,7 +198,7 @@ python3 -m ysudoku --no-cache <sudokupad-url>     # 跳过缓存
 T3 X-Wing / XY-Wing / W-Wing / **染色法**（单数字强链、A/B 双色、同色互见与双色夹击）
 / **3D Medusa**（格+数字候选、强弱链、同色冲突/双色夹击/同格双色）
 / **X-Chain**（单数字强弱链交替，两端夹击）/ **ALS-XZ**（两个几乎锁定集、受限共同候选）
-→ T4 反证（网页默认开启且不显示开关；CLI 用 `--no-chains` 关闭）。
+→ 其他技巧卡住时，尝试 T4 反证。
 
 步骤选择是有优先级的：先试与上一步焦点格相关的约束，再试唯一/隐性唯一，再试 T2 的数组/区块，
 只有廉价触发器命中（强链、双值格、X-Wing 行列形态）才进入 T3，最后才是 T4；命中即停，不是每步

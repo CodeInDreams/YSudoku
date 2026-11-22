@@ -812,7 +812,7 @@ def _explain_forcing_chain(events, data, n):
     cell, value = data["cell"], data["value"]
     trace = data.get("trace") or []
     detail = (
-        f"反证（高级技巧，不属于纯直接推理）：假设 {cell_name(cell, n)} = {value}。\n"
+        f"反证：假设 {cell_name(cell, n)} = {value}。\n"
         f"沿着已确定的约束传播，得到以下连锁反应：\n"
     )
     if trace:
@@ -823,8 +823,7 @@ def _explain_forcing_chain(events, data, n):
             else:
                 parts.append(f"{cell_name(item['cell'], n)}≠{item['value']}")
         detail += " → ".join(parts) + "\n"
-    detail += f"传播最终出现矛盾（某格候选被清空），所以假设不成立：{cell_name(cell, n)} ≠ {value}。\n"
-    detail += "注意：这一步是反证，不是直接推理；如只想看纯逻辑链，请关闭「反证」开关。"
+    detail += f"传播最终出现矛盾（某格候选被清空），所以假设不成立：{cell_name(cell, n)} ≠ {value}。"
     visual = _basic_visual(events, n)
     visual["focus"] = [cell]
     return detail, visual

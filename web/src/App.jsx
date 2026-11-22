@@ -522,7 +522,7 @@ export default function App() {
         const data = await postJson("/api/solve", {
           url: analysis.source_url || target,
           demo: !!analysis.demo,
-          llm, audit, chains: true, lang,
+          llm, audit, lang,
         });
         if (cancelled) return;
         const next = data.steps || [];
@@ -954,17 +954,17 @@ export default function App() {
 
   function refreshCachedVersion() {
     if (!analysis) return;
-    streamSolve({ url: target || analysis.source_url, llm, audit, chains: true,
+    streamSolve({ url: target || analysis.source_url, llm, audit,
                   demo: !!analysis.demo, rule_prompt: rulePrompt, lang, refresh_steps: true },
                 target, analysis.puzzle.title, analysis);
   }
 
   async function submit(payload) {
-    await streamSolve({ url: payload.url, llm, audit, chains: true, demo: false, rule_prompt: rulePrompt, lang }, payload.url);
+    await streamSolve({ url: payload.url, llm, audit, demo: false, rule_prompt: rulePrompt, lang }, payload.url);
   }
 
   async function demo() {
-    await streamSolve({ demo: true, llm, audit, chains: true, rule_prompt: rulePrompt, lang }, "");
+    await streamSolve({ demo: true, llm, audit, rule_prompt: rulePrompt, lang }, "");
   }
 
   async function refreshRules() {
@@ -1053,8 +1053,8 @@ export default function App() {
     setUrl(targetUrl);
     await streamSolve(
       entry.demo
-        ? { demo: true, llm, audit, chains: true }
-        : { url: entry.target, llm, audit, chains: true, demo: false, lang },
+        ? { demo: true, llm, audit }
+        : { url: entry.target, llm, audit, demo: false, lang },
       targetUrl, entry.title,
     );
   }
@@ -1635,7 +1635,7 @@ export default function App() {
                       <button key={option.id} type="button"
                         onClick={() => {
                           setConflictChoice(option.id);
-                          streamSolve({ url: target, llm: option.id === "llm", audit, chains: true, demo: false, rule_prompt: rulePrompt, rule_mode: option.id, lang }, target);
+                          streamSolve({ url: target, llm: option.id === "llm", audit, demo: false, rule_prompt: rulePrompt, rule_mode: option.id, lang }, target);
                         }}
                         className={`rounded-lg border px-3 py-2.5 text-left text-sm transition-colors hover:border-primary ${index === 0 ? "border-primary bg-primary/5" : "bg-background"}`}>
                         <span className="font-medium">{option.label}</span>
