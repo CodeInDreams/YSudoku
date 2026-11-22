@@ -24,12 +24,6 @@ import { detectLang, translate } from "./i18n";
 import logoLight from "./assets/logo-light.svg";
 import logoDark from "./assets/logo-dark.svg";
 
-const TECH_EN = {
-  cage: "Killer cage", hidden_single: "Hidden single", naked_single: "Naked single",
-  class_cover: "2×2 class cover", whisper: "Whisper", renban: "Renban", arrow: "Arrow",
-  thermo: "Thermometer", sandwich: "Sandwich", xsum: "X-Sums", skyscraper: "Skyscraper",
-  consecutive: "Consecutive", parity: "Parity", region: "Region",
-};
 const RULE_EN = {
   killer: "Killer cages", cage: "Killer cages", whisper: "Whispers", renban: "Renbans",
   arrow: "Arrows", thermo: "Thermometers", sandwich: "Sandwiches", xsum: "X-Sums",
@@ -46,6 +40,15 @@ function digitsOf(mask, n) {
 
 const PERSIST_KEY = "ysudoku.ui.v1";
 const DEFAULT_SETTINGS = { max_rules: 100, max_steps: 100, max_frames: 10, max_mb: 500 };
+
+function cacheDifference(data, lang) {
+  if (!data) return null;
+  const savedLang = data.content_lang || "zh";
+  const currentVersion = data.current_algo_version ?? data.cache_version?.current ?? data.algo_version;
+  const version = currentVersion != null && data.algo_version !== currentVersion;
+  const language = savedLang !== lang;
+  return version || language ? { version, language, savedLang, currentVersion } : null;
+}
 
 function readPersisted() {
   try {
@@ -342,7 +345,7 @@ function Digits({ digits, tone = "neutral" }) {
   );
 }
 
-function StepNarrative({ step, lang, n, t }) {
+function StepNarrative({ step, n, t }) {
   const lines = String(step.detail || "").split("\n");
   const lead = [];
   const combos = [];
@@ -350,8 +353,8 @@ function StepNarrative({ step, lang, n, t }) {
   for (const raw of lines) {
     const line = raw.trim();
     if (!line) continue;
-    const countMatch = line.match(/共\s*(\d+)\s*组/);
-    if (countMatch) { comboCount = Number(countMatch[1]); continue; }
+    const countMatch = line.match(/共\s*(\d+)\s*组|^(\d+) viable combinations?:$/);
+    if (countMatch) { comboCount = Number(countMatch[1] || countMatch[2]); continue; }
     if (/^\{.*\}$/.test(line)) {
       const digits = line.replace(/[{}]/g, "").split(/[、,，\s]+/).filter(Boolean);
       if (digits.length) combos.push(digits);
@@ -372,17 +375,10 @@ function StepNarrative({ step, lang, n, t }) {
     }
   }
   const cellName = (cell) => `R${Math.floor(cell / n) + 1}C${(cell % n) + 1}`;
-  const reason = step.events?.[0]?.reason?.data || {};
-  let classLead = "";
-  if (lang === "en" && step.technique === "class_cover" && reason.forced_cell != null && reason.forced_class) {
-    const others = (reason.cells || []).filter((cell) => cell !== reason.forced_cell);
-    classLead = `Every 2×2 region must contain one digit from each of ${(reason.classes || []).map((c) => `{${c.join(",")}}`).join(", ")}. The other cells (${others.map(cellName).join(", ")}) cannot be ${reason.forced_class.join(",")}, so ${cellName(reason.forced_cell)} must be ${reason.forced_class.join(",")}; the other digits are eliminated.`;
-  }
   const candidates = step.candidates || [];
   return (
     <div className="space-y-3">
-      {lang === "zh" && lead.length > 0 && <p className="whitespace-pre-wrap text-[13px] leading-7 text-foreground/90">{lead.join("\n")}</p>}
-      {classLead && <p className="text-[13px] leading-7 text-foreground/90">{classLead}</p>}
+      {lead.length > 0 && <p className="whitespace-pre-wrap text-[13px] leading-7 text-foreground/90">{lead.join("\n")}</p>}
       {combos.length > 0 && (
         <div className="rounded-lg border bg-muted/30 p-3">
           <SectionLabel extra={<Badge variant="outline">{comboCount === 1 || combos.length === 1 ? t("step.combinationOne") : t("step.combinationCount", { n: comboCount || combos.length })}</Badge>}>{t("step.combinations")}</SectionLabel>
@@ -514,37 +510,6 @@ export default function App() {
   }));
 
   useEffect(() => {
-    if (!analysis || (analysis.lang || "zh") === lang) return undefined;
-    let cancelled = false;
-    let timer = null;
-    (async () => {
-      try {
-        const data = await postJson("/api/solve", {
-          url: analysis.source_url || target,
-          demo: !!analysis.demo,
-          llm, audit, lang,
-        });
-        if (cancelled) return;
-        const next = data.steps || [];
-        let count = Math.min(5, next.length);
-        const apply = () => {
-          if (cancelled) return;
-          setAnalysis((prev) => prev ? {
-            ...prev, steps: next.slice(0, count), rules: data.rules || prev.rules,
-            status: data.status || prev.status, message: data.message || "",
-            conflicts: data.conflicts || [], lang,
-          } : prev);
-          count = Math.min(next.length, count + 5);
-          if (count >= next.length && timer) { clearInterval(timer); timer = null; }
-        };
-        apply();
-        if (next.length > 5) timer = setInterval(apply, 40);
-      } catch { /* keep current text */ }
-    })();
-    return () => { cancelled = true; if (timer) clearInterval(timer); };
-  }, [lang, analysis?.storage?.key]);
-
-  useEffect(() => {
     try {
       localStorage.setItem(PERSIST_KEY, JSON.stringify({
         speed, settings, view, inspectorTab, rulePrompt, conflictChoice,
@@ -587,31 +552,20 @@ export default function App() {
   const frameTimer = useRef(null);
   const streamToken = useRef(0);
   const buildingKey = useRef(null);
+  const activeLang = useRef(lang);
 
   const t = (key, vars) => translate(lang, key, vars);
+  const contentLang = analysis?.content_lang || "zh";
+  const contentText = (key, vars) => translate(contentLang, key, vars);
+  const cacheMismatch = cacheDifference(analysis, lang);
+  const choiceMismatch = cacheDifference(cacheChoice?.payload, lang);
   const puzzleUnit = (count) => (lang === "zh" ? "个谜题" : count === 1 ? "puzzle" : "puzzles");
   const steps = analysis?.steps || [];
   const n = analysis?.puzzle?.size || 9;
   const current = idx >= 0 ? steps[idx] : null;
   const statusLabel = (status) => t(`status.${status || "none"}`) || status;
-  const stepTitle = (step) => (lang === "en" ? TECH_EN[step.technique] || step.title : step.title);
   const ruleLabel = (rule) => (lang === "en" ? RULE_EN[rule.kind] || rule.label || rule.kind : rule.label || rule.kind);
   const cellName = (cell) => `R${Math.floor(cell / n) + 1}C${(cell % n) + 1}`;
-  const englishSummary = (step) => {
-    const places = [];
-    const elims = new Map();
-    for (const ev of step.events || []) {
-      if (ev.kind === "place") places.push(`${ev.value} in ${cellName(ev.cell)}`);
-      else if (ev.kind === "elim") {
-        if (!elims.has(ev.cell)) elims.set(ev.cell, []);
-        elims.get(ev.cell).push(ev.value);
-      }
-    }
-    const parts = [];
-    if (places.length) parts.push(`Place ${places.join(", ")}.`);
-    for (const [cell, values] of elims) parts.push(`Eliminate ${values.join(", ")} from ${cellName(cell)}.`);
-    return parts.length ? parts.join(" ") : step.detail;
-  };
 
   useEffect(() => {
     document.documentElement.removeAttribute("data-accent");
@@ -798,7 +752,9 @@ export default function App() {
       const actions = buildStepActions(nextAnalysis);
       let hash = 2166136261;
       const crop = !(nextAnalysis.puzzle?.outside ?? !!nextAnalysis.puzzle?.clues?.length);
-      const text = "frame-v33:" + (crop ? "crop:" : "full:") + JSON.stringify(actions);
+      const frameLang = nextAnalysis.content_lang || "zh";
+      const text = "frame-v33:" + (frameLang === "zh" ? "" : frameLang + ":")
+        + (crop ? "crop:" : "full:") + JSON.stringify(actions);
       for (let i = 0; i < text.length; i++) { hash ^= text.charCodeAt(i); hash = Math.imul(hash, 16777619); }
       const data = await postJson("/api/live/build", {
         url: nextAnalysis.source_url || "",
@@ -806,7 +762,9 @@ export default function App() {
         steps: actions,
         key: nextAnalysis.storage?.key || "",
         steps_hash: (hash >>> 0).toString(16),
-        keep_frames_for: nextAnalysis.cache_version?.steps_hash,
+        keep_frames_for: cacheDifference(nextAnalysis, activeLang.current)
+          ? nextAnalysis.storage?.steps_hash || nextAnalysis.cache_version?.steps_hash
+          : undefined,
         crop,
       }, AbortSignal.timeout(15000));
       if (token !== streamToken.current) return;
@@ -918,8 +876,9 @@ export default function App() {
         if (job.status === "done") {
           setTarget(targetUrl);
           setUrl(targetUrl);
-          if (job.payload?.cache_version) {
+          if (cacheDifference(job.payload, activeLang.current)) {
             setCacheChoice({ payload: job.payload, body, targetUrl });
+            setPhase("opening");
           } else if (job.payload?.cached) {
             applyAnalysis(job.payload);
           } else {
@@ -941,22 +900,38 @@ export default function App() {
     }
   }
 
-  function chooseCachedVersion(refresh) {
+  function chooseCachedAnalysis(refresh) {
     if (!cacheChoice) return;
-    const { payload, body, targetUrl } = cacheChoice;
+    const { payload, body, targetUrl, alreadyOpen } = cacheChoice;
     setCacheChoice(null);
     if (refresh) {
-      streamSolve({ ...body, refresh_steps: true }, targetUrl, payload.puzzle.title, payload);
-    } else {
+      refreshCachedAnalysis(payload, targetUrl, body);
+    } else if (!alreadyOpen) {
       applyAnalysis(payload);
     }
   }
 
-  function refreshCachedVersion() {
-    if (!analysis) return;
-    streamSolve({ url: target || analysis.source_url, llm, audit,
-                  demo: !!analysis.demo, rule_prompt: rulePrompt, lang, refresh_steps: true },
-                target, analysis.puzzle.title, analysis);
+  function refreshCachedAnalysis(payload, targetUrl = target, body = {}) {
+    if (!payload) return;
+    streamSolve({ url: targetUrl || payload.source_url, llm, audit,
+                  demo: !!payload.demo, rule_prompt: rulePrompt, ...body,
+                  lang: activeLang.current, refresh_steps: true },
+                targetUrl, payload.puzzle.title, payload);
+  }
+
+  function changeLanguage(next) {
+    if (next === activeLang.current) return;
+    activeLang.current = next;
+    setLang(next);
+    if (cacheDifference(analysis, next)) {
+      setPlaying(false);
+      setCacheChoice({ payload: analysis, targetUrl: target, alreadyOpen: true });
+    } else if (cacheDifference(finalPayload.current, next)) {
+      const payload = finalPayload.current;
+      finalPayload.current = null;
+      setCacheChoice({ payload, targetUrl: target });
+      setPhase("opening");
+    }
   }
 
   async function submit(payload) {
@@ -971,8 +946,9 @@ export default function App() {
     if (!analysis) return;
     setBusy(true); setPlaying(false);
     try {
-      const data = await postJson("/api/store/refresh_rules", { target: target || "", demo: !!analysis.demo, notes });
-      applyAnalysis(data, true);
+      const data = await postJson("/api/store/refresh_rules", { target: target || "", demo: !!analysis.demo, notes, lang: activeLang.current });
+      if (cacheDifference(data, activeLang.current)) setCacheChoice({ payload: data, targetUrl: target });
+      else applyAnalysis(data, true);
       setInspectorTab("explain");
     } catch (err) { setError(`${t("error.refresh")}: ${err.message}`); }
     finally { setBusy(false); }
@@ -1053,7 +1029,7 @@ export default function App() {
     setUrl(targetUrl);
     await streamSolve(
       entry.demo
-        ? { demo: true, llm, audit }
+        ? { demo: true, llm, audit, lang }
         : { url: entry.target, llm, audit, demo: false, lang },
       targetUrl, entry.title,
     );
@@ -1240,7 +1216,7 @@ export default function App() {
                 const cols = cells.map((c) => c % n);
                 const minR = Math.min(...rows), maxR = Math.max(...rows);
                 const minC = Math.min(...cols), maxC = Math.max(...cols);
-                const label = a.label || "假设";
+                const label = a.label || contentText("step.assumption");
                 const width = Math.min(n - 0.1, Math.max(1.1, label.length * 0.098 + 0.3));
                 const x = Math.min(n - width - 0.05, Math.max(0.05, (minC + maxC + 1) / 2 - width / 2));
                 const above = minR > 0.7;
@@ -1272,7 +1248,7 @@ export default function App() {
               ))}
             </svg>
           )}
-          <span className="pointer-events-none absolute right-0.5 top-0.5 rounded-sm bg-white/35 px-1 py-px text-[8px] font-normal text-slate-400/75 dark:bg-black/20 dark:text-neutral-600">{t("board.liveFrame", { i: idx + 1, n: steps.length })}</span>
+          <span className="pointer-events-none absolute right-0.5 top-0.5 rounded-sm bg-white/35 px-1 py-px text-[8px] font-normal text-slate-400/75 dark:bg-black/20 dark:text-neutral-600">{contentText("board.liveFrame", { i: idx + 1, n: steps.length })}</span>
         </div>
       </CardContent>
       <div className="flex items-center gap-2 border-t px-4 py-3">
@@ -1314,19 +1290,19 @@ export default function App() {
           <TabsContent value="explain" className="mt-0">
             {current ? (
               <div className="space-y-3">
-                <div className="flex items-center gap-2"><h2 className="text-sm font-semibold">{stepTitle(current)}</h2><Badge variant="outline">{t("step.tier", { tier: current.tier })}</Badge></div>
+                <div className="flex items-center gap-2"><h2 className="text-sm font-semibold">{current.title}</h2><Badge variant="outline">{t("step.tier", { tier: current.tier })}</Badge></div>
                 <p className="text-[11px] text-muted-foreground">{t("step.of", { i: idx + 1, n: steps.length })}</p>
-                <StepNarrative step={current} lang={lang} n={n} t={t} />
+                <StepNarrative step={current} n={n} t={t} />
                 {current.visual?.region_progress && (
                   <p className="text-xs text-muted-foreground">
-                    {lang === "zh"
+                    {contentLang === "zh"
                       ? `区域完成 ${current.visual.region_progress.complete}/${current.visual.region_progress.total} · 单色格 ${current.visual.region_progress.coloured}/${n * n}`
                       : `${current.visual.region_progress.complete}/${current.visual.region_progress.total} regions complete · ${current.visual.region_progress.coloured}/${n * n} single-colour cells`}
                   </p>
                 )}
                 {current.visual?.region_pairs?.length > 0 && (
                   <details className="text-xs">
-                    <summary className="cursor-pointer">{lang === "zh" ? "区域颜色关系" : "Region colour relationships"}</summary>
+                    <summary className="cursor-pointer">{contentLang === "zh" ? "区域颜色关系" : "Region colour relationships"}</summary>
                     <table className="mt-2 w-full"><tbody>
                       {current.visual.colours.filter(group => group.region).map(group => {
                         const related = current.visual.region_pairs.filter(p => p.a === group.colour || p.b === group.colour);
@@ -1334,8 +1310,8 @@ export default function App() {
                         return <tr key={group.colour} className="border-b">
                           <th className="p-1 text-left"><span style={{ backgroundColor: group.hex }} className="mr-1 inline-block h-3 w-3 rounded-sm" />
                             {cellName(group.cells[0])} (#{group.colour})</th>
-                          <td>{lang === "zh" ? "可能同区" : "May match"} {list(true)}</td>
-                          <td>{lang === "zh" ? "确定异区" : "Distinct"} {list(false)}</td>
+                          <td>{contentLang === "zh" ? "可能同区" : "May match"} {list(true)}</td>
+                          <td>{contentLang === "zh" ? "确定异区" : "Distinct"} {list(false)}</td>
                         </tr>;
                       })}
                     </tbody></table>
@@ -1412,7 +1388,7 @@ export default function App() {
           )}
           {displaySteps.map((step, i) => (
             <button key={i} disabled={!analysis || deleted} onClick={() => { setPlaying(false); setIdx(i); }} className={`flex w-full items-center gap-3 rounded-md px-2.5 py-1.5 text-left text-xs ${i === idx ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:bg-muted/60"}`}>
-              <span className="w-6 text-right font-mono text-[10.5px]">{i + 1}</span><span className="truncate">{stepTitle(step)}</span>
+              <span className="w-6 text-right font-mono text-[10.5px]">{i + 1}</span><span className="truncate">{step.title}</span>
               <Badge variant="outline" className="ml-auto">{t("step.tier", { tier: step.tier })}</Badge>
             </button>
           ))}
@@ -1547,8 +1523,8 @@ export default function App() {
                         <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs">{lang === "zh" ? "中文" : "English"}<ChevronDown className="h-3 w-3 opacity-60" /></Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-32">
-                        <DropdownMenuItem onClick={() => setLang("zh")} className={lang === "zh" ? "bg-accent font-medium" : ""}><span className="flex-1">中文</span>{lang === "zh" && <Check className="h-4 w-4" />}</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setLang("en")} className={lang === "en" ? "bg-accent font-medium" : ""}><span className="flex-1">English</span>{lang === "en" && <Check className="h-4 w-4" />}</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => changeLanguage("zh")} className={lang === "zh" ? "bg-accent font-medium" : ""}><span className="flex-1">中文</span>{lang === "zh" && <Check className="h-4 w-4" />}</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => changeLanguage("en")} className={lang === "en" ? "bg-accent font-medium" : ""}><span className="flex-1">English</span>{lang === "en" && <Check className="h-4 w-4" />}</DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
@@ -1576,20 +1552,30 @@ export default function App() {
       </header>
 
       <main className="mx-auto max-w-[1280px] px-4 py-6 lg:px-6 lg:py-8">
-        <Dialog open={!!cacheChoice} onOpenChange={(open) => { if (!open) chooseCachedVersion(false); }}>
-          {cacheChoice && (
+        <Dialog open={!!choiceMismatch} onOpenChange={(open) => { if (!open) chooseCachedAnalysis(false); }}>
+          {cacheChoice && choiceMismatch && (
             <DialogContent className="w-[calc(100%-2rem)] rounded-xl">
-              <DialogTitle className="pr-6 text-base font-semibold">{t("cache.versionTitle")}</DialogTitle>
-              <DialogDescription className="text-sm text-muted-foreground">{t("cache.versionDescription")}</DialogDescription>
+              <DialogTitle className="pr-6 text-base font-semibold">{t(choiceMismatch.version
+                ? (choiceMismatch.language ? "cache.bothTitle" : "cache.versionTitle") : "cache.languageTitle")}</DialogTitle>
+              <DialogDescription className="text-sm text-muted-foreground">{t(choiceMismatch.language
+                ? (choiceMismatch.version ? "cache.bothDescription" : "cache.languageDescription") : "cache.versionDescription")}</DialogDescription>
               <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-2 rounded-lg border bg-muted/30 p-3 text-sm">
-                <dt>{t("cache.savedVersion")}</dt>
-                <dd className="font-mono">{cacheChoice.payload.cache_version.saved ?? t("cache.unknownVersion")}</dd>
-                <dt>{t("cache.currentVersion")}</dt>
-                <dd className="font-mono">{cacheChoice.payload.cache_version.current}</dd>
+                {choiceMismatch.version && <>
+                  <dt>{t("cache.savedVersion")}</dt>
+                  <dd className="font-mono">{cacheChoice.payload.algo_version ?? t("cache.unknownVersion")}</dd>
+                  <dt>{t("cache.currentVersion")}</dt>
+                  <dd className="font-mono">{choiceMismatch.currentVersion}</dd>
+                </>}
+                {choiceMismatch.language && <>
+                  <dt>{t("cache.savedLanguage")}</dt>
+                  <dd>{t(`language.${choiceMismatch.savedLang}`)}</dd>
+                  <dt>{t("cache.currentLanguage")}</dt>
+                  <dd>{t(`language.${lang}`)}</dd>
+                </>}
               </dl>
               <div className="flex flex-wrap justify-end gap-2">
-                <Button variant="outline" onClick={() => chooseCachedVersion(false)}>{t("cache.keep")}</Button>
-                <Button onClick={() => chooseCachedVersion(true)}>{t("cache.refresh")}</Button>
+                <Button variant="outline" onClick={() => chooseCachedAnalysis(false)}>{t(choiceMismatch.language ? "cache.keepContent" : "cache.keep")}</Button>
+                <Button onClick={() => chooseCachedAnalysis(true)}>{t(choiceMismatch.language ? "cache.regenerate" : "cache.refresh")}</Button>
               </div>
             </DialogContent>
           )}
@@ -1615,15 +1601,18 @@ export default function App() {
               badges={analysis ? <>
                 <Badge variant="outline">{n}×{n}</Badge>
                 <Badge variant={isSolved ? "success" : "outline"}>{statusLabel(analysis.status)}</Badge>
-                {analysis.cache_version && (
+                {cacheMismatch && (
                   <>
-                    <Badge variant="outline">{t("cache.usingVersion", { version: analysis.cache_version.saved ?? t("cache.unknownVersion") })}</Badge>
-                    <Button size="sm" variant="outline" onClick={refreshCachedVersion} disabled={busy}>{t("cache.refresh")}</Button>
+                    {cacheMismatch.version && <Badge variant="outline">{t("cache.usingVersion", { version: analysis.algo_version ?? t("cache.unknownVersion") })}</Badge>}
+                    {cacheMismatch.language && <Badge variant="outline">{t("cache.usingLanguage", { language: t(`language.${cacheMismatch.savedLang}`) })}</Badge>}
+                    <Button size="sm" variant="outline" onClick={() => refreshCachedAnalysis(analysis)} disabled={busy}>
+                      {t(cacheMismatch.language ? "cache.regenerate" : "cache.refresh")}
+                    </Button>
                   </>
                 )}
               </> : null}
             />
-            {analysis?.conflicts?.length > 0 && !analysis.cache_version && !conflictChoice && (
+            {analysis?.conflicts?.length > 0 && !cacheMismatch && !conflictChoice && (
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
                 <div className="w-full max-w-lg rounded-xl border bg-card p-5 shadow-xl">
                   <h2 className="text-base font-semibold">规则识别冲突</h2>

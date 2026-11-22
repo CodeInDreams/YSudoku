@@ -12,6 +12,32 @@ from ysudoku import server, store
 
 
 class OpenPuzzleTest(unittest.TestCase):
+    def test_language_mismatch_requires_explicit_regeneration(self):
+        fixture = str(Path(__file__).resolve().parents[1] / "fixtures/demo-killer.json")
+        with TemporaryDirectory() as directory, patch.dict(os.environ, YSUDOKU_STORE=directory):
+            key, zh = server._stored_analysis(fixture, {"llm": False})
+            self.assertEqual(zh["content_lang"], "zh")
+            original_hash = store.steps_hash(key)
+            # Older versions recorded the requested language without translating the proof.
+            legacy = store.load_analysis(key)
+            del legacy["content_lang"]
+            legacy["lang"] = "en"
+            store.save_analysis(key, legacy, {})
+            with patch.object(server, "analyze") as analyze:
+                _, saved = server._stored_analysis(fixture, {"lang": "en"})
+                analyze.assert_not_called()
+            self.assertTrue(saved["cached"])
+            self.assertEqual(saved["content_lang"], "zh")
+            self.assertEqual(saved["steps"], zh["steps"])
+            self.assertEqual(store.steps_hash(key), original_hash)
+            self.assertNotIn("cache_version", saved)
+            _, en = server._stored_analysis(fixture, {"llm": False, "lang": "en"}, force_steps=True)
+            self.assertEqual(en["algo_version"], zh["algo_version"])
+            self.assertEqual(en["content_lang"], "en")
+            self.assertNotEqual(en["steps"][0]["detail"], zh["steps"][0]["detail"])
+            self.assertEqual(en["steps"][0]["events"], zh["steps"][0]["events"])
+            self.assertNotEqual(store.steps_hash(key), original_hash)
+
     def test_old_solver_cache_survives_open_and_failed_refresh(self):
         fixture = str(Path(__file__).resolve().parents[1] / "fixtures/demo-killer.json")
         with TemporaryDirectory() as directory, patch.dict(os.environ, YSUDOKU_STORE=directory):

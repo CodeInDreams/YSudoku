@@ -88,9 +88,10 @@ class Step:
     audit: str = "unchecked"
     branch: bool = False
     revert: bool = False
+    narration: dict = field(default_factory=dict, repr=False)
 
-    def to_dict(self, n: int) -> dict:
-        return {
+    def to_dict(self, n: int, lang: str = "zh") -> dict:
+        data = {
             "index": self.index,
             "technique": self.technique,
             "tier": self.tier,
@@ -104,6 +105,10 @@ class Step:
             "revert": self.revert,
             "events": [e.to_dict() for e in self.events],
         }
+        if lang == "en":
+            from .step_locale import english_step
+            return english_step(data, n, self.narration)
+        return data
 
 
 def _names(cells: list[int], n: int) -> str:

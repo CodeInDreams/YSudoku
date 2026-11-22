@@ -31,6 +31,14 @@ class NarrationTest(unittest.TestCase):
         self.assertEqual(analysis.audit.get("bad"), 0)
         self.assertIn("一致", analysis.solution_check)
         self.assertGreater(len(analysis.result.steps), 0)
+        english = analysis.to_json(lang="en")
+        self.assertEqual(english["content_lang"], "en")
+        branches = [step for step in english["steps"] if step["title"].startswith("Refutation evidence")]
+        self.assertTrue(branches)
+        self.assertIn("Assume R", branches[0]["visual"]["assumption"]["label"])
+        self.assertIn("Assume R", branches[0]["detail"])
+        for step in english["steps"]:
+            self.assertNotRegex(step["title"] + step["detail"], r"[\u3400-\u9fff]")
 
 
 if __name__ == "__main__":

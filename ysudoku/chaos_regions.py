@@ -420,7 +420,8 @@ def region_steps(solver, rules, steps):
                               f"则每个区域至多占圈内 {len(cells) - count + 1} 格。",
                               *reasons, f"排除 {count} 区，此圈只剩 {remaining} 区。"]
                     step = Step(len(steps), "constraint_simplify", 2, f"区域数反证：排除 {count} 区",
-                                "\n".join(detail), [], visual={"focus": cells}, pre_dom=pre_dom, pre_vals=pre_vals)
+                                "\n".join(detail), [], visual={"focus": cells}, pre_dom=pre_dom, pre_vals=pre_vals,
+                                narration={"cells": cells, "excluded_count": count, "remaining": clue.counts})
                 else:
                     shape = shape_deduction(fragments, clues)
                     if not shape:

@@ -44,11 +44,13 @@ class Analysis:
     conflicts: list = field(default_factory=list)
     lang: str = "zh"
 
-    def to_json(self) -> dict:
+    def to_json(self, *, lang: str | None = None) -> dict:
         n = self.puzzle.size
+        content_lang = "en" if (lang or self.lang) == "en" else "zh"
         return {
             "algo_version": ANALYSIS_VERSION,
-            "lang": self.lang,
+            "lang": content_lang,
+            "content_lang": content_lang,
             "puzzle": {
                 "id": self.puzzle.puzzle_id,
                 "title": self.puzzle.title,
@@ -86,7 +88,7 @@ class Analysis:
                 f"/api/rulesheet/{Path(self.puzzle.rule_sheet).name}"
                 if self.puzzle.rule_sheet else ""
             ),
-            "steps": [step.to_dict(n) for step in self.result.steps],
+            "steps": [step.to_dict(n, content_lang) for step in self.result.steps],
             "status": self.status,
             "message": self.message,
             "final": self.result.values,
@@ -142,6 +144,7 @@ def _chaos_pattern_steps(puzzle, rules, state) -> list:
             visual={"focus": cells, "groups": [{"cells": cells, "label": f"圈{index + 1}"}]},
             pre_dom=list(state.dom), pre_vals=list(state.vals),
             audit="unknown",
+            narration={"cells": cells, "counts": con.counts},
         ))
         index += 1
     return steps

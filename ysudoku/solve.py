@@ -354,6 +354,7 @@ class Solver:
         step = Step(
             index=len(self.steps), technique="contradiction", tier=4,
             title=prefix, detail=detail, events=[], visual=visual,
+            narration={"phase": phase, "cell": cell, "value": value},
         )
         step.pre_dom, step.pre_vals = pre_dom, pre_vals
         step.candidates = []
@@ -621,6 +622,7 @@ class Solver:
                     "links": [], "chips": [],
                     "assumption": {"cells": [cell],
                                    "label": f"反证开始：假设 {name}={value}"}},
+            narration={"phase": "start", "cell": cell, "value": value},
             branch=True)
         intro.pre_dom, intro.pre_vals = pre_dom, pre_vals
         intro.candidates = [{"cell": cell, "digits": [value]}]
@@ -635,7 +637,8 @@ class Solver:
             if assumption and assumption != (cell, value):
                 branch_cell, branch_value = assumption
                 lines.append(
-                    (f"{indent}再假设 {cell_name(branch_cell, self.state.n)} = {branch_value}：", None)
+                    (f"{indent}再假设 {cell_name(branch_cell, self.state.n)} = {branch_value}：", None,
+                     {"kind": "assume", "cell": branch_cell, "value": branch_value})
                 )
             support_dom = list(node.get("pre_dom") or self.state.dom)
             reason_labels = {
@@ -675,7 +678,8 @@ class Solver:
                            f"{cell_name(other, self.state.n)} 已填 {event.value}）")
                 if event.reason.kind != "assumption":
                     lines.append(
-                        (f"{indent}→ {why or effect + '（' + reason_labels.get(event.reason.kind, event.reason.kind) + '）'}", None)
+                        (f"{indent}→ {why or effect + '（' + reason_labels.get(event.reason.kind, event.reason.kind) + '）'}", None,
+                         {"kind": "event", "event": event.to_dict()})
                     )
                 bit = 1 << (event.value - 1)
                 if event.kind == "place":
@@ -683,29 +687,33 @@ class Solver:
                 else:
                     support_dom[event.cell] &= ~bit
             if node.get("cause"):
-                lines.append((f"{indent}出现矛盾：{node['cause']}。", node.get("visual_conflict")))
+                conflict = node.get("visual_conflict")
+                lines.append((f"{indent}出现矛盾：{node['cause']}。", conflict,
+                              {"kind": "cause", "text": node["cause"], "conflict": conflict}))
             children = node.get("children", ())
             branch_cell = node.get("branch_cell")
             if children and branch_cell is not None:
                 options = "、".join(str(child["value"]) for child in children)
                 lines.append(
                     (f"{indent}继续分支：{cell_name(branch_cell, self.state.n)} "
-                     f"只能取 {options}。", None)
+                     f"只能取 {options}。", None,
+                     {"kind": "branch", "cell": branch_cell, "values": [child["value"] for child in children]})
                 )
                 for child in children:
                     lines.extend(proof_lines(child["proof"], indent + "  "))
-                lines.append((f"{indent}该格所有候选都导致矛盾。", None))
+                lines.append((f"{indent}该格所有候选都导致矛盾。", None, {"kind": "branch_end"}))
             return lines
 
         proof_text = proof_lines(proof)
         if not proof_text:
-            proof_text = [(f"假设 {name} = {value} 后立即矛盾：{cause}。", None)]
+            proof_text = [(f"假设 {name} = {value} 后立即矛盾：{cause}。", None,
+                           {"kind": "cause", "text": cause})]
         chunks = [proof_text[i:i + chunk_size]
                   for i in range(0, len(proof_text), chunk_size)]
         pre_dom, pre_vals = self._pre()
         for index, chunk in enumerate(chunks):
-            lines = [f"反证推理（{index + 1}/{len(chunks)}）："] + [text for text, _ in chunk]
-            conflicts = [conflict for _, conflict in chunk if conflict]
+            lines = [f"反证推理（{index + 1}/{len(chunks)}）："] + [text for text, _, _ in chunk]
+            conflicts = [conflict for _, conflict, _ in chunk if conflict]
             reasoning = Step(
                 index=len(self.steps), technique="contradiction", tier=4,
                 title=f"反证推理 {index + 1}/{len(chunks)}",
@@ -715,7 +723,9 @@ class Solver:
                         "links": [], "chips": [], "conflicts": conflicts,
                         "assumption": {"cells": [cell],
                                        "label": f"反证推理：假设 {name}={value}"}},
-                branch=True)
+                branch=True, narration={"phase": "trace", "cell": cell, "value": value,
+                                        "page": index + 1, "total": len(chunks),
+                                        "rows": [row for _, _, row in chunk]})
             reasoning.pre_dom, reasoning.pre_vals = list(pre_dom), list(pre_vals)
             reasoning.candidates = []
             self.steps.append(reasoning)
@@ -733,7 +743,8 @@ class Solver:
                                "conflicts": [proof["visual_conflict"]] if proof.get("visual_conflict") else [],
                                "assumption": {"cells": [cell],
                                               "label": f"反证推翻：假设 {name}={value}"}},
-            branch=True)
+            branch=True, narration={"phase": "conflict", "cell": cell, "value": value,
+                                    "cause": cause, "conflict": proof.get("visual_conflict")})
         refuted.pre_dom, refuted.pre_vals = pre_dom, pre_vals
         refuted.candidates = []
         self.steps.append(refuted)

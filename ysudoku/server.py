@@ -23,6 +23,10 @@ _BUILDING: dict[str, str] = {}
 _BUILDING_LOCK = threading.Lock()
 
 
+def _content_language(body):
+    return "en" if str(body.get("lang") or "").lower().startswith("en") else "zh"
+
+
 def _canonical_frame_actions(steps, analysis):
     """Use the saved proof to make boundary rendering independent of client version."""
     if not analysis or len(analysis.get("steps", ())) != len(steps):
@@ -73,7 +77,7 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
         except Exception:
             pass
     key = store.key_for(target)
-    lang = str(body.get("lang") or "zh").lower()[:2]
+    lang = _content_language(body)
     if not demo:
         meta = store._meta(key)
         if not meta.get("title"):
@@ -100,7 +104,9 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
     rules = store.load_rules(key)
     cached = None if force_rules or force_steps else store.load_analysis(key)
     old_version = bool(cached and cached.get("algo_version") != ANALYSIS_VERSION)
-    if not old_version and rules and not rules.get("includes_underlay_markers"):
+    saved_language = "en" if cached and cached.get("content_lang") == "en" else "zh"
+    different_language = bool(cached and saved_language != lang)
+    if not (old_version or different_language) and rules and not rules.get("includes_underlay_markers"):
         try:
             raw = sudokupad.load_cached(target)
         except sudokupad.LoadError:
@@ -112,7 +118,7 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
         on_title(meta["title"])
     notes = str(body["notes"] if "notes" in body else meta.get("notes", "") or "").strip()
     if cached:
-        if old_version or (rules and cached.get("lang", "zh") == lang
+        if old_version or different_language or (rules
                 and cached.get("status") != "stuck"
                 and meta.get("rules_hash") == rules.get("hash")):
             if on_preview and not on_preview_start:
@@ -130,6 +136,8 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
             if isinstance(cached.get("rules"), dict):
                 cached["rules"]["notes"] = meta.get("notes", "")
             cached["cached"] = True
+            cached["content_lang"] = saved_language
+            cached["current_algo_version"] = ANALYSIS_VERSION
             if old_version:
                 cached["cache_version"] = {
                     "saved": cached.get("algo_version"), "current": ANALYSIS_VERSION,
@@ -138,6 +146,7 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
             cached["storage"] = {
                 "key": key, "location": store.storage_info()["location"],
                 "settings": store.load_settings(),
+                "steps_hash": meta.get("steps_hash"),
             }
             if on_rules is not None and not on_preview_start:
                 try:
@@ -179,7 +188,7 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
         on_step=on_step,
         on_puzzle=on_puzzle if on_preview or on_title else None,
     )
-    payload = analysis.to_json()
+    payload = analysis.to_json(lang=lang)
     payload["notes"] = notes
     if isinstance(payload.get("rules"), dict):
         payload["rules"]["notes"] = notes
@@ -195,10 +204,11 @@ def _stored_analysis(target: str, body: dict, demo: bool = False,
     }
     if analysis.spec:
         store.save_rules(key, analysis.spec, info)
-    store.save_analysis(key, payload, info)
+    steps_hash = store.save_analysis(key, payload, info)
     payload["storage"] = {
         "key": key, "location": store.storage_info()["location"],
         "settings": store.load_settings(),
+        "steps_hash": steps_hash,
     }
     return key, payload
 
@@ -244,7 +254,7 @@ def _start_job(target: str, body: dict, demo: bool) -> str:
         else:
             step = first
             n = max(1, int(math.isqrt(len(step.pre_dom) or 1)))
-            data = step.to_dict(n)
+            data = step.to_dict(n, _content_language(body))
             with _JOBS_LOCK:
                 index = len(_JOBS[job_id]["steps"])
         data = dict(data)
@@ -508,8 +518,12 @@ class Handler(BaseHTTPRequestHandler):
                     canonical = _canonical_frame_actions(steps, analysis)
                     digest = str(body.get("steps_hash") or "")
                     if canonical is not steps:
-                        digest = store.hash_json({"renderer": 33, "url": url, "size": size,
-                                                  "crop": crop, "steps": canonical})
+                        frame_spec = {"renderer": 33, "url": url, "size": size,
+                                      "crop": crop, "steps": canonical}
+                        content_lang = (analysis or {}).get("content_lang", "zh")
+                        if content_lang != "zh":
+                            frame_spec["lang"] = content_lang
+                        digest = store.hash_json(frame_spec)
                     steps = canonical
                     if key:
                         if keep_frames_for and (keep_frames_for != proof_hash
