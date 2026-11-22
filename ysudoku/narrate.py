@@ -26,6 +26,8 @@ TITLES = {
     "sum_link": "共享格组和数",
     "ir_support": "通用约束支持",
     "pattern_support": "组合占位",
+    "rule_choice": "规则选择与分配",
+    "full_rank": "Full Rank",
     "parity": "奇偶",
     "odd": "奇数",
     "even": "偶数",
@@ -67,6 +69,7 @@ TIERS = {
     "forcing_chain": 4, "contradiction": 4, "custom": 2, "coloring": 3, "parity": 1, "odd": 1, "even": 1,
     "clone": 1, "sandwich": 2, "skyscraper": 2, "region_sum": 2,
     "chaos_pattern": 2, "class_cover": 2, "pattern_support": 2,
+    "rule_choice": 2, "full_rank": 2,
 }
 
 
@@ -492,6 +495,40 @@ def _explain_pattern_support(events, data, n):
         detail += "被排除的候选只出现在无法配对的组合里。"
     prefix = "【推测规则】" if data["hypothesis"] else ""
     return prefix + detail + "\n" + "；".join(_effect_lines(events, n)), visual
+
+
+def _explain_rule_choice(events, data, n):
+    visual = _basic_visual(events, n)
+    lines = []
+    if data["quotas"] is not None:
+        counts = "、".join(f"{name}恰好 {count} 次" for name, count in data["quotas"].items())
+        lines.append(f"这些区域各用一条规则。{counts}。")
+    for region in data["regions"]:
+        label = region["label"]
+        visual["groups"].append({"cells": region["cells"], "kind": "pair"})
+        for name, why in region["rejected"].items():
+            lines.append(f"{label}排除 {name}。{why}。")
+        for name, witness in region["witnesses"].items():
+            groups = "、".join(data["regions"][index]["label"] for index in witness["regions"])
+            lines.append(f"{label}若使用 {name}，{groups} 只能分到 {witness['slots']} 次规则名额，"
+                         f"少于这 {len(witness['regions'])} 个区域所需的次数。")
+        remaining = "、".join(region["remaining"])
+        lines.append(f"{label}只能使用 {remaining}。")
+    lines.append("排除所有剩余规则都无法支持的候选。")
+    return "\n".join([*lines, *_effect_lines(events, n)]), visual
+
+
+def _explain_full_rank(events, data, n):
+    rank, head = data["rank"], data["head"]
+    lines = [f"每个数字都在首位出现 4 次。排名 {rank} 的读数首位是 {head}。"]
+    if data["lower"] or data["upper"]:
+        lines.append("只与首位相同的其他三个读数比较。")
+    if data["lower"]:
+        lines.append("这个读数必须大于 " + "".join(map(str, data["lower"])) + "。")
+    if data["upper"]:
+        lines.append("这个读数不能大于 " + "".join(map(str, data["upper"])) + "。")
+    visual = _unit_visual(data["cells"], n, focus=sorted(_group_elims(events)))
+    return "\n".join([*lines, *_effect_lines(events, n)]), visual
 
 
 def _explain_region_sum(events, data, n):

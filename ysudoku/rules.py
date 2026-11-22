@@ -37,6 +37,8 @@ from .constraints import (
     Thermo,
 )
 from .model import Puzzle
+from .full_rank import FullRank
+from .rule_choice import RuleAlternative, RuleChoice
 from .constraints_ir import relation_from_spec
 from . import predicate as predicate_mod
 from .state import cell_name
@@ -199,14 +201,62 @@ KINDS = {
     "x_sums": "X-Sums（盘外提示）",
     "product": "乘积线",
     "full_rank": "Full Rank（全局排名）",
+    "rule_choice": "规则选择与分配",
     "ir": "通用约束关系",
     "modular": "模块 2×2（每宫含 1/4/7、2/5/8、3/6/9）",
     "entropy": "熵 2×2（每宫含低/中/高）",
 }
 
 
+def paired_outside_choices(puzzle, elements):
+    text = " ".join(puzzle.rules_text.lower().split())
+    if ("every clue number outside the grid appears exactly twice" not in text
+            or "one appearance is a full rank clue and the other is an x-sums clue" not in text):
+        return []
+    pairs = {}
+    for element in elements:
+        if element.kind == "clue":
+            pairs.setdefault(element.attrs["value"], []).append(element)
+    if any(len(pair) != 2 for pair in pairs.values()):
+        return []
+    side_labels = {"left": "左", "right": "右", "top": "上", "bottom": "下"}
+
+    def region(element, value):
+        side = element.attrs["side"]
+        start = element.cells[-1 if side in ("right", "bottom") else 0]
+        return {
+            "label": f"{value}（{cell_name(start, puzzle.size)} {side_labels[side]}侧）",
+            "options": {"Full Rank": {"kind": "full_rank", "elements": [element.id]},
+                        "X-Sum": {"kind": "x_sums", "elements": [element.id]}},
+        }
+
+    return [{
+        "kind": "rule_choice", "elements": [e.id for e in pair],
+        "quotas": {"Full Rank": 1, "X-Sum": 1},
+        "regions": [region(element, value) for element in pair],
+    } for value, pair in sorted(pairs.items())]
+
+
+def with_paired_outside_choices(spec, choices):
+    if not choices:
+        return spec
+    claimed = {eid for choice in choices for eid in choice["elements"]}
+    rules = []
+    for raw in spec.get("rules", []):
+        ids = raw.get("elements") or []
+        if raw.get("kind") in ("full_rank", "x_sums", "rule_choice") and claimed.intersection(ids):
+            if raw.get("kind") == "rule_choice":
+                continue
+            remainder = [eid for eid in ids if eid not in claimed]
+            if not remainder:
+                continue
+            raw = {**raw, "elements": remainder}
+        rules.append(raw)
+    return {**spec, "rules": [*rules, *choices]}
+
+
 def compile_spec(puzzle: Puzzle, elements: list[Element], spec: dict,
-                 source: str = "llm") -> CompiledRules:
+                 source: str = "llm", *, nested=False) -> CompiledRules:
     n = puzzle.size
     by_id = {e.id: e for e in elements}
     result = CompiledRules([], source=source)
@@ -221,13 +271,13 @@ def compile_spec(puzzle: Puzzle, elements: list[Element], spec: dict,
         for eid in (raw.get("elements") or [])
     }
     for element in elements:
-        if element.kind == "xv" and element.id not in claimed:
+        if not nested and element.kind == "xv" and element.id not in claimed:
             raw_rules.append({
                 "kind": "xv", "elements": [element.id],
                 "sum": element.attrs.get("sum", 10),
             })
     text_low = (puzzle.rules_text or "").lower()
-    if "x-sum" in text_low or "x sum" in text_low or "xsum" in text_low:
+    if not nested and ("x-sum" in text_low or "x sum" in text_low or "xsum" in text_low):
         from .arrow_xsums import parse_arrows_fitted
         existing = {tuple(r.get("cells") or []) for r in raw_rules}
         for index, item in enumerate(parse_arrows_fitted(puzzle.raw or {}, puzzle, n)):
@@ -254,11 +304,42 @@ def compile_spec(puzzle: Puzzle, elements: list[Element], spec: dict,
         kind = str(raw.get("kind", "")).strip()
         ids = [str(x) for x in raw.get("elements", [])]
         params = {k: v for k, v in raw.items() if k not in ("kind", "elements", "note")}
-        if (kind == "x_sums" and not raw.get("cells")
+        if (not nested and kind == "x_sums" and not raw.get("cells")
                 and (puzzle.raw or {}).get("arrows")):
             continue
         if kind not in KINDS:
             result.warnings.append(f"未知规则类型 {kind}（已忽略）")
+            continue
+        if kind == "rule_choice":
+            try:
+                if nested:
+                    raise ValueError("规则选项中不能嵌套规则选择")
+                regions = []
+                cited = set()
+                for item in raw.get("regions") or []:
+                    options = {}
+                    for name, definition in item["options"].items():
+                        branches = definition if isinstance(definition, list) else [definition]
+                        built = compile_spec(puzzle, elements, {"rules": branches}, source, nested=True)
+                        warnings = [w for w in built.warnings if "未被任何规则使用" not in w
+                                    and "条推测规则" not in w]
+                        if warnings or not built.constraints:
+                            raise ValueError(f"{name}：{'；'.join(warnings) or '没有可编译的约束'}")
+                        cited.update(eid for r in built.resolved if r["kind"] != "_ignored"
+                                     for eid in r.get("elements", []))
+                        options[name] = (built.constraints[0] if len(built.constraints) == 1
+                                         else RuleAlternative(built.constraints))
+                    regions.append((str(item.get("label") or f"区域{len(regions) + 1}"), options))
+                constraint = RuleChoice(regions, raw.get("quotas"))
+            except (AttributeError, TypeError, ValueError, KeyError) as exc:
+                warning = f"规则选择无效：{exc}"
+                result.errors.append(warning)
+                continue
+            result.constraints.append(constraint)
+            selected = list(dict.fromkeys([*ids, *sorted(cited)]))
+            used.update(selected)
+            result.resolved.append({"kind": kind, "label": KINDS[kind],
+                                    "elements": selected, "count": len(regions)})
             continue
         if kind == "ir":
             try:
@@ -385,7 +466,7 @@ def compile_spec(puzzle: Puzzle, elements: list[Element], spec: dict,
 
     globals_ = list(spec.get("globals") or [])
     # Older saved specs could express this board-wide rule for just one pair.
-    if _global_non_consecutive(text_low) and not any(
+    if not nested and _global_non_consecutive(text_low) and not any(
             g.get("kind") == "non_consecutive" for g in globals_):
         globals_.append({"kind": "non_consecutive"})
     for raw in globals_:
@@ -690,8 +771,11 @@ def _build_rule(puzzle: Puzzle, kind: str, element: Element, params: dict,
         return [XSums(cells, int(total), side)]
 
     if kind == "full_rank":
-        warnings.append("Full Rank 约束暂未实现（需要 36 个行列数字的全局排名）")
-        return []
+        if element.kind != "clue":
+            raise ValueError("Full Rank 需要盘外数字")
+        side = element.attrs["side"]
+        ordered = cells[::-1] if side in ("right", "bottom") else cells
+        return [FullRank(ordered, int(params.get("rank", element.attrs["value"])), side, n)]
 
     if kind == "region_sum":
         if not puzzle.regions:
@@ -847,13 +931,18 @@ def heuristic_spec(puzzle: Puzzle, elements: list[Element]) -> dict:
         has_xsum = _has(text, "x-sums", "x sums", "xsum", "x-sums clue")
         if has_rank or has_xsum:
             if has_rank and has_xsum:
-                warnings.append("盘外提示同时涉及 Full Rank 与 X-Sums（未知类型配对），暂不自动映射")
+                choices = paired_outside_choices(puzzle, elements)
+                if choices:
+                    rules.extend(choices)
+                else:
+                    warnings.append("盘外提示同时涉及 Full Rank 与 X-Sums，未识别出类型分配方式")
             elif has_xsum:
                 for element in clue_elements:
                     rules.append({"kind": "x_sums", "elements": [element.id],
                                   "sum": element.attrs["value"], "side": element.attrs["side"]})
-            if has_rank:
-                warnings.append("检测到 Full Rank 盘外提示：当前版本未实现该约束")
+            elif has_rank:
+                for element in clue_elements:
+                    rules.append({"kind": "full_rank", "elements": [element.id]})
         elif _has(text, "sandwich", "between 1 and 9", "between the 1 and the 9",
                   "digits between 1 and 9", "sum of the digits between",
                   "between 1 and 6", "digits between 1 and 6"):

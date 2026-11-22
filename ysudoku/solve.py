@@ -644,6 +644,7 @@ class Solver:
                 "german_whisper": "德国耳语线", "dutch_whisper": "荷兰耳语线",
                 "xv": "XV 和数", "arrow": "箭头和数",
                 "ir_support": "通用约束支持", "x_sums": "X-Sums",
+                "rule_choice": "规则选择与分配", "full_rank": "Full Rank",
                 "subset": "数对/子集", "cage": "杀手数独宫格和",
                 "thermo": "温度计递增规则", "renban": "连续数集",
             }

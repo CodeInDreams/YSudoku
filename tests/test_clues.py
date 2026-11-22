@@ -51,13 +51,14 @@ class ClueTest(unittest.TestCase):
         self.assertEqual(puzzle.size, 6)
         self.assertEqual((puzzle.givens.get(1 * 6 + 1), puzzle.givens.get(1 * 6 + 4)), (4, 1))
 
-    def test_unmapped_clues_are_reported(self):
-        # Without OR-Tools the puzzle is reported as unsupported; with it the
-        # global solver takes over and answers it.
-        self.assertIn(self.analysis.status, {"unsupported", "solved-global"})
-        if self.analysis.status == "unsupported":
-            self.assertIn("盘外提示", self.analysis.message)
-            self.assertTrue(any("盘外提示" in w for w in self.analysis.warnings))
+    def test_paired_clues_retain_both_rule_types(self):
+        choices = self.analysis.rules.constraints
+        self.assertEqual(len(choices), 6)
+        self.assertTrue(all(rule.kind == "rule_choice" for rule in choices))
+        self.assertTrue(all(rule.check(self.puzzle.solution) for rule in choices))
+        self.assertTrue(any(step.technique == "rule_choice" for step in self.analysis.result.steps))
+        self.assertEqual(len({eid for item in self.analysis.rules.resolved
+                              if item["kind"] == "rule_choice" for eid in item["elements"]}), 12)
 
     def test_x_sums_check(self):
         rule = XSums(list(range(9)), 6, "left")

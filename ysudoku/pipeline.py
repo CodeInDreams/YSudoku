@@ -10,7 +10,8 @@ from pathlib import Path
 
 from . import llm, rulecache
 from .model import Puzzle, parse_puzzle
-from .rules import compile_spec, heuristic_spec, build_inventory
+from .rules import (build_inventory, compile_spec, heuristic_spec, paired_outside_choices,
+                    with_paired_outside_choices)
 from .chaos import check_chaos_solution, solve_chaos
 from .solve import Solver, SolveResult, audit_steps, check_solution, compare_with_solution
 from .state import Contradiction, cell_name
@@ -19,7 +20,7 @@ from .narrate import Step
 
 
 # Invalidate cached results when the solver's proof strategy changes.
-ANALYSIS_VERSION = 28
+ANALYSIS_VERSION = 29
 
 
 @dataclass
@@ -268,10 +269,13 @@ def analyze(
             + notes
         )
     text_low = (puzzle.rules_text or "").lower()
+    paired_choices = paired_outside_choices(puzzle, inventory)
     arrow_xsum = (("x-sum" in text_low or "x sum" in text_low or "xsum" in text_low)
                   and bool((puzzle.raw or {}).get("arrows")))
     if arrow_xsum and rule_mode != "llm":
         spec_override = None
+        use_llm = False
+    if paired_choices and not notes and rule_mode != "llm":
         use_llm = False
     fingerprint = rulecache.fingerprint(puzzle, inventory)
     cached = None
@@ -310,6 +314,7 @@ def analyze(
     else:
         spec = heuristic_spec(puzzle, inventory)
 
+    spec = with_paired_outside_choices(spec, paired_choices)
     puzzle.rules_text = original_rules
     rules = compile_spec(puzzle, inventory, spec, source=source)
     warnings.extend(spec.get("warnings", []))
@@ -547,6 +552,7 @@ def _llm_repair(puzzle, inventory, config, spec, diagnostics, warnings):
     except llm.LLMError as exc:
         warnings.append(f"LLM 规则修复失败：{exc}")
         return None
+    new_spec = with_paired_outside_choices(new_spec, paired_outside_choices(puzzle, inventory))
     new_rules = compile_spec(puzzle, inventory, new_spec, source="llm-repair")
     if new_rules.errors:
         warnings.append("LLM 修复后的规则无法编译：" + "；".join(new_rules.errors[:3]))
@@ -630,6 +636,7 @@ def _llm_spec(puzzle, inventory, config, warnings: list[str]):
             previous=feedback, image_uri=image_uri,
         )
         _apply_arrow_geometry(puzzle, spec, warnings)
+        spec = with_paired_outside_choices(spec, paired_outside_choices(puzzle, inventory))
         rules = compile_spec(puzzle, inventory, spec, source="llm")
         errors = rules.errors
         if not errors and puzzle.solution:

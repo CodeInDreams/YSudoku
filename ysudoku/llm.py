@@ -35,7 +35,7 @@ Schema:
              "palindrome" | "renban" | "german_whisper" | "dutch_whisper" |
              "between" | "consecutive" | "little_killer" | "clone" |
              "clone" | "odd" | "even" | "sandwich" | "skyscraper" | "region_sum" |
-             "region_count",
+             "region_count" | "full_rank" | "rule_choice",
      "elements": ["<element id>", ...],
      "variant": "black" | "white",     // kropki only
      "sum": 15,                        // xv / little_killer only
@@ -66,6 +66,12 @@ Rules:
   still defines the scope of any rule the text assigns to it.
 - "Arrow" means the digit in the circle equals the sum of the digits on the arm.
 - Put every non-cosmetic element you did not use into "ignored" with a reason.
+- When a region has alternative rules, keep the alternatives as candidates.
+  Emit {"kind":"rule_choice","regions":[{"label":"<region>",
+  "options":{"A":<rule object>,"B":<rule object>}}]}.
+  Each option can also be a list of rule objects that must all hold together.
+  If the statement gives an exact number of uses for each option across
+  these regions, add "quotas":{"A":1,"B":1} at rule level and list all options.
 - If no built-in kind can express a stated rule, use "custom" for each
   applicable group of cells:
   {"kind":"custom","cells":["R1C1","R1C2",...],
