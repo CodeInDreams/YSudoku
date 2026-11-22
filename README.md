@@ -7,6 +7,33 @@ English · [中文](README.zh-CN.md)
 
 YSudoku turns a SudokuPad variant into a playable, step-by-step solve. Each step shows the rule, the cells involved, and the changes to their candidates. The interface and explanations are available in English and Chinese.
 
+## Quick start
+
+You need Git, Python 3.10+, and Node.js with npm. Install dependencies and build the web app once. If you already have the repository, run the last two lines from its root.
+
+```bash
+git clone https://github.com/CodeInDreams/YSudoku.git
+cd YSudoku
+npm --prefix web ci && npm --prefix web run build
+npm --prefix tools ci && (cd tools && npx playwright install chromium)
+```
+
+Choose either startup command, then open [http://127.0.0.1:8765/](http://127.0.0.1:8765/) and click **Demo**.
+
+### Local parsing
+
+```bash
+SUDOKU_LLM_API_KEY= DEEPSEEK_API_KEY= OPENAI_API_KEY= python3 -m ysudoku --web
+```
+
+### With an LLM
+
+Replace `YOUR_DEEPSEEK_API_KEY` with your DeepSeek API key.
+
+```bash
+SUDOKU_LLM_API_KEY='YOUR_DEEPSEEK_API_KEY' python3 -m ysudoku --web
+```
+
 ![Desktop solve view with the Route 66 board on the left and the current deduction on the right](docs/ysudoku-desktop-solve.png)
 
 ## Use YSudoku
@@ -32,21 +59,9 @@ YSudoku decodes SudokuPad data into an inventory of shapes and cells. Local reco
 
 Complex combinations can still stall. Chaos Construction can infer connections, borders and some region assignments, and full construction remains an active area of development. See the [solver and architecture guide in Chinese](docs/solver-guide.zh-CN.md) and the [rule DSL](docs/rule-dsl.md).
 
-## Run locally
+## Command line
 
-Install Python 3.10+, Node.js and Playwright Chromium.
-
-```bash
-git clone https://github.com/CodeInDreams/YSudoku.git
-cd YSudoku
-npm --prefix web ci
-npm --prefix web run build
-npm --prefix tools ci
-(cd tools && npx playwright install chromium)
-python3 -m ysudoku --web
-```
-
-Open `http://127.0.0.1:8765/`. The CLI also accepts local JSON and can emit a machine-readable proof.
+The CLI also accepts local JSON and can emit a machine-readable proof.
 
 ```bash
 python3 -m ysudoku --no-llm --json fixtures/demo-killer.json

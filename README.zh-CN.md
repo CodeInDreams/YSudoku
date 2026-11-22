@@ -7,6 +7,33 @@
 
 YSudoku 把 SudokuPad 变形数独变成可以逐步播放的解题讲解。每一步展示用到的规则、关联区域和候选变化。支持中英文界面和讲解。
 
+## 快速体验
+
+需要 Git、Python 3.10+ 和 Node.js（含 npm）。首次运行时安装依赖并构建网页。如果已经下载仓库，从仓库根目录执行最后两行。
+
+```bash
+git clone https://github.com/CodeInDreams/YSudoku.git
+cd YSudoku
+npm --prefix web ci && npm --prefix web run build
+npm --prefix tools ci && (cd tools && npx playwright install chromium)
+```
+
+任选一种启动方式，然后打开 [http://127.0.0.1:8765/](http://127.0.0.1:8765/)，点击「示例」即可体验。
+
+### 本地解析
+
+```bash
+SUDOKU_LLM_API_KEY= DEEPSEEK_API_KEY= OPENAI_API_KEY= python3 -m ysudoku --web
+```
+
+### 启用 LLM
+
+将 `YOUR_DEEPSEEK_API_KEY` 换成自己的 DeepSeek API 密钥。
+
+```bash
+SUDOKU_LLM_API_KEY='YOUR_DEEPSEEK_API_KEY' python3 -m ysudoku --web
+```
+
 ![桌面端解题界面。左侧播放 Route 66 的数独盘面，右侧展示步骤、候选和排除理由](docs/ysudoku-desktop-solve.png)
 
 ## 使用
@@ -30,21 +57,9 @@ YSudoku 把 SudokuPad 变形数独变成可以逐步播放的解题讲解。每�
 
 支持程度取决于规则文本、图形和组合复杂度。规则能够解析的题目也可能卡在某一步。详见[核心算法与架构](docs/solver-guide.zh-CN.md)。
 
-## 本地运行
+## 命令行
 
-需要 Python 3.10+、Node.js 和 Playwright Chromium。先编译网页，再启动服务。
-
-```bash
-git clone https://github.com/CodeInDreams/YSudoku.git
-cd YSudoku
-npm --prefix web ci
-npm --prefix web run build
-npm --prefix tools ci
-(cd tools && npx playwright install chromium)
-python3 -m ysudoku --web
-```
-
-在浏览器打开 `http://127.0.0.1:8765/`。命令行也可直接解析题目 ID、本地 JSON，以及输出机器可读的讲解。
+命令行也可直接解析题目 ID、本地 JSON，以及输出机器可读的讲解。
 
 ```bash
 python3 -m ysudoku --no-llm --json fixtures/demo-killer.json

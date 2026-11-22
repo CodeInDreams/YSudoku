@@ -1,5 +1,34 @@
 # 部署 YSudoku
 
+## 快速体验
+
+需要 Git、Python 3.10+ 和 Node.js（含 npm）。首次运行时安装依赖并构建网页。如果已经下载仓库，从仓库根目录执行最后两行。
+
+```bash
+git clone https://github.com/CodeInDreams/YSudoku.git
+cd YSudoku
+npm --prefix web ci && npm --prefix web run build
+npm --prefix tools ci && (cd tools && npx playwright install chromium)
+```
+
+任选一种启动方式，然后打开 [http://127.0.0.1:8765/](http://127.0.0.1:8765/)，点击「示例」即可体验。
+
+### 本地解析
+
+```bash
+SUDOKU_LLM_API_KEY= DEEPSEEK_API_KEY= OPENAI_API_KEY= python3 -m ysudoku --web
+```
+
+### 启用 LLM
+
+将 `YOUR_DEEPSEEK_API_KEY` 换成自己的 DeepSeek API 密钥。
+
+```bash
+SUDOKU_LLM_API_KEY='YOUR_DEEPSEEK_API_KEY' python3 -m ysudoku --web
+```
+
+## 公开部署
+
 构建网页并安装 Playwright Chromium 后，运行一份 Python HTTP 服务。全局并发在服务进程内协调，令牌和每 IP 次数存放在数据目录的 SQLite 中。一个公开站点应运行一个服务进程，由反向代理转发到它。Linux 服务会锁定数据目录，避免多个进程各自计算全局配额。
 
 ## 运行账号
