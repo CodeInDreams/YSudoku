@@ -22,8 +22,10 @@ Choose either startup command, then open [http://127.0.0.1:8765/](http://127.0.0
 
 ### Local parsing
 
+No API key is needed. If this terminal already has an API key configured, turn off LLM parsing in the web settings.
+
 ```bash
-SUDOKU_LLM_API_KEY= DEEPSEEK_API_KEY= OPENAI_API_KEY= python3 -m ysudoku --web
+python3 -m ysudoku --web
 ```
 
 ### With an LLM

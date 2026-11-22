@@ -22,8 +22,10 @@ npm --prefix tools ci && (cd tools && npx playwright install chromium)
 
 ### 本地解析
 
+无需配置 API 密钥。如果当前终端已经配置过密钥，可以在网页设置里关闭 LLM 解析。
+
 ```bash
-SUDOKU_LLM_API_KEY= DEEPSEEK_API_KEY= OPENAI_API_KEY= python3 -m ysudoku --web
+python3 -m ysudoku --web
 ```
 
 ### 启用 LLM
