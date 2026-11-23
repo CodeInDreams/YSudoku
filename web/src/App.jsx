@@ -390,6 +390,7 @@ export default function App() {
   const [favOnly, setFavOnly] = useState(false);
   const [error, setError] = useState("");
   const [quota, setQuota] = useState(null);
+  const [backendVersion, setBackendVersion] = useState(null);
   const [serviceNotice, setServiceNotice] = useState(null);
   const [llmFallback, setLlmFallback] = useState(false);
   const [notes, setNotes] = useState("");
@@ -459,6 +460,15 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
   const activeLang = useRef(lang);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/api/health", { signal: controller.signal })
+      .then((res) => res.ok ? res.json() : null)
+      .then((health) => setBackendVersion(health?.version || null))
+      .catch(() => {});
+    return () => controller.abort();
+  }, []);
 
   const t = (key, vars) => translate(lang, key, vars);
   const contentLang = analysis?.content_lang || "zh";
@@ -1727,7 +1737,10 @@ export default function App() {
 
         {error && <div className="mt-4 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-200">{error}</div>}
         <footer className="mt-8 space-y-1.5 border-t pt-4 text-center text-xs text-muted-foreground">
-          <p>{t("footer.local")}</p>
+          <p>
+            {t("footer.local")}
+            {backendVersion && <span>{" · "}{t("footer.backendVersion", { version: backendVersion })}</span>}
+          </p>
           <p className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
             <span className="font-medium">{t("footer.thanks")}</span>
             <a className="underline-offset-2 hover:underline" href="https://logic-masters.de/Verein/index.php" target="_blank" rel="noreferrer">Logic Masters Deutschland e.V.</a>

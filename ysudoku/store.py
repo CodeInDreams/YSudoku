@@ -68,7 +68,11 @@ def hash_json(value) -> str:
 
 
 def load_settings() -> dict:
-    return {**DEFAULT_SETTINGS, **_read_json(_settings_path(), {})}
+    defaults = {
+        key: max(0, int(os.environ.get(f"YSUDOKU_STORAGE_{key.upper()}", value)))
+        for key, value in DEFAULT_SETTINGS.items()
+    }
+    return {**defaults, **_read_json(_settings_path(), {})}
 
 
 class CountReductionDisabled(ValueError):

@@ -14,7 +14,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import history, live, llm, store, sudokupad
+from . import __version__, history, live, llm, store, sudokupad
 from .service_limits import Limits, PROMPT_LIMIT, Rejected, Work
 from .pipeline import ANALYSIS_VERSION, analyze, initial_screenshot, rulesheet_dir, save_rulesheet
 from .llm import LLMError
@@ -576,6 +576,7 @@ class Handler(BaseHTTPRequestHandler):
             config = llm.LLMConfig.from_env()
             payload = {
                 "ok": True,
+                "version": __version__,
                 "llm_available": config is not None,
                 "llm_model": config.model if config else None,
                 "rules_cache": rulecache.summary(),

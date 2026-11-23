@@ -40,6 +40,10 @@
     try {
       const res = await fetch("/api/health");
       const h = await res.json();
+      if (h.version) {
+        $("backend-version").textContent = `后端版本 ${h.version}`;
+        $("backend-version").hidden = false;
+      }
       const box = $("use-llm");
       const note = $("llm-note");
       if (!h.llm_available) {

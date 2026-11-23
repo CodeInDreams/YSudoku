@@ -2,7 +2,7 @@
 
 ## 快速体验
 
-需要 Git、Python 3.10+ 和 Node.js（含 npm）。首次运行时安装依赖并构建网页。如果已经下载仓库，从仓库根目录执行最后两行。
+需要 Git、Python 3.10+ 和 Node.js 20+（含 npm）。首次运行时安装依赖并构建网页。如果已经下载仓库，从仓库根目录执行最后两行。
 
 ```bash
 git clone https://github.com/CodeInDreams/YSudoku.git
@@ -33,6 +33,26 @@ SUDOKU_LLM_API_KEY='YOUR_DEEPSEEK_API_KEY' python3 -m ysudoku --web
 
 构建网页并安装 Playwright Chromium 后，运行一份 Python HTTP 服务。全局并发在服务进程内协调，令牌和每 IP 次数存放在数据目录的 SQLite 中。一个公开站点应运行一个服务进程，由反向代理转发到它。Linux 服务会锁定数据目录，避免多个进程各自计算全局配额。
 
+## 环境文件模板
+
+[deploy.env.example](deploy.env.example) 列出部署脚本可使用的配置。放在工程目录外的 `install.sh` 和 `update.sh` 用它初始化 `/etc/ysudoku/ysudoku.env`。更新时，脚本保留现有内容并追加缺少的键和说明。以后增加部署配置时，也应在模板中登记默认值和注释。
+
+把两个脚本放在远程服务器的同一个目录，在 Debian 或 Ubuntu 上以 root 运行。
+
+```bash
+bash install.sh
+# 修改 /etc/ysudoku/ysudoku.env 后重新加载配置
+systemctl restart ysudoku
+# 日后拉取并部署最新代码
+bash update.sh
+```
+
+更新会先在独立目录构建和安装 Chromium，再切换运行目录。新版本未通过服务启动检查时会切回上一版本。脚本以 `ysudoku-build` 构建，以 `ysudoku` 运行服务。
+
+systemd 通过 `EnvironmentFile` 读取配置。文件由 root 保管，每项写一行 `KEY=VALUE`。改完后用 `systemctl restart ysudoku` 生效。两个脚本默认部署 `main`，也可传入一个分支或标签。脚本使用本机反代可访问的 `127.0.0.1:8765` 作为初始地址。如果修改数据目录到 `/var/lib/ysudoku` 之外，需要在 systemd drop-in 里为自定义目录开放写入权限。
+
+`YSUDOKU_STORAGE_MAX_RULES`、`YSUDOKU_STORAGE_MAX_STEPS`、`YSUDOKU_STORAGE_MAX_FRAMES` 和 `YSUDOKU_STORAGE_MAX_MB` 定义存储默认值。网页已保存的设置优先。
+
 ## 运行账号
 
 用独立的系统账号启动 YSudoku。账号须能读取代码和 Chromium，并能写入数据目录。以下是 systemd 配置的核心部分，目录和二进制位置按实际安装填写。
@@ -41,8 +61,8 @@ SUDOKU_LLM_API_KEY='YOUR_DEEPSEEK_API_KEY' python3 -m ysudoku --web
 [Service]
 User=ysudoku
 Group=ysudoku
-WorkingDirectory=/opt/ysudoku
-EnvironmentFile=/etc/ysudoku/public.env
+WorkingDirectory=/opt/ysudoku/current
+EnvironmentFile=/etc/ysudoku/ysudoku.env
 ExecStart=/usr/bin/python3 -m ysudoku --web --host 127.0.0.1 --port 8765
 StateDirectory=ysudoku
 NoNewPrivileges=true
@@ -73,7 +93,7 @@ Restart=on-failure
 | `YSUDOKU_TRUSTED_PROXIES` | 允许代报客户端 IP 的直连代理 CIDR | 空 |
 | `YSUDOKU_PROXY_IP_HEADER` | 可信代理提供的单值 IP 请求头 | `CF-Connecting-IP`，也可设 `X-Real-IP` |
 
-例如，在 `/etc/ysudoku/public.env` 中填入：
+例如，在 `/etc/ysudoku/ysudoku.env` 中填入：
 
 ```ini
 YSUDOKU_RUN_USER=ysudoku

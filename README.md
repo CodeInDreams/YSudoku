@@ -9,7 +9,7 @@ YSudoku turns a SudokuPad variant into a playable, step-by-step solve. Each step
 
 ## Quick start
 
-You need Git, Python 3.10+, and Node.js with npm. Install dependencies and build the web app once. If you already have the repository, run the last two lines from its root.
+You need Git, Python 3.10+, and Node.js 20+ with npm. Install dependencies and build the web app once. If you already have the repository, run the last two lines from its root.
 
 ```bash
 git clone https://github.com/CodeInDreams/YSudoku.git

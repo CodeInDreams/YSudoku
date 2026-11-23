@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ysudoku"
-version = "0.96.5"
+dynamic = ["version"]
 description = "See why every digit is right: explainable, animated variant sudoku solver for SudokuPad links"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -33,3 +33,6 @@ include = ["ysudoku*"]
 
 [tool.setuptools.package-data]
 ysudoku = ["static/*"]
+
+[tool.setuptools.dynamic]
+version = { attr = "ysudoku.__version__" }

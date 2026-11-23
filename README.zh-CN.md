@@ -9,7 +9,7 @@ YSudoku 把 SudokuPad 变形数独变成可以逐步播放的解题讲解。每�
 
 ## 快速体验
 
-需要 Git、Python 3.10+ 和 Node.js（含 npm）。首次运行时安装依赖并构建网页。如果已经下载仓库，从仓库根目录执行最后两行。
+需要 Git、Python 3.10+ 和 Node.js 20+（含 npm）。首次运行时安装依赖并构建网页。如果已经下载仓库，从仓库根目录执行最后两行。
 
 ```bash
 git clone https://github.com/CodeInDreams/YSudoku.git

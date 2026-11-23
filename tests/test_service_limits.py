@@ -10,7 +10,7 @@ from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-from ysudoku import llm, server, store
+from ysudoku import __version__, llm, server, store
 from ysudoku.service_limits import Limits, LLMBudgetExceeded, Rejected, Work
 
 
@@ -117,6 +117,7 @@ class PublicLimitsTest(unittest.TestCase):
                         return error.code, json.load(error)
 
                 try:
+                    self.assertEqual(request("/api/health")[1]["version"], __version__)
                     _, job = request("/api/solve/start", {"url": first})
                     result = wait_job(job)
                     self.assertTrue(entered.wait(2))
@@ -163,6 +164,10 @@ class PublicLimitsTest(unittest.TestCase):
                 self.assertEqual(store.load_settings(), {
                     "max_rules": 1000, "max_steps": 1000, "max_frames": 100, "max_mb": 500,
                 })
+                with patch.dict(os.environ, {"YSUDOKU_STORAGE_MAX_MB": "25"}):
+                    self.assertEqual(store.load_settings()["max_mb"], 25)
+                    store.save_settings(max_mb=500)
+                    self.assertEqual(store.load_settings()["max_mb"], 500)
                 for key, saved, opened in (("old-open", 20, 1), ("recent-open", 10, 2)):
                     meta = {"title": key, "at": saved, "opened_at": opened}
                     store.save_puzzle(key, {"rules": "x" * (1024 * 1024)})
