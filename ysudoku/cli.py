@@ -8,7 +8,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .pipeline import analyze
+from .config import apply_config, bind_address, read_config
 
 
 def _print_text(analysis) -> None:
@@ -44,8 +44,9 @@ def main(argv=None) -> int:
     )
     parser.add_argument("target", nargs="?", help="SudokuPad 链接 / id / 本地 JSON")
     parser.add_argument("--web", action="store_true", help="启动本地 Web 界面")
-    parser.add_argument("--port", type=int, default=8765)
-    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--config", help="部署配置 TOML 文件")
+    parser.add_argument("--port", type=int)
+    parser.add_argument("--host")
     parser.add_argument("--no-llm", action="store_true", help="不使用 LLM，走本地启发式")
     parser.add_argument("--audit", action="store_true", help="用穷举反证校验每一步")
     parser.add_argument("--json", action="store_true", help="输出 JSON")
@@ -56,10 +57,19 @@ def main(argv=None) -> int:
     parser.add_argument("--global-timeout", type=float, default=60.0, help="CP-SAT 全局求解超时（秒）")
     args = parser.parse_args(argv)
 
+    try:
+        values = read_config(args.config) if args.config else {}
+        apply_config(values)
+        host, port = bind_address(values)
+    except (OSError, ValueError, ImportError) as exc:
+        parser.error(f"Cannot load deployment configuration: {exc}")
+
     if args.web or not args.target:
         from .server import run
-        run(args.host, args.port)
+        run(host if args.host is None else args.host, port if args.port is None else args.port)
         return 0
+
+    from .pipeline import analyze
 
     analysis = analyze(
         args.target,

@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 
 from . import store
 from .llm import LLMError
+from .config import env_flag
 
 
 PROMPT_LIMIT = 1000
@@ -37,18 +38,6 @@ def _number(name):
     return value
 
 
-def _flag(name, default):
-    value = os.environ.get("YSUDOKU_" + name)
-    if value is None:
-        return default
-    value = value.strip().lower()
-    if value in ("1", "true", "yes", "on"):
-        return True
-    if value in ("0", "false", "no", "off"):
-        return False
-    raise ValueError("YSUDOKU_" + name + " must be 0 or 1")
-
-
 def _networks(text):
     return tuple(ip_network(value, strict=False) for value in re.split(r"[,\s]+", text) if value)
 
@@ -69,8 +58,8 @@ class Limits:
     def __init__(self, root):
         self.concurrent = _number("MAX_CONCURRENT")
         self.per_ip = _number("DAILY_SOLVES_PER_IP")
-        self.allow_settings = _flag("ALLOW_STORAGE_SETTINGS", True)
-        self.allow_delete = _flag("ALLOW_DELETE", True)
+        self.allow_settings = env_flag("YSUDOKU_ALLOW_STORAGE_SETTINGS", True)
+        self.allow_delete = env_flag("YSUDOKU_ALLOW_DELETE", True)
         self.input_limit = _number("DAILY_LLM_INPUT_TOKENS")
         self.output_limit = _number("DAILY_LLM_OUTPUT_TOKENS")
         self.zone = ZoneInfo(os.environ.get("YSUDOKU_QUOTA_TIMEZONE", "Asia/Shanghai"))

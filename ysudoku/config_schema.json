@@ -1,0 +1,51 @@
+{
+  "server": {
+    "host": ["YSUDOKU_HTTP_HOST", "string"],
+    "port": ["YSUDOKU_HTTP_PORT", "port"],
+    "user": ["YSUDOKU_RUN_USER", "string"],
+    "data_dir": ["YSUDOKU_DATA_DIR", "string"]
+  },
+  "limits": {
+    "max_concurrent": ["YSUDOKU_MAX_CONCURRENT", "integer"],
+    "daily_solves_per_ip": ["YSUDOKU_DAILY_SOLVES_PER_IP", "integer"],
+    "timezone": ["YSUDOKU_QUOTA_TIMEZONE", "string"]
+  },
+  "llm": {
+    "enabled": ["YSUDOKU_LLM_ENABLED", "boolean"],
+    "base_url": ["SUDOKU_LLM_BASE_URL", "string"],
+    "model": ["SUDOKU_LLM_MODEL", "string"],
+    "timeout_seconds": ["SUDOKU_LLM_TIMEOUT", "positive_number"],
+    "daily_input_tokens": ["YSUDOKU_DAILY_LLM_INPUT_TOKENS", "integer"],
+    "daily_output_tokens": ["YSUDOKU_DAILY_LLM_OUTPUT_TOKENS", "integer"]
+  },
+  "storage": {
+    "max_rules": ["YSUDOKU_STORAGE_MAX_RULES", "integer"],
+    "max_steps": ["YSUDOKU_STORAGE_MAX_STEPS", "integer"],
+    "max_frames": ["YSUDOKU_STORAGE_MAX_FRAMES", "integer"],
+    "max_mb": ["YSUDOKU_STORAGE_MAX_MB", "integer"],
+    "allow_settings": ["YSUDOKU_ALLOW_STORAGE_SETTINGS", "boolean"],
+    "allow_delete": ["YSUDOKU_ALLOW_DELETE", "boolean"],
+    "store_dir": ["YSUDOKU_STORE", "optional_string"],
+    "cache_dir": ["YSUDOKU_CACHE", "optional_string"],
+    "raw_cache_dir": ["SUDOKU_EXPLAIN_CACHE", "optional_string"],
+    "history_file": ["YSUDOKU_HISTORY", "optional_string"],
+    "shared_rules_dir": ["YSUDOKU_RULES", "optional_string"]
+  },
+  "network": {
+    "trusted_proxies": ["YSUDOKU_TRUSTED_PROXIES", "strings"],
+    "client_ip_header": ["YSUDOKU_PROXY_IP_HEADER", "string"],
+    "banned_ips": ["YSUDOKU_BANNED_IPS", "strings"],
+    "ban_file": ["YSUDOKU_BAN_FILE", "string"]
+  },
+  "renderer": {
+    "port": ["YSUDOKU_LIVE_PORT", "port"],
+    "idle_seconds": ["YSUDOKU_LIVE_IDLE_SECONDS", "integer"],
+    "min_idle": ["YSUDOKU_LIVE_MIN_IDLE", "integer"],
+    "chromium": ["YSUDOKU_CHROME", "string"],
+    "browsers_path": ["PLAYWRIGHT_BROWSERS_PATH", "string"],
+    "node_path": ["NODE_PATH", "string"]
+  },
+  "solver": {
+    "refute_workers": ["YSUDOKU_REFUTE_WORKERS", "auto_integer"]
+  }
+}

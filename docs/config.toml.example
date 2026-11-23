@@ -1,0 +1,48 @@
+[server]
+host = "127.0.0.1" # HTTP listen address; use loopback with a local reverse proxy.
+port = 8765 # Public HTTP port.
+user = "ysudoku" # Dedicated server account created by install.sh.
+data_dir = "/var/lib/ysudoku" # Persistent cache and quota data.
+
+[limits]
+max_concurrent = 0 # Jobs from loading through rendering; 0 means unlimited.
+daily_solves_per_ip = 0 # Daily solves per IP; 0 means unlimited.
+timezone = "Asia/Shanghai" # Daily quota resets at midnight in this IANA timezone.
+
+[llm]
+enabled = true # Allows LLM parsing if a provider API key is configured in secrets.env.
+base_url = "https://api.deepseek.com" # OpenAI-compatible base URL.
+model = "deepseek-flash" # Provider model ID.
+timeout_seconds = 60 # Timeout per provider request.
+daily_input_tokens = 0 # Shared input token allowance; 0 means unlimited.
+daily_output_tokens = 0 # Shared output token allowance; 0 means unlimited.
+
+[storage]
+max_rules = 1000 # Default number of cached rule sets.
+max_steps = 1000 # Default number of cached step sets.
+max_frames = 100 # Default number of cached frame sets.
+max_mb = 500 # Total storage threshold in MiB; 0 means unlimited.
+allow_settings = true # Apply and allow writing web overrides in store/settings.json.
+allow_delete = true # Allow manual cache and history deletion.
+store_dir = "" # Blank uses server.data_dir/store.
+cache_dir = "" # Blank uses server.data_dir.
+raw_cache_dir = "" # Blank uses server.data_dir.
+history_file = "" # Blank uses history.json in server.data_dir.
+shared_rules_dir = "" # Blank uses curated rules shipped with the active release.
+
+[network]
+trusted_proxies = [] # Trusted TCP peer addresses or CIDRs.
+client_ip_header = "CF-Connecting-IP" # Header accepted only from a trusted peer; X-Real-IP is also supported.
+banned_ips = [] # Permanent IP or CIDR bans.
+ban_file = "/etc/ysudoku/banned-ips.txt" # Hot-reloaded bans; blank disables this list.
+
+[renderer]
+port = 8791 # Local Playwright worker port.
+idle_seconds = 600 # Chromium idle recycling time; 0 keeps it running.
+min_idle = 0 # Positive values keep Chromium warm.
+chromium = "" # Optional custom Chromium executable path.
+browsers_path = "/var/cache/ysudoku-build/playwright" # Location managed by the deployment scripts.
+node_path = "" # Blank uses the deployed tools dependencies.
+
+[solver]
+refute_workers = 0 # 0 chooses the worker count automatically.

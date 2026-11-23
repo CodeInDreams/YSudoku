@@ -8,6 +8,7 @@ dynamic = ["version"]
 description = "See why every digit is right: explainable, animated variant sudoku solver for SudokuPad links"
 readme = "README.md"
 requires-python = ">=3.10"
+dependencies = ["tomli>=2; python_version < '3.11'"]
 license = { text = "MIT" }
 authors = [{ name = "YSudoku contributors" }]
 keywords = ["sudoku", "variant-sudoku", "sudokupad", "explainable", "solver"]
@@ -32,7 +33,7 @@ ysudoku = "ysudoku.cli:main"
 include = ["ysudoku*"]
 
 [tool.setuptools.package-data]
-ysudoku = ["static/*"]
+ysudoku = ["static/*", "config_schema.json"]
 
 [tool.setuptools.dynamic]
 version = { attr = "ysudoku.__version__" }

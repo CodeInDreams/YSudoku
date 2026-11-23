@@ -33,25 +33,32 @@ SUDOKU_LLM_API_KEY='YOUR_DEEPSEEK_API_KEY' python3 -m ysudoku --web
 
 构建网页并安装 Playwright Chromium 后，运行一份 Python HTTP 服务。全局并发在服务进程内协调，令牌和每 IP 次数存放在数据目录的 SQLite 中。一个公开站点应运行一个服务进程，由反向代理转发到它。Linux 服务会锁定数据目录，避免多个进程各自计算全局配额。
 
-## 环境文件模板
+## 安装与更新
 
-[deploy.env.example](deploy.env.example) 列出部署脚本可使用的配置。放在工程目录外的 `install.sh` 和 `update.sh` 用它初始化 `/etc/ysudoku/ysudoku.env`。更新时，脚本保留现有内容并追加缺少的键和说明。以后增加部署配置时，也应在模板中登记默认值和注释。
-
-把两个脚本放在远程服务器的同一个目录，在 Debian 或 Ubuntu 上以 root 运行。
+把工程目录外的 `install.sh` 和 `update.sh` 放在远程服务器的同一个目录，在 Debian 或 Ubuntu 上以 root 运行。
 
 ```bash
 bash install.sh
-# 修改 /etc/ysudoku/ysudoku.env 后重新加载配置
+# 编辑 /etc/ysudoku/config.toml 和 /etc/ysudoku/secrets.env 后重新启动
 systemctl restart ysudoku
 # 日后拉取并部署最新代码
 bash update.sh
 ```
 
-更新会先在独立目录构建和安装 Chromium，再切换运行目录。新版本未通过服务启动检查时会切回上一版本。脚本以 `ysudoku-build` 构建，以 `ysudoku` 运行服务。
+[config.toml.example](config.toml.example) 按服务、限额、LLM、存储、网络、渲染和求解器分组。安装脚本把它写入 `/etc/ysudoku/config.toml`。更新保留配置中的已有值和注释，并为模板里新增的键补上默认值和注释。增加部署配置时，应同时更新模板和后端配置定义。
 
-systemd 通过 `EnvironmentFile` 读取配置。文件由 root 保管，每项写一行 `KEY=VALUE`。改完后用 `systemctl restart ysudoku` 生效。两个脚本默认部署 `main`，也可传入一个分支或标签。脚本使用本机反代可访问的 `127.0.0.1:8765` 作为初始地址。如果修改数据目录到 `/var/lib/ysudoku` 之外，需要在 systemd drop-in 里为自定义目录开放写入权限。
+| 文件 | 用途 |
+| --- | --- |
+| `/etc/ysudoku/config.toml` | 管理员维护的部署配置，重启后生效 |
+| `/etc/ysudoku/secrets.env` | LLM 密钥和管理员令牌。由 systemd 读取，只允许 root 读写 |
+| `/etc/ysudoku/banned-ips.txt` | 永久封禁名单，每五分钟加载 |
+| `/var/lib/ysudoku/store/settings.json` | 网页保存的共享存储覆盖值。配置了 `storage.store_dir` 时，文件跟随该目录 |
 
-`YSUDOKU_STORAGE_MAX_RULES`、`YSUDOKU_STORAGE_MAX_STEPS`、`YSUDOKU_STORAGE_MAX_FRAMES` 和 `YSUDOKU_STORAGE_MAX_MB` 定义存储默认值。网页已保存的设置优先。
+当 `storage.allow_settings = true` 时，网页覆盖值按项优先，其他项使用部署默认值。当它为 `false` 时，服务忽略已保存的覆盖值，并保留文件，重新开启后可继续使用。网页的历史页会标明每项设置的当前来源。把某项改回部署默认值会清掉该项覆盖。缓存目录和求解限额仍由管理员维护。
+
+脚本默认部署 `main`，也可传入分支或标签。它以 `ysudoku-build` 构建，以 `ysudoku` 运行。更新会先构建新版本，启动检查失败时恢复原程序和配置。由旧脚本创建的 `/etc/ysudoku/ysudoku.env` 会在首次迁移时读入新文件，并保留原件。
+
+初始监听地址为 `127.0.0.1:8765`。如果把写入路径移到 `/var/lib/ysudoku` 之外，需要通过 systemd drop-in 开放对应目录的写入权限。可使用 `python3 -m ysudoku --web --config /path/to/config.toml` 手动启动。显式指定的 `--host` 和 `--port` 优先，其他设置以 TOML 中提供的值为准。缺省项仍可使用旧环境变量。
 
 ## 运行账号
 
@@ -62,18 +69,20 @@ systemd 通过 `EnvironmentFile` 读取配置。文件由 root 保管，每项�
 User=ysudoku
 Group=ysudoku
 WorkingDirectory=/opt/ysudoku/current
-EnvironmentFile=/etc/ysudoku/ysudoku.env
-ExecStart=/usr/bin/python3 -m ysudoku --web --host 127.0.0.1 --port 8765
+EnvironmentFile=/etc/ysudoku/secrets.env
+ExecStart=/usr/bin/python3 -m ysudoku --web --config /etc/ysudoku/config.toml
 StateDirectory=ysudoku
 NoNewPrivileges=true
 Restart=on-failure
 ```
 
-在环境文件中使用 `YSUDOKU_RUN_USER=ysudoku` 可校验账号。由 root 启动时，服务在创建监听端口和浏览器进程前切换用户。未设置时使用启动服务的账号。用独立账号安装 Chromium，或通过 `PLAYWRIGHT_BROWSERS_PATH` 指定账号可读取的安装位置。
+在配置文件中使用 `server.user = "ysudoku"` 可校验账号。由 root 启动时，服务在创建监听端口和浏览器进程前切换用户。未设置时使用启动服务的账号。用独立账号安装 Chromium，或通过 `PLAYWRIGHT_BROWSERS_PATH` 指定账号可读取的安装位置。
 
 如果在同一台主机部署第二个独立站点，给两个站点各自设置 HTTP 端口、`YSUDOKU_LIVE_PORT` 和 `YSUDOKU_DATA_DIR`。同一站点内的用户共享规则、步骤、截图缓存和令牌预算。不同数据目录的预算分别统计，即使两个站点使用同一 API 密钥。
 
-## 环境变量
+## 旧环境变量部署
+
+已有的纯环境变量部署仍可继续使用。以下是兼容的变量。新安装优先使用 TOML。
 
 | 环境变量 | 含义 | 默认 |
 | --- | --- | --- |
@@ -93,7 +102,7 @@ Restart=on-failure
 | `YSUDOKU_TRUSTED_PROXIES` | 允许代报客户端 IP 的直连代理 CIDR | 空 |
 | `YSUDOKU_PROXY_IP_HEADER` | 可信代理提供的单值 IP 请求头 | `CF-Connecting-IP`，也可设 `X-Real-IP` |
 
-例如，在 `/etc/ysudoku/ysudoku.env` 中填入：
+如果继续使用旧的纯环境变量部署，可以在原来的环境文件中填入以下配置。
 
 ```ini
 YSUDOKU_RUN_USER=ysudoku
@@ -114,17 +123,17 @@ YSUDOKU_BAN_FILE=/etc/ysudoku/banned-ips.txt
 
 ## 客户端 IP 和封禁
 
-直连模式保持 `YSUDOKU_TRUSTED_PROXIES` 为空，以 TCP 对端地址为准。Cloudflare 直连源站时，填入 Cloudflare 对外发布的 IPv4 和 IPv6 网段，使用默认的 `CF-Connecting-IP`。如果应用连接的是本机反向代理，填写该代理的地址，并在代理配置中先验证上游来源，再覆盖转发的客户端 IP。代理应清理客户端自带的同名头。 [Cloudflare 原始访客 IP 文档](https://developers.cloudflare.com/support/troubleshooting/restoring-visitor-ips/restoring-original-visitor-ips/) · [Cloudflare IP 网段](https://www.cloudflare.com/ips/)
+直连模式保持 TOML 的 `network.trusted_proxies = []`，以 TCP 对端地址为准。Cloudflare 直连源站时，填入 Cloudflare 对外发布的 IPv4 和 IPv6 网段，使用默认的 `CF-Connecting-IP`。如果应用连接的是本机反向代理，填写该代理的地址，并在代理配置中先验证上游来源，再覆盖转发的客户端 IP。代理应清理客户端自带的同名头。 [Cloudflare 原始访客 IP 文档](https://developers.cloudflare.com/support/troubleshooting/restoring-visitor-ips/restoring-original-visitor-ips/) · [Cloudflare IP 网段](https://www.cloudflare.com/ips/)
 
-普通反向代理可将 `YSUDOKU_PROXY_IP_HEADER` 设为 `X-Real-IP`，由代理用实际连接对端覆盖该头。转发链中的任意 `X-Forwarded-For` 不会用于计费。Cloudflare 的 Pseudo IPv4 设为 Off 或 Add Header 可保留访客的 IPv6 地址。 [Cloudflare 请求头文档](https://developers.cloudflare.com/fundamentals/reference/http-headers/)
+普通反向代理可将 `network.client_ip_header` 设为 `X-Real-IP`，由代理用实际连接对端覆盖该头。转发链中的任意 `X-Forwarded-For` 不会用于计费。Cloudflare 的 Pseudo IPv4 设为 Off 或 Add Header 可保留访客的 IPv6 地址。 [Cloudflare 请求头文档](https://developers.cloudflare.com/fundamentals/reference/http-headers/)
 
-环境变量随进程启动读取。想不重启修改名单，编辑 `YSUDOKU_BAN_FILE` 指向的文件。服务每五分钟检查一次，文件中列出的封禁没有到期时间。文件读取或格式校验失败会继续使用上次有效名单。
+配置随进程启动读取。想不重启修改名单，编辑 `network.ban_file` 指向的文件。服务每五分钟检查一次，文件中列出的封禁没有到期时间。文件读取或格式校验失败会继续使用上次有效名单。
 
 ## 日志与共享缓存
 
 服务向标准输出写 JSON 日志。写接口记录时间、IP 和题目，LLM 调用另记题目及输入、输出令牌。日志不写 API 密钥和提示正文。用 systemd 时可通过 `journalctl -u ysudoku` 查询。日志与用量数据库只供服务运营使用。
 
-公开页面可浏览和重新生成共享结果。两个管理开关默认开启。在公开站点若保留默认且未配置管理员令牌，任意访客都可以调高容量上限或删除缓存。上面的公开站点示例关闭了这两项。自动缓存淘汰仍按容量设置运行。删除关闭时，网页不能调低数量上限，防止通过修改设置触发批量删除。
+公开页面可浏览和重新生成共享结果。两个管理开关默认开启。在公开站点若保留默认且未配置管理员令牌，任意访客都可以调高容量上限或删除缓存。公开站点可在 TOML 中设置 `storage.allow_settings = false` 和 `storage.allow_delete = false`。自动缓存淘汰仍按容量设置运行。删除关闭时，网页不能调低数量上限，防止通过修改设置触发批量删除。
 
 默认保留 1000 份规则、1000 份步骤、100 份截图，总上限 500 MiB。原题数据也计入总量，历史页会显示其大小。某层数目超限时，先清理该层中最早打开的题目。清理后若总量仍达到上限，已有完整缓存可播放，新增求解、重新求解和补渲染会收到存储已满提示，且不扣求解次数。已受理任务仍会完成，因此总量可暂时跨过阈值。
 

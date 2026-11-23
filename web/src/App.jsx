@@ -921,8 +921,11 @@ export default function App() {
   }
 
   async function saveSettings() {
+    const changes = Object.fromEntries(Object.entries(settings)
+      .filter(([key, value]) => value !== store?.info?.settings?.[key]));
+    if (!Object.keys(changes).length) return;
     try {
-      await postJson("/api/store/settings", settings);
+      await postJson("/api/store/settings", changes);
     } catch (err) {
       showServiceError(err, "history.save");
     }
@@ -1715,7 +1718,9 @@ export default function App() {
                 ].map(([layer, label, key, count, size]) => (
                   <div key={layer} className="col-span-2 flex items-center gap-2 rounded-md border px-2.5 py-2">
                     <div className="min-w-0 flex-1">
-                      <div className="text-[11px] font-medium">{t(label)}</div>
+                      <div className="text-[11px] font-medium">
+                        {t(label)} <span className="font-normal text-muted-foreground">· {t(store.info.settings_overrides?.includes(key) ? "history.webOverride" : "history.serverDefault")}</span>
+                      </div>
                       <div className="text-[10px] text-muted-foreground">{t("history.usedLimit", { used: count, limit: settings[key] ?? 0, size: fmtBytes(size) })}</div>
                     </div>
                     <input type="number" min={store?.can_delete ? 0 : store?.info?.settings?.[key]} disabled={!store?.can_update_settings} value={settings[key] ?? ""} onChange={(e) => setSettings((s) => ({ ...s, [key]: Number(e.target.value) }))} className="w-14 rounded border bg-transparent px-1 py-0.5 text-right text-[11px] outline-none" />
@@ -1723,7 +1728,9 @@ export default function App() {
                 ))}
                 <div className="col-span-2 flex items-center gap-2 rounded-md border px-2.5 py-2">
                   <div className="min-w-0 flex-1">
-                    <div className="text-[11px] font-medium">{t("history.totalSpace")}</div>
+                    <div className="text-[11px] font-medium">
+                      {t("history.totalSpace")} <span className="font-normal text-muted-foreground">· {t(store.info.settings_overrides?.includes("max_mb") ? "history.webOverride" : "history.serverDefault")}</span>
+                    </div>
                     <div className="text-[10px] text-muted-foreground">{t("history.spaceUsed", { used: fmtBytes(store?.info?.total), limit: settings.max_mb ?? 0 })}</div>
                   </div>
                   <input type="number" min="0" disabled={!store?.can_update_settings} value={settings.max_mb ?? ""} onChange={(e) => setSettings((s) => ({ ...s, max_mb: Number(e.target.value) }))} className="w-14 rounded border bg-transparent px-1 py-0.5 text-right text-[11px] outline-none" />

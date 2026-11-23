@@ -11,6 +11,8 @@ import time
 from threading import RLock
 from pathlib import Path
 
+from .config import env_flag
+
 LAYERS = ("puzzle", "rules", "steps", "frames")
 DEFAULT_SETTINGS = {"max_rules": 1000, "max_steps": 1000, "max_frames": 100, "max_mb": 500}
 
@@ -67,12 +69,25 @@ def hash_json(value) -> str:
     return hashlib.sha1(json.dumps(value, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()[:16]
 
 
-def load_settings() -> dict:
-    defaults = {
+def _settings_defaults():
+    return {
         key: max(0, int(os.environ.get(f"YSUDOKU_STORAGE_{key.upper()}", value)))
         for key, value in DEFAULT_SETTINGS.items()
     }
-    return {**defaults, **_read_json(_settings_path(), {})}
+
+
+def _settings_overrides():
+    if not env_flag("YSUDOKU_ALLOW_STORAGE_SETTINGS", True):
+        return {}
+    values = _read_json(_settings_path(), {})
+    if not isinstance(values, dict):
+        return {}
+    return {key: value for key, value in values.items()
+            if key in DEFAULT_SETTINGS and type(value) is int and value >= 0}
+
+
+def load_settings() -> dict:
+    return {**_settings_defaults(), **_settings_overrides()}
 
 
 class CountReductionDisabled(ValueError):
@@ -81,14 +96,20 @@ class CountReductionDisabled(ValueError):
 
 def save_settings(*, allow_count_reduction=True, **values) -> dict:
     with _META_LOCK:
-        settings = load_settings()
+        defaults = _settings_defaults()
+        overrides = _settings_overrides()
+        settings = {**defaults, **overrides}
         for name in DEFAULT_SETTINGS:
             if name in values:
                 value = max(0, int(values[name]))
                 if not allow_count_reduction and name != "max_mb" and value < settings[name]:
                     raise CountReductionDisabled()
                 settings[name] = value
-        _write_json(_settings_path(), settings)
+                if value == defaults[name]:
+                    overrides.pop(name, None)
+                else:
+                    overrides[name] = value
+        _write_json(_settings_path(), overrides)
         _prune()
         return settings
 
@@ -303,9 +324,11 @@ def storage_info(entries: list[dict] | None = None) -> dict:
     if entries is None:
         entries = list_entries()
     sizes = {layer: sum(item["sizes"][layer] for item in entries) for layer in LAYERS}
+    overrides = _settings_overrides()
     return {
         "location": str(_root().resolve()),
-        "settings": load_settings(),
+        "settings": {**_settings_defaults(), **overrides},
+        "settings_overrides": sorted(overrides),
         "counts": {layer: sum(item["layers"][layer] for item in entries) for layer in LAYERS},
         "sizes": sizes,
         "total": _storage_total(),

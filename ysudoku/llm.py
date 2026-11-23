@@ -10,6 +10,8 @@ import urllib.request
 from contextvars import ContextVar
 from dataclasses import dataclass
 
+from .config import env_flag
+
 SYSTEM_PROMPT = """You are a precise rule compiler for variant sudoku puzzles.
 
 For outside X-Sums clues:
@@ -120,6 +122,8 @@ class LLMConfig:
 
     @classmethod
     def from_env(cls) -> "LLMConfig | None":
+        if not env_flag("YSUDOKU_LLM_ENABLED", True):
+            return None
         key = (
             os.environ.get("SUDOKU_LLM_API_KEY")
             or os.environ.get("DEEPSEEK_API_KEY")
