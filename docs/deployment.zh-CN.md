@@ -60,6 +60,18 @@ bash update.sh
 
 初始监听地址为 `127.0.0.1:8765`。如果把写入路径移到 `/var/lib/ysudoku` 之外，需要通过 systemd drop-in 开放对应目录的写入权限。可使用 `python3 -m ysudoku --web --config /path/to/config.toml` 手动启动。显式指定的 `--host` 和 `--port` 优先，其他设置以 TOML 中提供的值为准。缺省项仍可使用旧环境变量。
 
+### 使用已安装的 Chromium 和 Python
+
+在装有 Python 3.11 和系统 Chromium 的机器上，可以为部署脚本指定这两个可执行文件。以 root 运行，按实际安装路径填写。
+
+```bash
+YSUDOKU_DEPLOY_PYTHON=/usr/local/bin/python3.11 \
+YSUDOKU_DEPLOY_CHROMIUM=/usr/bin/chromium \
+bash install.sh
+```
+
+脚本仍安装项目锁定的 Playwright JavaScript 包，并用指定的 Chromium 做启动和截图检查。会跳过 Playwright 自带浏览器的下载与系统依赖安装。成功后，Python 路径保存在 systemd 服务中，Chromium 路径保存在 `config.toml` 的 `renderer.chromium` 中，后续直接运行 `bash update.sh` 即可。最终在网页点「示例」或提交新题，确认可以从第 0 步播放到最后一帧。Debian 11 配系统 Chromium 属于兼容路径，实际渲染取决于已安装的 Chromium。 [Playwright 自定义浏览器路径说明](https://playwright.dev/docs/api/class-browsertype#browser-type-launch-option-executable-path)
+
 ## 运行账号
 
 用独立的系统账号启动 YSudoku。账号须能读取代码和 Chromium，并能写入数据目录。以下是 systemd 配置的核心部分，目录和二进制位置按实际安装填写。
