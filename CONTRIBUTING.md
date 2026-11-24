@@ -15,16 +15,18 @@ python3 -m unittest discover -s tests
 
 ## Changelog and releases
 
-Review [CHANGELOG.md](CHANGELOG.md) before every commit. Add or update concise entries for the main user-facing changes under Unreleased, grouping them under Added, Changed, or Fixed. Internal-only changes can leave the entries unchanged. When Unreleased has entries, add a `Target version: a.b.c` line directly below its heading and recalculate it as the change set evolves.
+Review [CHANGELOG.md](CHANGELOG.md) before every commit. Add or update concise entries for the main user-facing changes under Unreleased, grouping them under Added, Changed, or Fixed. Internal-only changes can leave the entries unchanged. When Unreleased has entries, add a `Target version:` line directly below its heading, including the expected suffix, and recalculate it as the change set evolves.
 
 - Fixes only, including hotfixes, increment the patch number `c`.
 - Any new user-facing feature increments the minor number `b` and resets `c` to zero.
 - Major changes increment `a` and reset `b` and `c` to zero. Ask the maintainer to confirm the major version before setting it.
 
-Calculate the target for the whole batch from the previous stable release. Commits in the same batch share one target. A beta uses the target version with the `-beta` suffix. Keep this suffix for versions without full maintainer acceptance, and obtain that acceptance before publishing a stable version. An accepted beta can become the corresponding stable version with the same numbers. Published tags are immutable.
+Calculate the target for the whole batch from the latest published version, including prereleases. Commits in the same batch share one target. For example, the next fix-only batch after `1.2.0-beta` targets `1.2.1`, and the next feature batch targets `1.3.0`.
+
+Publish without a suffix when the maintainer explicitly confirms validation passed or explicitly specifies the release version. All other releases use the `-beta` suffix and are marked as GitHub prereleases. A beta changes the release status only. Its numeric version counts normally toward the next release. Published tags are immutable.
 
 Before each release:
 
-1. Review everything since the previous stable release against the changelog. Confirm the feature/fix classification, version, acceptance status, and release date.
-2. Move the pending entries into a dated release section and update the runtime version in `ysudoku/__init__.py`. For a stable release after a beta, include the beta's user-facing changes in the stable section. Stage the changelog and version bump in the release commit.
+1. Review everything since the previous release against the changelog. Confirm the feature/fix classification, version, acceptance or explicit version instruction, and release date.
+2. Move the pending entries into a dated release section and update the runtime version in `ysudoku/__init__.py`. When publishing a stable release, cover user-facing changes since the previous stable release in its GitHub notes. Stage the changelog and version bump in the release commit.
 3. Verify the release commit passes tests. Create the matching `v<version>` tag and publish a GitHub Release whose notes reflect the changelog. Mark beta releases as prereleases. Then verify the published tag, notes, and prerelease flag.

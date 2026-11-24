@@ -4,6 +4,16 @@ User-facing features and fixes are recorded here. See [CONTRIBUTING.md](CONTRIBU
 
 ## Unreleased
 
+Target version: 1.2.0-beta
+
+### Added
+
+- Add separate written-digit and effective-value deductions for liar-cell puzzles with Renban, Kropki and XV clues. The walkthrough shows both domains and explains how the liar-cell rules link them.
+
+### Fixed
+
+- Treat the closing point of a looped Renban as part of the same cell. Recover supplied answers when a SudokuPad canvas pads the playable grid with blank note cells.
+
 ## [1.1.0-beta] - 2026-11-24
 
 ### Added

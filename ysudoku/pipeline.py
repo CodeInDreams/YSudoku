@@ -21,7 +21,7 @@ from .narrate import Step
 
 
 # Invalidate cached results when the solver's proof strategy changes.
-ANALYSIS_VERSION = 34
+ANALYSIS_VERSION = 35
 
 
 def _requires_liar_cell_values(rules_text: str) -> bool:
@@ -56,6 +56,7 @@ class Analysis:
     source_url: str = ""
     conflicts: list = field(default_factory=list)
     lang: str = "zh"
+    effective_values: list[int] = field(default_factory=list)
 
     def to_json(self, *, lang: str | None = None) -> dict:
         n = self.puzzle.size
@@ -105,6 +106,7 @@ class Analysis:
             "status": self.status,
             "message": self.message,
             "final": self.result.values,
+            "effective_values": self.effective_values,
             "solution_check": self.solution_check,
             "audit": self.audit,
         }
@@ -273,7 +275,35 @@ def analyze(
         puzzle.source_url = "https://sudokupad.app/" + target
     if on_puzzle:
         puzzle.rule_sheet = on_puzzle(puzzle) or ""
+    inventory = build_inventory(puzzle)
     if _requires_liar_cell_values(puzzle.rules_text or ""):
+        from .dual_values import liar_value_spec, solve_dual
+        spec = liar_value_spec(puzzle, inventory) if not notes.strip() else None
+        if spec is not None:
+            rules = compile_spec(puzzle, inventory, spec)
+            if len(rules.constraints) == len(spec["rules"]):
+                rules.resolved = [r for r in rules.resolved if r["kind"] != "_ignored"]
+                rules.resolved.insert(0, {"kind": "liar_values",
+                                         "label": "说谎格（填写数字与实际值）" if not lang.startswith("en")
+                                         else "Liar cells (written digits and effective values)",
+                                         "count": puzzle.size, "elements": []})
+                if on_rules is not None:
+                    try:
+                        on_rules(rules.describe())
+                    except Exception:
+                        pass
+                result, initial, effective = solve_dual(
+                    puzzle, rules.constraints, max_steps, allow_chains=allow_chains, on_step=on_step,
+                )
+                check = ""
+                if result.status == "solved" and puzzle.solution:
+                    check = compare_with_solution(puzzle, result.values) or "与题面内置答案一致"
+                return Analysis(
+                    puzzle=puzzle, spec=spec, rules=rules, source="heuristic",
+                    result=result, initial=initial, status=result.status, message=result.message,
+                    source_url=puzzle.source_url, lang=lang, solution_check=check,
+                    effective_values=effective,
+                )
         message = (
             "Liar cells require separate domains for written digits and effective values. "
             "This rule is not supported yet."
@@ -293,7 +323,6 @@ def analyze(
             status="unsupported", message=message, warnings=[message],
             source_url=puzzle.source_url, lang=lang,
         )
-    inventory = build_inventory(puzzle)
 
     warnings: list[str] = []
     source = "heuristic"

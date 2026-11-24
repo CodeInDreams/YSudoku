@@ -730,8 +730,12 @@ def _build_rule(puzzle: Puzzle, kind: str, element: Element, params: dict,
         return [Palindrome(cells)]
 
     if kind == "renban":
+        if len(cells) > 2 and cells[0] == cells[-1]:
+            cells = cells[:-1]
         if len(cells) < 2:
             raise ValueError("Renban 太短")
+        if len(set(cells)) != len(cells):
+            raise ValueError("Renban 经过同一格多次")
         return [Renban(cells)]
 
     if kind in ("german_whisper", "dutch_whisper", "consecutive"):

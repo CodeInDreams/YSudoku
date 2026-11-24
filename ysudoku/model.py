@@ -502,6 +502,15 @@ def parse_puzzle(data: dict, puzzle_id: str = "") -> Puzzle:
     raw_solution = meta.get("solution")
     if isinstance(raw_solution, str) and len(raw_solution) == n * n:
         solution = [int(ch) if ch.isdigit() else 0 for ch in raw_solution]
+    elif isinstance(raw_solution, str) and (canvas := data.get("cells")):
+        width = len(canvas[0])
+        if (len(canvas) >= n and width >= n and all(len(row) == width for row in canvas)
+                and len(raw_solution) == width * len(canvas)):
+            board = [raw_solution[r * width:r * width + n] for r in range(n)]
+            outside = "".join(raw_solution[r * width + n:(r + 1) * width] for r in range(n))
+            outside += raw_solution[width * n:]
+            if all(ch in ".?0" for ch in outside) and all(row.isascii() and row.isdigit() for row in board):
+                solution = [int(ch) for row in board for ch in row]
 
     return Puzzle(
         puzzle_id=puzzle_id or data.get("id", ""),

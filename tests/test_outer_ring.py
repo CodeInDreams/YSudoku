@@ -29,6 +29,12 @@ class OuterRingTest(unittest.TestCase):
         puzzle = parse_puzzle(data)
         self.assertNotIn(9, puzzle.givens)
 
+    def test_padded_solution_keeps_only_the_playable_grid(self):
+        data = make_data()
+        grid = "123456789"
+        data["metadata"]["solution"] = (grid + "??") * 9 + "?" * 22
+        self.assertEqual(parse_puzzle(data).solution, [int(x) for x in grid * 9])
+
 
 if __name__ == "__main__":
     unittest.main()

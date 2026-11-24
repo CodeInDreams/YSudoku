@@ -106,6 +106,9 @@ class Step:
             "revert": self.revert,
             "events": [e.to_dict() for e in self.events],
         }
+        if self.technique == "dual_value" and self.narration.get("proof"):
+            from .dual_values import describe_step
+            data["proof_detail"] = describe_step(self.narration, n, lang, show_trace=True)
         if lang == "en":
             from .step_locale import english_step
             return english_step(data, n, self.narration)

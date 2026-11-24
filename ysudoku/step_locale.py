@@ -177,6 +177,11 @@ def english_step(payload, n, evidence):
     reason = event["reason"] if event else {"kind": technique, "data": {}}
     d = reason["data"]
     title = TITLES.get(technique, "Deduction")
+    if technique == "dual_value":
+        from .dual_values import describe_step
+        title = "Dual-value refutation" if evidence["proof"] else "Dual-value deduction"
+        payload.update(title=title, detail=describe_step(evidence, n, "en"))
+        return payload
     if technique == "chaos_region":
         if "region_anchor" in evidence:
             title = "Region shapes from an uncoloured cell"

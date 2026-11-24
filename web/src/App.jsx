@@ -274,6 +274,12 @@ function StepNarrative({ step, n, t }) {
   return (
     <div className="space-y-3">
       {lead.length > 0 && <p className="whitespace-pre-wrap text-[13px] leading-7 text-foreground/90">{lead.join("\n")}</p>}
+      {step.proof_detail && (
+        <details className="rounded-md border bg-muted/30 p-3 text-xs">
+          <summary className="cursor-pointer">{t("step.proofDetail")}</summary>
+          <p className="mt-2 whitespace-pre-wrap leading-6">{step.proof_detail}</p>
+        </details>
+      )}
       {combos.length > 0 && (
         <div className="rounded-lg border bg-muted/30 p-3">
           <SectionLabel extra={<Badge variant="outline">{comboCount === 1 || combos.length === 1 ? t("step.combinationOne") : t("step.combinationCount", { n: comboCount || combos.length })}</Badge>}>{t("step.combinations")}</SectionLabel>
@@ -313,7 +319,14 @@ function StepNarrative({ step, n, t }) {
             {candidates.map((candidate) => (
               <div key={candidate.cell} className="flex items-center justify-between gap-2 rounded-md border bg-background px-2 py-1.5">
                 <span className="font-mono text-[11px] text-muted-foreground">{cellName(candidate.cell)}</span>
-                <Digits digits={candidate.digits} />
+                {candidate.effective ? (
+                  <div className="flex min-w-0 flex-col gap-1">
+                    <span className="text-[11px] text-muted-foreground">{t("step.writtenDigit")}</span>
+                    <Digits digits={candidate.digits} />
+                    <span className="text-[11px] text-muted-foreground">{t("step.effectiveValue")}</span>
+                    <Digits digits={candidate.effective} />
+                  </div>
+                ) : <Digits digits={candidate.digits} />}
               </div>
             ))}
           </div>
