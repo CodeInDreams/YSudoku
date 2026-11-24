@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from copy import copy
+from dataclasses import dataclass, field, replace
+from time import monotonic
 
 from .intersections import PatternPropagation
 from .narrate import Step, build_step, contradiction_zh
@@ -12,6 +14,8 @@ from .simplify import can_simplify, simplify
 from .sum_links import compile_links
 from .techniques import TECHNIQUES, TRIGGERS
 from .unit_inference import solver_units
+
+REFUTATION_LINES_PER_PAGE = 8
 
 
 @dataclass
@@ -51,6 +55,18 @@ class Solver:
 
     def _pre(self):
         return self.state.dom.copy(), self.state.vals.copy()
+
+    def fork_for_replay(self):
+        trial = copy(self)
+        trial.state = self.state.copy()
+        trial.constraints = self.constraints.copy()
+        trial.state.constraints = trial.constraints
+        trial._rewrite_inputs = self._rewrite_inputs.copy()
+        trial.sum_links = [copy(link) for link in self.sum_links]
+        trial.patterns = PatternPropagation()
+        trial.steps = self.steps.copy()
+        trial.on_step = None
+        return trial
 
     def _candidates(self, events, pre_dom):
         masks: dict[int, int] = {}
@@ -277,6 +293,7 @@ class Solver:
         Dependent steps may sit between siblings; they stay in place, while the
         direct children are folded into the first child step.
         """
+        steps = list(steps)
         i = 0
         while i < len(steps):
             origin = steps[i]
@@ -299,6 +316,8 @@ class Solver:
                 j += 1
             if len(direct) >= 2:
                 target = steps[direct[0]]
+                target = replace(target, events=list(target.events), visual=dict(target.visual))
+                steps[direct[0]] = target
                 remove: list[int] = []
                 for k in direct[1:]:
                     right = steps[k]
@@ -325,7 +344,8 @@ class Solver:
                     steps.pop(k)
             i += 1
         for index, step in enumerate(steps):
-            step.index = index
+            if step.index != index:
+                steps[index] = replace(step, index=index)
         return steps
 
     def _contradiction_intro(self, cell: int, value: int, phase: str,
@@ -537,12 +557,10 @@ class Solver:
         from .search import proof_cost
         self.refutation_limited = False
         # Reserve the assumption, contradiction and combined rollback.
-        chunk_size = 8
         max_pages = min(32, max_steps - len(self.steps) - 3)
         if max_pages < 1:
             self.refutation_limited = True
             return None
-        pre_dom, pre_vals = self._pre()
         focus_units = {u for c in self.focus if c < len(self.state.unit_of)
                        for u in self.state.unit_of[c]}
 
@@ -591,7 +609,7 @@ class Solver:
             cost = proof_cost(proof)
             # Each node adds at most two lines beyond the counted deductions
             # and sub-assumptions. Compare only proofs we can show in full.
-            if cost[0] + 2 * cost[2] > max_pages * chunk_size:
+            if cost[0] + 2 * cost[2] > max_pages * REFUTATION_LINES_PER_PAGE:
                 self.refutation_limited = True
                 continue
             score = (
@@ -600,15 +618,19 @@ class Solver:
                 self.state.dom[cell].bit_count(),
             )
             if best is None or score < best[0]:
-                best = (score, cell, value, list(bits(self.state.dom[cell])),
-                        proof, cause)
+                best = (score, cell, value, proof, cause)
             # A very short proof cannot be improved materially by further
             # probes; retain time for applying it and propagating the result.
             if cost[0] <= 2:
                 break
         if best is None:
             return None
-        _, cell, value, values, proof, cause = best
+        _, cell, value, proof, cause = best
+        return self.apply_refutation(cell, value, proof, cause)
+
+    def apply_refutation(self, cell, value, proof, cause):
+        pre_dom, pre_vals = self._pre()
+        values = list(bits(pre_dom[cell]))
         name = cell_name(cell, self.state.n)
 
         intro = Step(
@@ -711,8 +733,8 @@ class Solver:
         if not proof_text:
             proof_text = [(f"假设 {name} = {value} 后立即矛盾：{contradiction_zh(cause)}。", None,
                            {"kind": "cause", "text": cause})]
-        chunks = [proof_text[i:i + chunk_size]
-                  for i in range(0, len(proof_text), chunk_size)]
+        chunks = [proof_text[i:i + REFUTATION_LINES_PER_PAGE]
+                  for i in range(0, len(proof_text), REFUTATION_LINES_PER_PAGE)]
         pre_dom, pre_vals = self._pre()
         for index, chunk in enumerate(chunks):
             lines = [f"反证推理（{index + 1}/{len(chunks)}）："] + [text for text, _, _ in chunk]
@@ -897,10 +919,22 @@ class Solver:
                     return step
         return None
 
-    def run(self, max_steps: int = 4000) -> SolveResult:
+    def add_candidate_map(self, max_steps):
+        for step in (self._candidate_map_steps() or [])[:max_steps - len(self.steps)]:
+            self.steps.append(step)
+            if self.on_step is not None:
+                try:
+                    self.on_step(step)
+                except Exception:
+                    pass
+
+    def run(self, max_steps: int = 4000, *, candidate_maps=True, merge_singles=True,
+            deadline=None) -> SolveResult:
         if self.invalid:
             return SolveResult("invalid", [], self.state.vals, self.invalid)
         while not self.state.solved:
+            if deadline is not None and monotonic() >= deadline:
+                return SolveResult("timeout", self.steps, self.state.vals)
             if len(self.steps) >= max_steps:
                 return SolveResult("stuck", self.steps, self.state.vals,
                                    f"达到 {max_steps} 步上限，仍未解完")
@@ -917,17 +951,8 @@ class Solver:
                         except Exception:
                             pass
                     continue
-                map_steps = self._candidate_map_steps()
-                if map_steps:
-                    for step in map_steps[:max_steps - len(self.steps)]:
-                        self.steps.append(step)
-                        if self.on_step is not None:
-                            try:
-                                self.on_step(step)
-                            except Exception:
-                                pass
-                    continue
-                tried = sorted({s.technique for s in self.steps})
+                if candidate_maps:
+                    self.add_candidate_map(max_steps)
                 return SolveResult(
                     "stuck", self.steps, self.state.vals,
                     "已对全部约束做固定点检查，没有候选可再缩小",
@@ -938,8 +963,9 @@ class Solver:
                     self.on_step(step)
                 except Exception:
                     pass
-        return SolveResult("solved", self._merge_sibling_singles(self.steps),
-                           self.state.vals, "")
+        if merge_singles:
+            self.steps = self._merge_sibling_singles(self.steps)
+        return SolveResult("solved", self.steps, self.state.vals)
 
 
 # ------------------------------------------------------------------ validation

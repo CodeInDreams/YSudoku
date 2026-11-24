@@ -119,12 +119,14 @@ def _trial(base, clues, actions=None):
         return merges, [*reasons, str(exc)]
 
 
-def refute_count(fragments, clues):
+def refute_count(fragments, clues, target=None):
     best = None
     for index, clue in enumerate(clues):
         if len(clue.counts) < 2:
             continue
         for count in reversed(clue.counts):
+            if target is not None and (index, count) != target:
+                continue
             assumed = copy(clue)
             assumed.counts = [count]
             trial_clues = [assumed, *clues[:index], *clues[index+1:]]

@@ -283,6 +283,18 @@ class RegionFragments:
         return {"colours": groups, "region_pairs": pairs, "region_options": list(options.values()),
                 "region_edges": edges, "region_progress": progress}
 
+    def local_partitions(self, roots):
+        partitions = [[]]
+        for root in roots:
+            more = []
+            for blocks in partitions:
+                for index, block in enumerate(blocks):
+                    if all(not self.blocked(root, other) for other in block):
+                        more.append(blocks[:index] + [block + [root]] + blocks[index+1:])
+                more.append(blocks + [[root]])
+            partitions = more
+        return partitions
+
     def clue(self, rule):
         cells = rule.cells()
         roots = list(dict.fromkeys(self.owner[c] for c in cells))
@@ -319,16 +331,7 @@ class RegionFragments:
         # For small circles, intersect the local partitions still allowed by
         # their count and the proven pair relations (e.g. a three-region clue).
         if len(roots) <= 4 and not one and not distinct:
-            partitions = [[]]
-            for root in roots:
-                more = []
-                for blocks in partitions:
-                    for index, block in enumerate(blocks):
-                        if all(not self.blocked(root, other) for other in block):
-                            more.append(blocks[:index] + [block + [root]] + blocks[index+1:])
-                    more.append(blocks + [[root]])
-                partitions = more
-            patterns = [p for p in partitions if len(p) in rule.counts]
+            patterns = [p for p in self.local_partitions(roots) if len(p) in rule.counts]
             if not patterns:
                 raise Contradiction("圈内没有满足区域数的分组")
             for a, b in pairs:
@@ -345,12 +348,17 @@ class RegionFragments:
         return None
 
 
-def region_steps(solver, rules, steps):
+def region_steps(solver, rules, steps, *, refutations=None, replay=None, deadline=None,
+                 max_steps=None):
+    from time import monotonic
+
     state = solver.state
     fragments = RegionFragments(state)
     solver.allow_chains = False  # Construct regions from deductions before the separate search fallback.
     clues = [copy(c) for c in rules.constraints if c.kind == "region_count"]
+    clue_ids = {id(clue): index for index, clue in enumerate(clues)}
     fragments.count_clues = clues
+    fragments.all_count_clues = clues.copy()
     for clue, step in zip(clues.copy(), steps):
         detail = fragments.replace_corner_clue(clue)
         if detail:
@@ -364,6 +372,9 @@ def region_steps(solver, rules, steps):
         if solver.on_step:
             solver.on_step(step)
     while True:
+        if (deadline is not None and monotonic() >= deadline
+                or max_steps is not None and len(steps) > max_steps):
+            raise TimeoutError
         pre_dom, pre_vals = state.dom.copy(), state.vals.copy()
         observation = fragments.propagate_choices()
         if not observation:
@@ -418,10 +429,24 @@ def region_steps(solver, rules, steps):
             if error:
                 raise Contradiction(error)
             if step is None:
-                proof = refute_count(fragments, clues)
+                if replay is None:
+                    proof = refute_count(fragments, clues)
+                else:
+                    proof = None
+                    for clue_id, count in replay:
+                        if deadline is not None and monotonic() >= deadline:
+                            raise TimeoutError
+                        index = next((i for i, clue in enumerate(clues)
+                                      if clue_ids[id(clue)] == clue_id), None)
+                        if index is not None:
+                            proof = refute_count(fragments, clues, target=(index, count))
+                            if proof:
+                                break
                 if proof:
                     index, count, reasons = proof
                     clue = clues[index]
+                    if refutations is not None:
+                        refutations[clue_ids[id(clue)], count] = len(reasons) + 2
                     clue.counts = [k for k in clue.counts if k != count]
                     cells = clue.cells()
                     remaining = " 或 ".join(map(str, clue.counts))

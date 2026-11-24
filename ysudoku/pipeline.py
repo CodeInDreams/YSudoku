@@ -15,12 +15,12 @@ from .rules import (build_inventory, compile_spec, heuristic_spec, paired_outsid
 from .chaos import check_chaos_solution, solve_chaos
 from .solve import Solver, SolveResult, audit_steps, check_solution, compare_with_solution
 from .state import Contradiction, cell_name
-from .chaos_regions import region_steps
+from .refutation_path import finish_regions, finish_with_refutations
 from .narrate import Step
 
 
 # Invalidate cached results when the solver's proof strategy changes.
-ANALYSIS_VERSION = 32
+ANALYSIS_VERSION = 33
 
 
 @dataclass
@@ -382,7 +382,11 @@ def analyze(
                             result=SolveResult("invalid", pattern_steps, solver.state.vals),
                             message=solver.invalid or "圈内重复数字与区域数提示矛盾")
         try:
-            fragments = region_steps(solver, rules, pattern_steps)
+            solver.steps = pattern_steps
+            solver, fragments = finish_regions(
+                solver, rules, lambda state: _chaos_pattern_steps(puzzle, rules, state),
+            )
+            pattern_steps = solver.steps
         except Contradiction as exc:
             return Analysis(puzzle=puzzle, spec=spec, rules=rules, source=source,
                             initial=solver.initial, status="invalid", warnings=warnings,
@@ -420,7 +424,7 @@ def analyze(
             source_url=puzzle.source_url, message=f"混沌搜索未完成：{chaos_result.message}",
         )
 
-    result = solver.run(max_steps=max_steps)
+    result = solver.run(max_steps=max_steps, candidate_maps=not allow_chains)
 
     if result.status == "stuck" and puzzle.clues and use_global:
         attempted = _try_global(puzzle, rules, solver, source, warnings,
@@ -447,7 +451,7 @@ def analyze(
                 solver2 = Solver(puzzle, new_rules, allow_chains=allow_chains,
                                  solution=puzzle.solution,
                                  on_step=on_step)
-                result2 = solver2.run(max_steps=max_steps)
+                result2 = solver2.run(max_steps=max_steps, candidate_maps=not allow_chains)
                 if (result2.status == "solved"
                         or len(result2.steps) > len(result.steps)):
                     rules, result, solver, spec = new_rules, result2, solver2, new_spec
@@ -459,21 +463,7 @@ def analyze(
                         pass
 
     if result.status == "stuck" and allow_chains:
-        import time as _time
-        deadline = _time.time() + 25.0
-        while (result.status == "stuck" and len(solver.steps) < max_steps
-               and _time.time() < deadline):
-            step = solver.contradiction_step(deadline, max_steps=max_steps)
-            if step is None:
-                if solver.refutation_limited:
-                    warnings.append("找到的反证过长，未能在步骤预算内展示完整证明")
-                    break
-                warnings.append("反证尝试未能在预算内找到可排除的候选")
-                break
-            result = solver.run(max_steps=max_steps)
-        else:
-            if result.status == "stuck" and len(solver.steps) < max_steps:
-                warnings.append("反证尝试达到时间上限，题目仍未解完")
+        solver, result = finish_with_refutations(solver, result, max_steps, warnings)
 
     for constraint in rules.constraints:
         support = getattr(constraint, "last_result", None)
