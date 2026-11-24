@@ -507,6 +507,34 @@ class Renban(Constraint):
         return changed
 
 
+@lru_cache(maxsize=4096)
+def _between_support(domains, groups):
+    supported = [0] * len(domains)
+    for a, b in product(bits(domains[0]), bits(domains[-1])):
+        lo, hi = sorted((a, b))
+        if hi - lo < 2:
+            continue
+        interval = (1 << (hi - 1)) - (1 << lo)
+        interior = [mask & interval for mask in domains[1:-1]]
+        if not all(interior):
+            continue
+        for group in groups:
+            spare = hi - lo - 1 - len(group)
+            matching = None if spare < 0 else _matching_masks(
+                tuple(interior[i] for i in group) + (interval,) * spare, interval,
+            )
+            if matching is None:
+                break
+            for i, mask in zip(group, matching):
+                interior[i] = mask
+        else:
+            supported[0] |= 1 << (a - 1)
+            supported[-1] |= 1 << (b - 1)
+            for i, mask in enumerate(interior, 1):
+                supported[i] |= mask
+    return supported
+
+
 class Between(Constraint):
     kind = "between"
 
@@ -533,18 +561,18 @@ class Between(Constraint):
     def prune(self, st: State) -> bool:
         if len(self._cells) < 3:
             return False
-        reason = Reason("between", {"cells": self._cells})
+        inside = self._cells[1:-1]
+        units = sorted({uid for cell in inside for uid in st.unit_of[cell]})
+        groups = {tuple(i for i, cell in enumerate(inside) if uid in st.unit_of[cell])
+                  for uid in units}
+        groups = tuple(sorted(group for group in groups if len(group) > 1))
+        supported = _between_support(tuple(st.dom[c] for c in self._cells), groups)
+        reason = Reason("between", {"cells": self._cells, "distinct_groups": [
+            [inside[i] for i in group] for group in groups
+        ]})
         changed = False
-        a, b = self._cells[0], self._cells[-1]
-        for cell in self._cells[1:-1]:
-            for value in bits(st.dom[cell]):
-                ok = any(
-                    (x < value < y) or (y < value < x)
-                    for x in bits(st.dom[a])
-                    for y in bits(st.dom[b])
-                )
-                if not ok:
-                    changed |= st.elim(cell, value, reason)
+        for cell, mask in zip(self._cells, supported):
+            changed |= st.restrict(cell, mask, reason)
         return changed
 
 

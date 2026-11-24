@@ -838,6 +838,13 @@ def _red_line(colour):
     return min(hue, 1 - hue) <= 0.05 and saturation >= 0.35 and brightness >= 0.25
 
 
+def _pink_line(colour):
+    if not re.fullmatch(r"#[0-9a-f]{6}(?:[0-9a-f]{2})?", colour):
+        return False
+    hue, saturation, brightness = rgb_to_hsv(*(v / 255 for v in bytes.fromhex(colour[1:7])))
+    return 0.72 <= hue <= 0.96 and saturation >= 0.15 and brightness >= 0.5
+
+
 def _has(text: str, *words: str) -> bool:
     low = text.lower()
     return any(w in low for w in words)
@@ -906,7 +913,14 @@ def heuristic_spec(puzzle: Puzzle, elements: list[Element]) -> dict:
     lines = [e for e in elements if e.kind == "line" and len(e.cells) >= 2]
 
     def lines_with(colors: set[str]) -> list[str]:
-        return [e.id for e in lines if e.attrs.get("color", "") in colors]
+        return [e.id for e in lines if e.attrs.get("color", "")[:7] in colors]
+
+    between_declared = re.search(r"\bbetween[ -]?lines?\b", text, re.I)
+    between_lines = []
+    if between_declared:
+        ends = {e.cells[0] for e in elements if e.kind == "marker" and len(e.cells) == 1}
+        between_lines = [e.id for e in lines if len(e.cells) >= 3
+                         and e.cells[0] in ends and e.cells[-1] in ends]
 
     if _has(text, "whisper"):
         kind = "dutch_whisper" if _has(text, "dutch") else "german_whisper"
@@ -917,18 +931,27 @@ def heuristic_spec(puzzle: Puzzle, elements: list[Element]) -> dict:
         if ids:
             rules.append({"kind": kind, "elements": ids})
     if _has(text, "renban"):
-        ids = lines_with(PURPLE) or [e.id for e in lines]
+        pink = [e.id for e in lines if _pink_line(e.attrs.get("color", ""))]
+        ids = (pink if _has(text, "pink line") else []) or lines_with(PURPLE) or [
+            e.id for e in lines if e.id not in between_lines
+        ]
         if ids:
             rules.append({"kind": "renban", "elements": ids})
     if _has(text, "palindrome"):
-        ids = lines_with(GREY) or [e.id for e in lines]
+        greys = GREY | {"#aaaaaa"}
+        ids = [eid for eid in lines_with(greys) if eid not in between_lines] or [
+            e.id for e in lines if e.id not in between_lines
+        ]
         if ids:
             rules.append({"kind": "palindrome", "elements": ids})
-    if re.search(r"\bbetween[ -]?lines?\b", text, re.I):
-        ids = [e.id for e in lines if len(e.cells) >= 3]
+    if between_declared:
+        ids = between_lines or [e.id for e in lines if len(e.cells) >= 3]
         if ids:
             rules.append({"kind": "between", "elements": ids})
-    if _has(text, "consecutive") and not _has(text, "kropki"):
+    consecutive_named = re.search(r"(?<!non-)(?<!non )\bconsecutive[ -]lines?\b", text, re.I)
+    consecutive_only = (_has(text, "consecutive")
+                        and not _has(text, "renban", "kropki", "dot", "non-consecutive"))
+    if consecutive_named or consecutive_only:
         ids = lines_with(ORANGE | GREEN) or [e.id for e in lines]
         if ids:
             rules.append({"kind": "consecutive", "elements": ids})

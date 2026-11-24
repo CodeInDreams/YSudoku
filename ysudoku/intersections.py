@@ -8,11 +8,137 @@ enumerated as a CSP.  A candidate is removed only when the enumeration is
 
 from __future__ import annotations
 
-from .constraints import AntiPair
-from .state import Contradiction, Reason, State
+from functools import lru_cache
+
+from .constraints import AntiPair, Clone, Palindrome, Renban, _matching_masks, consecutive_windows
+from .state import Contradiction, Reason, State, bits
 
 MAX_COMPONENT_CELLS = 6
 MAX_NODES = 20_000
+
+
+@lru_cache(maxsize=2048)
+def _required_renban_digits(domains, n):
+    required = (1 << n) - 1
+    feasible = False
+    for window in consecutive_windows(len(domains), n):
+        mask = sum(1 << (digit - 1) for digit in window)
+        if _matching_masks(domains, mask) is not None:
+            required &= mask
+            feasible = True
+    return required if feasible else 0
+
+
+def _equal_groups(rule):
+    cells = rule.cells()
+    if isinstance(rule, Clone):
+        yield cells
+    elif isinstance(rule, Palindrome):
+        yield from zip(cells[:len(cells) // 2], reversed(cells))
+
+
+def _equal_digit_cover(state, constraints):
+    """An equal group cannot use a required digit if it sees every possible host."""
+    equal = [(rule, tuple(group)) for rule in constraints for group in _equal_groups(rule)]
+    for rule in constraints:
+        if not isinstance(rule, Renban) or not equal:
+            continue
+        scope = rule.cells()
+        required = _required_renban_digits(tuple(state.dom[c] for c in scope), state.n)
+        for equal_rule, group in equal:
+            seen = set().union(*(state.peers[c] for c in group))
+            unseen = 0
+            for cell in scope:
+                if cell not in seen:
+                    unseen |= state.dom[cell]
+            eliminated = required & ~unseen
+            changes = {cell: state.dom[cell] & ~eliminated for cell in group
+                       if state.dom[cell] & eliminated}
+            if changes:
+                return changes, Reason("equal_digit_cover", {
+                    "cells": scope, "equal": group, "digits": eliminated,
+                    "hypothesis": any(getattr(r, "hypothesis", False) for r in (rule, equal_rule)),
+                })
+    return None
+
+
+def _single_digit_layout(state, constraints):
+    """Find where one digit can appear with matching positions on equal lines."""
+    renbans = [rule for rule in constraints if isinstance(rule, Renban)]
+    equal = [tuple(group) for rule in constraints for group in _equal_groups(rule)]
+    if not renbans or not equal or state.n > 9:
+        return None
+
+    def mask(cells):
+        return sum(1 << c for c in set(cells))
+
+    def indexes(value):
+        return (i - 1 for i in bits(value))
+
+    required = [mask(unit.cells) for unit in state.units if len(unit.cells) == state.n]
+    covered = 0
+    for unit in required:
+        covered |= unit
+    if covered != (1 << state.n2) - 1:
+        return None
+    bans = [mask(peers) for peers in state.peers]
+    groups = [mask(group) for group in equal]
+    scope_masks = [(mask(rule.cells()), _required_renban_digits(
+        tuple(state.dom[c] for c in rule.cells()), state.n)) for rule in renbans]
+    for scope, _ in scope_masks:
+        for cell in indexes(scope):
+            bans[cell] |= scope ^ (1 << cell)
+    choices = []
+    for cell in range(state.n2):
+        companions = 1 << cell
+        while True:
+            before = companions
+            for group in groups:
+                if group & companions:
+                    companions |= group
+            if companions == before:
+                break
+        excluded = 0
+        for peer in indexes(companions):
+            excluded |= bans[peer]
+        choices.append((companions, excluded))
+
+    for digit in range(1, state.n + 1):
+        candidate = 1 << (digit - 1)
+        possible = mask(c for c in range(state.n2) if state.dom[c] & candidate)
+        needed = required + [scope for scope, values in scope_masks if values & candidate]
+        supported, nodes = 0, 0
+
+        def visit(available, outstanding, placed):
+            nonlocal supported, nodes
+            if supported == possible:
+                return True
+            nodes += 1
+            if nodes > 20_000:
+                return False
+            if not outstanding:
+                supported |= placed
+                return True
+            narrowest = min((unit & available for unit in outstanding), key=int.bit_count)
+            for cell in indexes(narrowest):
+                companions, excluded = choices[cell]
+                if companions & excluded or companions & available != companions:
+                    continue
+                if not visit(available & ~(companions | excluded),
+                             [unit for unit in outstanding if not unit & companions],
+                             placed | companions):
+                    return False
+            return True
+
+        if visit(possible, needed, 0) and supported != possible:
+            if not supported:
+                raise Contradiction(f"数字 {digit} 在行列宫、Renban 与同值格之间没有可行布局")
+            cells = list(indexes(possible & ~supported))
+            return {c: state.dom[c] & ~candidate for c in cells}, Reason("single_digit_layout", {
+                "digit": digit, "equal": equal, "renbans": [r.cells() for r in renbans],
+                "hypothesis": any(getattr(r, "hypothesis", False) for r in constraints),
+            })
+    return None
 
 
 def local_component(state: State, constraints, target: int):
@@ -182,6 +308,8 @@ class PatternPropagation:
         })
 
     def find(self, state, constraints):
+        if equal_cover := _equal_digit_cover(state, constraints):
+            return equal_cover
         tables = []
         for rule in constraints:
             # Board-wide anti constraints expand to many binary edges. Their
@@ -236,7 +364,7 @@ class PatternPropagation:
                                           state.units[ui], left_inside, right_inside)
                     if result:
                         return result
-        return None
+        return _single_digit_layout(state, constraints)
 
 
 def unsupported_candidates(state: State, constraints) -> list[tuple[int, int, list]]:

@@ -90,3 +90,59 @@ class PatternTest(unittest.TestCase):
         rule = IRSupport([TupleRelation([0, 1], [(1, 2), (3, 4)])])
         with patch("ysudoku.intersections.MAX_NODES", 3):
             self.assertIsNone(PatternPropagation().find(state, [rule]))
+
+
+class EqualDigitCoverTest(unittest.TestCase):
+    def test_a_mirror_pair_sees_all_required_digit_hosts(self):
+        from ysudoku.constraints import Palindrome, Renban
+        from ysudoku.model import parse_puzzle
+        from ysudoku.state import build_units
+
+        puzzle = parse_puzzle({"cells": [[{} for _ in range(4)] for _ in range(4)]})
+        state = State(4, build_units(puzzle))
+        allowed, reason = PatternPropagation().find(state, [Renban([1, 2, 14]), Palindrome([0, 15])])
+
+        self.assertEqual(allowed, {0: 0b1001, 15: 0b1001})
+        self.assertEqual(reason.kind, "equal_digit_cover")
+
+    def test_between_constrains_both_endpoints(self):
+        from ysudoku.constraints import Between
+
+        state = State(4, [Unit("row", 1, [4, 5, 6, 7])])
+        rule = Between([0, 4, 5, 15])
+        state.dom[0], state.dom[15] = 0b0011, 0b1100
+
+        rule.prune(state)
+        self.assertEqual([state.dom[i] for i in (0, 4, 5, 15)], [1, 6, 6, 8])
+
+    def test_single_digit_layout_counts_renban_and_house_only_once(self):
+        from ysudoku.constraints import Palindrome, Renban
+        from ysudoku.intersections import _single_digit_layout
+        from ysudoku.model import parse_puzzle
+        from ysudoku.state import build_units
+
+        puzzle = parse_puzzle({"cells": [[{} for _ in range(4)] for _ in range(4)]})
+        state = State(4, build_units(puzzle))
+        allowed, reason = _single_digit_layout(state, [Palindrome([0, 6]), Renban([0, 1, 2])])
+        self.assertEqual(allowed, {3: 0b1101})
+        self.assertEqual(reason.data["digit"], 2)
+
+    def test_mixed_line_heuristic_keeps_renban_distinct_from_consecutive_line(self):
+        from ysudoku.model import parse_puzzle
+        from ysudoku.rules import Element, heuristic_spec
+
+        puzzle = parse_puzzle({"metadata": {"rules": (
+            "Between Lines: digits strictly between the circles. "
+            "Renban: Pink lines contain a set of consecutive digits. Palindrome: mirrored digits repeat."
+        )}})
+        elements = [
+            Element("line:0", "line", [0, 4, 8], {"color": "#aaaaaaff"}),
+            Element("line:1", "line", [1, 2, 3], {"color": "#f067f0ff"}),
+            Element("line:2", "line", [9, 10, 11], {"color": "#aaaaaaff"}),
+            Element("marker:0", "marker", [0], {}),
+            Element("marker:1", "marker", [8], {}),
+        ]
+        inferred = heuristic_spec(puzzle, elements)
+        self.assertEqual({rule["kind"]: rule["elements"] for rule in inferred["rules"]}, {
+            "between": ["line:0"], "renban": ["line:1"], "palindrome": ["line:2"],
+        })

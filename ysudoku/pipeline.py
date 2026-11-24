@@ -21,7 +21,7 @@ from .narrate import Step
 
 
 # Invalidate cached results when the solver's proof strategy changes.
-ANALYSIS_VERSION = 35
+ANALYSIS_VERSION = 36
 
 
 def _requires_liar_cell_values(rules_text: str) -> bool:
@@ -57,6 +57,7 @@ class Analysis:
     conflicts: list = field(default_factory=list)
     lang: str = "zh"
     effective_values: list[int] = field(default_factory=list)
+    shades: list[int] = field(default_factory=list)
 
     def to_json(self, *, lang: str | None = None) -> dict:
         n = self.puzzle.size
@@ -107,6 +108,7 @@ class Analysis:
             "message": self.message,
             "final": self.result.values,
             "effective_values": self.effective_values,
+            "shades": self.shades,
             "solution_check": self.solution_check,
             "audit": self.audit,
         }
@@ -276,6 +278,32 @@ def analyze(
     if on_puzzle:
         puzzle.rule_sheet = on_puzzle(puzzle) or ""
     inventory = build_inventory(puzzle)
+    from .shaded_inversions import recognizes_shaded_inversions, solve_shaded
+    if puzzle.clues and not notes.strip() and recognizes_shaded_inversions(puzzle.rules_text):
+        spec = {"rules": [], "globals": [], "model": "shaded_inversions"}
+        rules = CompiledRules([], source="heuristic")
+        english = lang == "en"
+        rules.resolved = [
+            {"kind": "two_connected_shades", "label": "Two connected colours, no monochrome 2×2"
+             if english else "双色正交连通，禁止单色 2×2", "count": 1, "elements": []},
+            {"kind": "shaded_inversions", "label": "Shaded inversions"
+             if english else "深色逆序对", "count": len(puzzle.clues),
+             "elements": [f"clue:{i}" for i in range(len(puzzle.clues))]},
+        ]
+        if on_rules is not None:
+            try:
+                on_rules(rules.describe())
+            except Exception:
+                pass
+        solver = Solver(puzzle, rules, allow_chains=allow_chains, on_step=on_step)
+        result, shades = solve_shaded(solver, max_steps)
+        check = ""
+        if result.status == "solved" and puzzle.solution:
+            check = compare_with_solution(puzzle, result.values) or "与题面内置答案一致"
+        return Analysis(puzzle=puzzle, spec=spec, rules=rules, source=rules.source,
+                        result=result, initial=solver.initial, status=result.status,
+                        message=result.message, solution_check=check, source_url=puzzle.source_url,
+                        lang=lang, shades=shades)
     if _requires_liar_cell_values(puzzle.rules_text or ""):
         from .dual_values import liar_value_spec, solve_dual
         spec = liar_value_spec(puzzle, inventory) if not notes.strip() else None

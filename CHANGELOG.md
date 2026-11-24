@@ -8,9 +8,14 @@ Target version: 1.2.0-beta
 
 ### Added
 
+- Support two orthogonally connected colours with no monochrome 2×2 and outside clues counting shaded inversions. The walkthrough keeps colour and digit candidates separate.
+- Deduce required Renban digits across palindrome and clone pairs. Between lines also propagate back to their endpoints.
+
 - Add separate written-digit and effective-value deductions for liar-cell puzzles with Renban, Kropki and XV clues. The walkthrough shows both domains and explains how the liar-cell rules link them.
 
 ### Fixed
+
+- Distinguish Between, pink Renban and grey palindrome lines in local rule detection. A consecutive Renban set no longer becomes a separate consecutive-line constraint.
 
 - Treat the closing point of a looped Renban as part of the same cell. Recover supplied answers when a SudokuPad canvas pads the playable grid with blank note cells.
 

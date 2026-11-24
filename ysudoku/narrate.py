@@ -9,6 +9,8 @@ from . import predicate as predicate_mod
 from .state import Event, bits, cell_name
 
 TITLES = {
+    "equal_digit_cover": "同值格排除必含数字",
+    "single_digit_layout": "单数字布局",
     "naked_single": "唯一候选",
     "hidden_single": "隐性唯一",
     "locked": "区块排除",
@@ -484,6 +486,26 @@ def _explain_ir_support(events, data, n):
         + ("\n".join(effects) if effects else "（无候选变化）")
     )
     return detail, _basic_visual(events, n)
+
+
+def _explain_equal_digit_cover(events, data, n):
+    visual = _unit_visual(data["cells"], list(data["equal"]))
+    digits = _values(list(bits(data["digits"])))
+    group = _names(data["equal"], n)
+    detail = (f"Renban 必须包含 {digits}。对每个数字，所有可能落点都能看到 {group} 中至少一格。"
+              f"这几格取值相同，若取上述任何数字，Renban 上就无处可放它。")
+    return detail + "\n" + "\n".join(_effect_lines(events, n)), visual
+
+
+def _explain_single_digit_layout(events, data, n):
+    visual = _basic_visual(events, n)
+    visual["groups"] = [{"cells": scope, "kind": "pair"}
+                        for scope in (*data["equal"], *data["renbans"])]
+    digit = data["digit"]
+    detail = (f"只检查数字 {digit}。每行、列、宫恰好放一次。Renban 中互不重复，"
+              "若每个可行窗口都包含该数字，则还必须放一次。同值格必须同时使用或同时避开这个数字。"
+              "被排除的格无法出现在任何满足这些条件的布局中。")
+    return detail + "\n" + "\n".join(_effect_lines(events, n)), visual
 
 
 def _explain_pattern_support(events, data, n):
@@ -1034,8 +1056,11 @@ def _explain_between(events, data, n):
     cells = data["cells"]
     detail = (
         f"之间线 {_names(cells, n)}：中间格子的数字必须严格介于两端数字之间。\n"
-        f"检查两端所有可能取值后，排除不可能处于中间的候选：\n"
+        "检查各组端点取值与中间候选。"
     )
+    if data.get("distinct_groups"):
+        detail += "同一行、列或宫内的中间格还必须能分配到不同数字。"
+    detail += "\n"
     detail += "；".join(_effect_lines(events, n)) or "（无）"
     visual = _basic_visual(events, n)
     visual["groups"].append({"cells": cells, "kind": "line"})

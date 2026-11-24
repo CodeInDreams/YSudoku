@@ -7,6 +7,8 @@ from .state import bits, cell_name
 
 
 TITLES = {
+    "equal_digit_cover": "Equal cells and required digits",
+    "single_digit_layout": "Single-digit layout",
     "naked_single": "Naked single", "hidden_single": "Hidden single",
     "locked": "Locked candidates", "subset": "Naked subset", "hidden_subset": "Hidden subset",
     "x_wing": "X-Wing", "xy_wing": "XY-Wing", "w_wing": "W-Wing",
@@ -177,6 +179,13 @@ def english_step(payload, n, evidence):
     reason = event["reason"] if event else {"kind": technique, "data": {}}
     d = reason["data"]
     title = TITLES.get(technique, "Deduction")
+    if technique == "shaded_inversions":
+        from .shaded_inversions import shade_step_text
+        detail = shade_step_text(evidence, n, "en")
+        if events:
+            detail += "\n" + "\n".join(_event_text(event, name) for event in events)
+        payload.update(title="Shading and inversions", detail=detail)
+        return payload
     if technique == "dual_value":
         from .dual_values import describe_step
         title = "Dual-value refutation" if evidence["proof"] else "Dual-value deduction"
@@ -271,6 +280,18 @@ def _explain(payload, kind, d, evidence, name, n):
         return f"In {unit}, {cells} are restricted to {{{digits}}}. Other cells in that unit cannot use these digits."
     if kind == "rule_choice":
         return _assignment(d, name, n)
+    if kind == "equal_digit_cover":
+        group = ", ".join(name(c) for c in d["equal"])
+        return (f"The Renban must contain {_lists(bits(d['digits']))}. "
+                f"Every possible host sees at least one of the equal cells {group}. "
+                "If the equal cells used any of these digits, the Renban would have no place for it.")
+    if kind == "single_digit_layout":
+        return (f"Consider digit {d['digit']} alone. It occurs once per row, column and box, "
+                "at most once per Renban, and once when every possible Renban window contains it. "
+                "Equal cells must all use or all avoid this digit. The eliminated cells occur in no compatible layout.")
+    if kind == "between" and d.get("distinct_groups"):
+        return ("Every interior digit lies strictly between the endpoints. Keep only endpoint and "
+                "interior candidates compatible with that interval and the marked cells' shared units.")
     if kind == "pattern_support":
         unit = _unit(d.get("unit"))
         if "digits" in d:
