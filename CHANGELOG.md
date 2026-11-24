@@ -4,23 +4,19 @@ User-facing features and fixes are recorded here. See [CONTRIBUTING.md](CONTRIBU
 
 ## Unreleased
 
-Target version: 1.2.0-beta
+## [1.2.0] - 2026-11-24
 
 ### Added
 
-- Combine colour patterns across shaded inversion clues using 2×2, perimeter and connectivity constraints. Digit and colour deductions now feed back into the next layout pass.
-- Test the two candidates of equal cells with ordinary deductions, and combine Between Line endpoint cases using all-different house matching. Walkthroughs include the supporting cases.
-
-- Support two orthogonally connected colours with no monochrome 2×2 and outside clues counting shaded inversions. The walkthrough keeps colour and digit candidates separate.
-- Deduce required Renban digits across palindrome and clone pairs. Between lines also propagate back to their endpoints.
-
-- Add separate written-digit and effective-value deductions for liar-cell puzzles with Renban, Kropki and XV clues. The walkthrough shows both domains and explains how the liar-cell rules link them.
+- Solve **The Smiler** by combining shaded inversion clues with 2×2, perimeter, and connectivity constraints. The walkthrough displays the two colour regions and explains how digit and colour deductions inform each other.
+- Solve **Fidget** by combining Between Line endpoint choices with all-different house matching. Between lines now propagate back to their endpoints, and Renban deductions account for equal cells on palindrome and clone clues. Walkthroughs include the supporting cases.
+- Solve **Renban Lies** with separate deductions for written digits and effective values. This supports liar-cell puzzles that combine the same model with Renban, Kropki, and XV clues.
 
 ### Fixed
 
-- Distinguish Between, pink Renban and grey palindrome lines in local rule detection. A consecutive Renban set no longer becomes a separate consecutive-line constraint.
-
-- Treat the closing point of a looped Renban as part of the same cell. Recover supplied answers when a SudokuPad canvas pads the playable grid with blank note cells.
+- Distinguish Between, pink Renban, and grey palindrome lines in local rule detection. A consecutive Renban set no longer becomes a separate consecutive-line constraint.
+- Count the starting cell of a looped Renban once when the line returns to it.
+- Recover supplied answers when a SudokuPad canvas pads the playable grid with blank note cells.
 
 ## [1.1.0-beta] - 2026-11-24
 
@@ -44,5 +40,6 @@ Target version: 1.2.0-beta
 - Reuse shared puzzle history and cached walkthroughs, with a choice to regenerate after solver or language changes.
 - Self-host with local or optional LLM rule parsing, concurrency and usage limits, and configurable storage.
 
+[1.2.0]: https://github.com/CodeInDreams/YSudoku/releases/tag/v1.2.0
 [1.1.0-beta]: https://github.com/CodeInDreams/YSudoku/releases/tag/v1.1.0-beta
 [1.0.0]: https://github.com/CodeInDreams/YSudoku/releases/tag/v1.0.0
