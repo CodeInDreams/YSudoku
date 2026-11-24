@@ -8,7 +8,7 @@ import re
 import urllib.error
 import urllib.request
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from .decode import decode_payload
 
@@ -54,10 +54,8 @@ def _extract_target(target: str) -> tuple[str, str]:
 
     if target.startswith("{"):
         return "json", target
-    if re.match(r"^(scl|ctc|scf)", target):
+    if target.startswith(("scl", "ctc", "scf", "fpuz")):
         return "payload", target
-    if re.match(r"^(fpuz|fpuzzles)", target):
-        raise LoadError("暂不支持 f-puzzles 格式（P2 计划）")
 
     if target.startswith("http://") or target.startswith("https://"):
         parsed = urlparse(target)
@@ -68,6 +66,8 @@ def _extract_target(target: str) -> tuple[str, str]:
             if key in query and query[key]:
                 return "id", query[key][0]
         path = parsed.path.strip("/")
+        if path.startswith("fpuz"):
+            return "payload", unquote(path)
         if not path:
             raise LoadError("这个链接里没有题目 id")
         if path.startswith("scl") or "/scl" in path:
@@ -85,7 +85,7 @@ def _extract_target(target: str) -> tuple[str, str]:
 def _payload_from_raw(raw: str) -> dict:
     if raw.lstrip().startswith("{"):
         return json.loads(raw)
-    if re.match(r"^(scl|ctc)", raw):
+    if raw.lstrip().startswith(("scl", "ctc", "fpuz")):
         return decode_payload(raw)
     raise LoadError("响应不是 SudokuPad 数据包")
 

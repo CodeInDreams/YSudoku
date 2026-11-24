@@ -11,6 +11,8 @@ from __future__ import annotations
 import json
 import re
 
+from .fpuzzles import normalize_fpuzzles
+
 # 65-character alphabet used by SudokuPad ('\\' replaced the usual '=').
 _ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/\\"
 _REV = {ch: i for i, ch in enumerate(_ALPHABET)}
@@ -154,8 +156,13 @@ def _restore_names(obj):
 
 
 def decode_payload(raw: str) -> dict:
-    """Decode a raw ``scl...`` payload into a dict."""
+    """Decode a SudokuPad or supported f-puzzles payload into a drawing inventory."""
     raw = raw.strip()
+    if raw.startswith("fpuz"):
+        prefix = "fpuzzles" if raw.startswith("fpuzzles") else "fpuz"
+        text = lzw_decompress(raw[len(prefix):])
+        text = text.encode("utf-16-le", errors="surrogatepass").decode("utf-16-le")
+        return normalize_fpuzzles(json.loads(text))
     for prefix in ("scl", "ctc"):
         if raw.startswith(prefix):
             raw = raw[len(prefix):]

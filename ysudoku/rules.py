@@ -9,7 +9,9 @@ LLM is configured we fall back to heuristics based on colours and keywords.
 
 from __future__ import annotations
 
+from colorsys import rgb_to_hsv
 from dataclasses import dataclass, field
+import re
 from math import dist
 
 from .constraints import (
@@ -822,7 +824,14 @@ PURPLE = {"#ff00ff", "#9b30ff", "#8000ff", "#9400d3", "#da70d6"}
 BLUE = {"#0000ff", "#0096ff", "#00bfff", "#1e90ff", "#4169e1"}
 GREY = {"#808080", "#a8a8a8", "#c0c0c0", "#999999", "#a0a0a0"}
 ORANGE = {"#ffa500", "#ff8c00", "#ff7f00"}
-RED = {"#ff0000", "#dc143c", "#e00000"}
+RED = {"#ff0000", "#f00", "#dc143c", "#e00000"}
+
+
+def _red_line(colour):
+    if not re.fullmatch(r"#[0-9a-f]{6}(?:[0-9a-f]{2})?", colour):
+        return colour in RED
+    hue, saturation, brightness = rgb_to_hsv(*(v / 255 for v in bytes.fromhex(colour[1:7])))
+    return min(hue, 1 - hue) <= 0.05 and saturation >= 0.35 and brightness >= 0.25
 
 
 def _has(text: str, *words: str) -> bool:
@@ -853,7 +862,8 @@ def heuristic_spec(puzzle: Puzzle, elements: list[Element]) -> dict:
             rules.append({"kind": "product", "elements": line_ids, "total": total})
 
     cage_ids = [e.id for e in elements if e.kind == "cage" and e.attrs.get("sum") is not None]
-    if cage_ids and _has(text, "killer", "cage", "sum", "笼"):
+    typed_fpuzzles = (puzzle.raw or {}).get("format") == "fpuz"
+    if cage_ids and (typed_fpuzzles or _has(text, "killer", "cage", "sum", "笼")):
         rules.append({"kind": "cage", "elements": cage_ids})
 
     circle_ids = [e.id for e in elements if e.kind == "circle" and e.attrs.get("texts")]
@@ -882,7 +892,7 @@ def heuristic_spec(puzzle: Puzzle, elements: list[Element]) -> dict:
                           "sum": element.attrs["sum"]})
 
     dot_ids = [e.id for e in elements if e.kind == "dot"]
-    if dot_ids and _has(text, "kropki", "dot", "consecutive", "ratio", "consecutiv"):
+    if dot_ids and (typed_fpuzzles or _has(text, "kropki", "dot", "consecutive", "ratio", "consecutiv")):
         for dot in elements:
             if dot.kind != "dot":
                 continue
@@ -895,9 +905,12 @@ def heuristic_spec(puzzle: Puzzle, elements: list[Element]) -> dict:
         return [e.id for e in lines if e.attrs.get("color", "") in colors]
 
     if _has(text, "whisper"):
-        ids = lines_with(GREEN) or [e.id for e in lines if _has(text, "german", "whisper")]
+        kind = "dutch_whisper" if _has(text, "dutch") else "german_whisper"
+        if re.search(r"\bwhispers?\b[^.\n;]*?\b(?:on|along)\s+(?:the\s+)?red\s+lines?\b", text, re.I):
+            ids = [e.id for e in lines if _red_line(e.attrs.get("color", ""))]
+        else:
+            ids = lines_with(GREEN) or [e.id for e in lines if _has(text, "german", "whisper")]
         if ids:
-            kind = "dutch_whisper" if _has(text, "dutch") else "german_whisper"
             rules.append({"kind": kind, "elements": ids})
     if _has(text, "renban"):
         ids = lines_with(PURPLE) or [e.id for e in lines]
@@ -907,7 +920,7 @@ def heuristic_spec(puzzle: Puzzle, elements: list[Element]) -> dict:
         ids = lines_with(GREY) or [e.id for e in lines]
         if ids:
             rules.append({"kind": "palindrome", "elements": ids})
-    if _has(text, "between"):
+    if re.search(r"\bbetween[ -]?lines?\b", text, re.I):
         ids = [e.id for e in lines if len(e.cells) >= 3]
         if ids:
             rules.append({"kind": "between", "elements": ids})
