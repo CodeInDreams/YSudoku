@@ -45,6 +45,7 @@ class RegionFragments:
         self.colours = {}
         self.display_colours = {}
         self.geometry = {}
+        self.cover_sizes = {}
         self.board = (1 << (n*n)) - 1
         self.left = sum(1 << (i*n) for i in range(n))
         self.right = self.left << (n-1)
@@ -80,8 +81,14 @@ class RegionFragments:
         return self.geometry[union]
 
     def minimum_size(self, group):
-        outside = self.board ^ sum(1 << c for c in group)
-        minimum = len(group)
+        return self.minimum_cover(sum(1 << c for c in group))
+
+    def minimum_cover(self, mask):
+        """Size needed to cover the cells and the remainders they cut off."""
+        if mask in self.cover_sizes:
+            return self.cover_sizes[mask]
+        outside = self.board ^ mask
+        minimum = mask.bit_count()
         while outside:
             piece = outside & -outside
             while True:
@@ -91,6 +98,8 @@ class RegionFragments:
                 piece = more
             minimum += piece.bit_count() % self.n
             outside ^= piece
+        if len(self.cover_sizes) < 32_768:
+            self.cover_sizes[mask] = minimum
         return minimum
 
     def merge(self, a, b):
@@ -426,9 +435,9 @@ def region_steps(solver, rules, steps):
                     shape = shape_deduction(fragments, clues)
                     if not shape:
                         break
-                    cells, detail = shape
-                    step = Step(len(steps), "chaos_region", 2, "区域形状推理", detail, [],
-                                visual={"focus": cells}, pre_dom=pre_dom, pre_vals=pre_vals)
+                    step = Step(len(steps), "chaos_region", 2, shape.title, shape.detail, [],
+                                visual={"focus": shape.cells, "premise": shape.evidence.get("premise", [])},
+                                pre_dom=pre_dom, pre_vals=pre_vals, narration=shape.evidence)
             step.index = len(steps)
         snapshot = fragments.snapshot()
         # Region labels take one slot; preserve other annotations up to the

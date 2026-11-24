@@ -177,6 +177,11 @@ def english_step(payload, n, evidence):
     reason = event["reason"] if event else {"kind": technique, "data": {}}
     d = reason["data"]
     title = TITLES.get(technique, "Deduction")
+    if technique == "chaos_region":
+        if "region_anchor" in evidence:
+            title = "Region shapes from an uncoloured cell"
+        elif "shape_comparisons" in evidence:
+            title = "Compare region shapes"
     assumption = None
     if technique == "contradiction":
         title, detail, assumption = _refutation(payload, evidence, d, name, n)
@@ -214,6 +219,24 @@ def _explain(payload, kind, d, evidence, name, n):
     if technique == "chaos_pattern" and evidence:
         return (f"The clue at {names(evidence['cells'])} allows these region counts: "
                 f"{_lists(evidence['counts'])}. Each region is connected and contains {n} distinct digits.")
+    if technique == "chaos_region" and "shape_comparisons" in evidence:
+        lines = [f"Fragments in the same region must have an identical connected {n}-cell shape."]
+        for item in evidence["shape_comparisons"]:
+            anchor = name(item["anchor"])
+            targets = names(item["targets"])
+            lines.append(f"None of the {item['shape_count']} shapes at {anchor} is available "
+                         f"to any of the fragments at {targets}. Each is in a different region from {anchor}.")
+        return "\n".join(lines)
+    if technique == "chaos_region" and "region_anchor" in evidence:
+        anchor = name(evidence["region_anchor"])
+        targets = names(evidence["targets"])
+        peers = evidence["peers"]
+        check = f" after checking support from the fragments at {names(peers)}" if peers else ""
+        intro = (f"Starting from the uncoloured cell {anchor}, "
+                 f"{evidence['shape_count']} connected {n}-cell shapes remain{check}.")
+        if evidence["same"]:
+            return f"{intro} Every shape contains {targets}, so those cells are in the same region."
+        return f"{intro} Every shape avoids {targets}, so those neighbouring fragments belong to other regions."
     if technique in ("chaos_pattern", "chaos_region"):
         return (f"Use connected regions of {n} cells with distinct digits. "
                 f"The marked cells ({names(visual.get('focus', []))}) show the region relationship under consideration.")

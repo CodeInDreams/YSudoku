@@ -1,22 +1,48 @@
 """Local support for a single region of a fixed-size partition."""
 
+from dataclasses import dataclass, field
+from functools import lru_cache
+
 from .constraints_ir import AllDifferent
 from .state import Contradiction, bits, cell_name
+
+
+@dataclass
+class RegionShapeProof:
+    cells: list[int]
+    detail: str
+    title: str = "区域形状推理"
+    evidence: dict = field(default_factory=dict)
 
 
 def _mask(cells):
     return sum(1 << c for c in cells)
 
 
-def region_shapes(board, root, clues, limit=7500):
-    """Return all surviving shapes, or None if the local budget is exhausted."""
-    owned = _mask(board.groups[root])
-    masks = {r: _mask(cells) for r, cells in board.groups.items()}
+def _growth_space(board, root, masks):
+    owned = masks[root]
     allowed = board.board
     for other, mask in masks.items():
         if other != root and board.blocked(root, other):
             allowed &= ~mask
-    allowed = board.reachable(owned, allowed)
+    return board.reachable(owned, allowed)
+
+
+@lru_cache(maxsize=4096)
+def _has_distinct_digits(restricted_domains):
+    # Unrestricted cells can use any digits left after matching the restricted
+    # ones. Every accepted shape has exactly one cell per digit.
+    return (not restricted_domains
+            or AllDifferent(range(len(restricted_domains))).possible(restricted_domains))
+
+
+def region_shapes(board, root, clues, limit=7500, *, masks=None, allowed=None):
+    """Return all surviving shapes, or None if the local budget is exhausted."""
+    if masks is None:
+        masks = {r: _mask(cells) for r, cells in board.groups.items()}
+    if allowed is None:
+        allowed = _growth_space(board, root, masks)
+    owned = masks[root]
     if owned & ~allowed:
         return set()
     forced_groups = [mask for mask in masks.values() if mask.bit_count() > 1]
@@ -42,7 +68,8 @@ def region_shapes(board, root, clues, limit=7500):
                 visited += 1
                 if visited > limit:
                     return None
-    domains = dict(enumerate(board.state.dom))
+    domains = board.state.dom
+    full = board.state.full
     result = set()
     for shape in layers[board.n]:
         connected = shape & -shape
@@ -59,10 +86,10 @@ def region_shapes(board, root, clues, limit=7500):
                        <= k <= (mask & ~shape).bit_count() + bool(shape & mask)
                        for k in counts) for mask, counts in count_bounds):
             continue
-        cells = [c - 1 for c in bits(shape)]
-        if board.minimum_size(cells) != board.n:
+        if board.minimum_cover(shape) != board.n:
             continue
-        if not AllDifferent(cells).possible(domains):
+        restricted = tuple(sorted(domains[c - 1] for c in bits(shape) if domains[c - 1] != full))
+        if not _has_distinct_digits(restricted):
             continue
         # A complete region cannot contain both ends of a proven border.
         if any(shape & masks[a] and shape & masks[b] for a, b in board.separate):
@@ -79,7 +106,6 @@ def shape_deduction(board, clues):
                   else {_mask(group)})
         if shapes is not None:
             placements[root] = shapes
-    union_fits = {}
     for root, shapes in placements.items():
         group = board.groups[root]
         name = cell_name(root, board.n)
@@ -95,11 +121,7 @@ def shape_deduction(board, clues):
                     return not distinct and shape == other_shape
                 if not check_pockets:
                     return True
-                union = shape | other_shape
-                if union not in union_fits:
-                    cells = [c - 1 for c in bits(union)]
-                    union_fits[union] = board.minimum_size(cells) == 2 * board.n
-                return union_fits[union]
+                return board.minimum_cover(shape | other_shape) == 2 * board.n
 
             filtered = {s for s in shapes if any(can_coexist(s, t) for t in other_shapes)}
             if len(filtered) < len(shapes):
@@ -121,7 +143,7 @@ def shape_deduction(board, clues):
                 if a != b:
                     board.merge(a, b)
             cells = "、".join(cell_name(c, board.n) for c in added)
-            return sorted(board.groups[board.owner[root]]), (
+            return RegionShapeProof(sorted(board.groups[board.owner[root]]),
                 f"{name} 所在片区可扩成 {len(shapes)} 种连通的 {board.n} 格区域。"
                 f"按格数、已知边界、圈域提示和数字互异筛选，{premise}每种都包含 {cells}，所以这些格必须同区。")
         boundary = board.expand(_mask(group)) & ~union
@@ -131,7 +153,125 @@ def shape_deduction(board, clues):
             for other in excluded:
                 board.apart(root, other)
             cells = "、".join(cell_name(c, board.n) for c in excluded)
-            return sorted(group | set(excluded)), (
+            return RegionShapeProof(sorted(group | set(excluded)),
                 f"{name} 所在片区有 {len(shapes)} 种可行的连通区域形状，{premise}其中都避开 {cells}，"
                 "因此可以确定这些邻格与该片区异区。")
+    return (frontier_deduction(board, clues, placements)
+            or separated_shape_anchors(board, placements))
+
+
+MAX_FRONTIER_ROOTS = 16
+FRONTIER_SHAPE_BUDGET = 2500
+MAX_PAIR_CHECKS = 25_000
+
+
+def frontier_deduction(board, clues, placements):
+    """Use local shapes around the frontier of the constructed partition."""
+    relevant = board.expand(_mask(c for r in placements for c in board.groups[r]))
+    relevant |= _mask({cell for clue in clues for cell in clue.cells()})
+    if not relevant:
+        return None
+    masks = {r: _mask(cells) for r, cells in board.groups.items()}
+    peers_by_cost = sorted(placements.items(), key=lambda item: (len(item[1]), item[0]))
+    priority = []
+    for root in board.groups.keys() - board.colours.keys():
+        if relevant & masks[root]:
+            reach = _growth_space(board, root, masks)
+            priority.append((reach.bit_count(), root, reach))
+
+    for _, root, allowed in sorted(priority)[:MAX_FRONTIER_ROOTS]:
+        shapes = region_shapes(board, root, clues, limit=FRONTIER_SHAPE_BUDGET, masks=masks, allowed=allowed)
+        if shapes is None:
+            continue
+        proof = _frontier_consequence(board, root, shapes, masks)
+        if proof:
+            return proof
+
+        # Prefer a single supporting region. If that is insufficient, combine
+        # the independent support checks without exploring a board solution.
+        filtered = shapes
+        peers = []
+        for other, candidates in peers_by_cost:
+            if len(shapes) * len(candidates) > MAX_PAIR_CHECKS:
+                continue
+            common = shapes & candidates
+            supports = {shape for shape in shapes if shape in common
+                        or any(not shape & candidate for candidate in candidates)}
+            if supports == shapes:
+                continue
+            proof = _frontier_consequence(board, root, supports, masks, [other])
+            if proof:
+                return proof
+            if filtered - supports:
+                filtered &= supports
+                peers.append(other)
+        if peers:
+            proof = _frontier_consequence(board, root, filtered, masks, peers)
+            if proof:
+                return proof
     return None
+
+
+def _frontier_consequence(board, root, shapes, masks, peers=()):
+    name = cell_name(root, board.n)
+    if not shapes:
+        raise Contradiction(f"{name} 所在区域没有可行的 {board.n} 格形状。")
+    common, union = board.board, 0
+    for shape in shapes:
+        common &= shape
+        union |= shape
+    same = [c - 1 for c in bits(common & ~masks[root])]
+    apart = sorted({board.owner[c - 1] for c in bits(board.expand(masks[root]) & ~union)
+                    if not board.blocked(root, board.owner[c - 1])})
+    if not same and not apart:
+        return None
+
+    target = same or apart
+    original = sorted(board.groups[root])
+    peer_cells = sorted({c for other in peers for c in board.groups[other]})
+    focus = sorted(set(original).union(*(board.groups[board.owner[c]] for c in target)))
+    letters = "、".join(cell_name(c, board.n) for c in target)
+    premise = f"分别检查与 {'、'.join(cell_name(c, board.n) for c in peers)} 所在片区的形状能否共存后，" if peers else ""
+    intro = f"从未染色的 {name} 出发，{premise}有 {len(shapes)} 种可能的 {board.n} 格连通区域。"
+    if same:
+        for cell in same:
+            a, b = board.owner[root], board.owner[cell]
+            if a != b:
+                board.merge(a, b)
+        detail = f"{intro}每种形状都经过 {letters}，这些格必须同区。"
+    else:
+        for other in apart:
+            board.apart(root, other)
+        detail = f"{intro}每种形状都避开 {letters}，这些邻格必须异区。"
+    return RegionShapeProof(focus, detail, "未染色格的区域形状", {
+        "region_anchor": root, "shape_count": len(shapes), "same": bool(same),
+        "targets": target, "peers": list(peers), "premise": peer_cells,
+    })
+
+
+def separated_shape_anchors(board, placements):
+    """Compare shape lists once, then apply independent distinct-region facts."""
+    ordered = sorted(placements, key=lambda root: (len(placements[root]), root))
+    comparisons = []
+    focus = set()
+    for index, root in enumerate(ordered):
+        shapes = placements[root]
+        excluded = [other for other in ordered[index + 1:]
+                    if not board.blocked(root, other) and shapes.isdisjoint(placements[other])]
+        if excluded:
+            comparisons.append({"anchor": root, "targets": excluded, "shape_count": len(shapes)})
+            focus.update((root, *excluded))
+    if not comparisons:
+        return None
+
+    detail = [f"如果两个片区同区，它们必须能扩成同一个连通的 {board.n} 格形状。"]
+    for comparison in comparisons:
+        root = comparison["anchor"]
+        name = cell_name(root, board.n)
+        peers = "、".join(cell_name(c, board.n) for c in comparison["targets"])
+        detail.append(f"{name} 的 {comparison['shape_count']} 种形状在 {peers} 的清单里都找不到，"
+                      f"因此 {name} 与这些片区分别异区。")
+        for other in comparison["targets"]:
+            board.apart(root, other)
+    return RegionShapeProof(sorted(focus), "\n".join(detail), "比较片区的可行形状",
+                            {"shape_comparisons": comparisons})
