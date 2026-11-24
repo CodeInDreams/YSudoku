@@ -1,11 +1,12 @@
 import unittest
 from copy import copy
 from itertools import combinations
+from time import monotonic
 
 from ysudoku.chaos_regions import RegionFragments
-from ysudoku.constraints import Constraint, RegionCount
+from ysudoku.constraints import Clone, Constraint, RegionCount
 from ysudoku.model import parse_puzzle
-from ysudoku.refutation_path import _region_endpoint, _shorten_digits
+from ysudoku.refutation_path import _region_endpoint, _shorten_digits, refute_equal_bivalue
 from ysudoku.rules import CompiledRules
 from ysudoku.search import refute_candidate_with_proof
 from ysudoku.solve import Solver
@@ -31,6 +32,18 @@ class Gate(Constraint):
 
 
 class RefutationPathTest(unittest.TestCase):
+    def test_refute_a_bivalue_with_the_existing_equality_deduction(self):
+        puzzle = parse_puzzle({"cells": [[{} for _ in range(4)] for _ in range(4)]})
+        solver = Solver(puzzle, CompiledRules([Clone([0, 5]), Gate(5, 1, 2, 3)]))
+        solver.state = State(4, [])
+        solver.state.dom[0] = solver.state.dom[5] = 0b11
+        solver.state.place(2, 3)
+        step = refute_equal_bivalue(solver, monotonic() + 3)
+        self.assertEqual(step.narration["assumed"], 1)
+        self.assertEqual(solver.state.vals[0], 2)
+        self.assertEqual(solver.state.vals[5], 0)
+        self.assertTrue(step.to_dict(4, "en")["proof_detail"])
+
     def test_replay_replaces_a_redundant_proof_and_keeps_the_required_one(self):
         puzzle = parse_puzzle({"cells": [[{} for _ in range(4)] for _ in range(4)]})
         rules = CompiledRules([Gate(0, 1, 2, 3), Gate(1, 1, 2, 3), Gate(1, 2, 0, 1)])

@@ -55,6 +55,9 @@ def _label(label):
 
 
 def _cause(text, conflict, n):
+    if match := re.fullmatch(r"数字 (\d+) 在行列宫、Renban 与同值格之间没有可行布局", text):
+        return (f"Digit {match[1]} has no layout that satisfies the rows, columns, boxes, "
+                "Renban lines and equal cells.")
     match = re.fullmatch(r"尾部和为 (\d+)，末格是 (\d+)，所以 (R\d+C\d+) 必须是 1，但该格已排除 1", text)
     if match:
         total, end, cell = match.groups()
@@ -179,6 +182,18 @@ def english_step(payload, n, evidence):
     reason = event["reason"] if event else {"kind": technique, "data": {}}
     d = reason["data"]
     title = TITLES.get(technique, "Deduction")
+    if technique == "between_cases":
+        from .between_cases import between_cases_text
+        payload.update(title="Combine Between Line endpoint cases",
+                       detail=between_cases_text(evidence, n, "en"))
+        return payload
+    if technique == "equal_bivalue":
+        cells = ", ".join(name(c) for c in evidence["cells"])
+        detail = (f"{cells} share the same digit. Suppose their digit is {evidence['assumed']}. "
+                  f"{_cause(evidence['cause'], None, n)} "
+                  f"Their only remaining digit is {evidence['forced']}.")
+        payload.update(title="Refute one of two equal values", detail=detail)
+        return payload
     if technique == "shaded_inversions":
         from .shaded_inversions import shade_step_text
         detail = shade_step_text(evidence, n, "en")

@@ -8,6 +8,9 @@ Target version: 1.2.0-beta
 
 ### Added
 
+- Combine colour patterns across shaded inversion clues using 2×2, perimeter and connectivity constraints. Digit and colour deductions now feed back into the next layout pass.
+- Test the two candidates of equal cells with ordinary deductions, and combine Between Line endpoint cases using all-different house matching. Walkthroughs include the supporting cases.
+
 - Support two orthogonally connected colours with no monochrome 2×2 and outside clues counting shaded inversions. The walkthrough keeps colour and digit candidates separate.
 - Deduce required Renban digits across palindrome and clone pairs. Between lines also propagate back to their endpoints.
 

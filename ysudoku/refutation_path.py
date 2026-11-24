@@ -4,7 +4,7 @@ import time
 from itertools import combinations
 
 from .search import refute_candidate_with_proof
-from .state import Contradiction
+from .state import Contradiction, Reason, bits, cell_name
 
 
 def shorten_path(path, costs, replay, score, *, seconds=6.0, max_trials=24):
@@ -85,8 +85,54 @@ def _shorten_digits(checkpoint, solver, costs):
     return shorten_path(solver, costs, replay, _digit_score)
 
 
+def refute_equal_bivalue(solver, deadline):
+    """Try the two candidates of cells already linked by an equality clue."""
+    from .intersections import _equal_groups
+
+    checked = set()
+    for rule in solver.constraints:
+        for group in _equal_groups(rule):
+            if len(group) < 2 or any(c in checked for c in group):
+                continue
+            checked.update(group)
+            cell = group[0]
+            mask = solver.state.dom[cell]
+            if mask.bit_count() != 2 or any(solver.state.dom[c] != mask for c in group):
+                continue
+            for value in bits(mask):
+                if time.monotonic() >= deadline:
+                    return None
+                trial = solver.fork_for_replay()
+                trial.steps = []
+                try:
+                    trial.state.place(cell, value)
+                except Contradiction:
+                    continue
+                result = trial.run(max_steps=18, candidate_maps=False, merge_singles=False,
+                                   deadline=deadline)
+                if result.status != "invalid":
+                    continue
+                before, values = solver._pre()
+                forced = next(digit for digit in bits(mask) if digit != value)
+                solver.state.begin()
+                solver.state.place(cell, forced, Reason("equal_bivalue", {"cells": list(group)}))
+                step = solver._commit(solver.state.end(), before, values)
+                names = "、".join(cell_name(c, solver.state.n) for c in group)
+                step.technique, step.title, step.tier = "equal_bivalue", "同值格双候选反证", 4
+                step.detail = (f"{names} 必须同值。假设它们为 {value}，逐步推导后出现矛盾。"
+                               f"{result.message}。所以它们只能为 {forced}。")
+                step.visual["groups"] = [{"cells": list(group), "kind": "pair"}]
+                step.visual["focus"] = list(group)
+                step.narration = {"cells": list(group), "assumed": value, "forced": forced,
+                                  "cause": result.message, "trace": result.steps}
+                solver.steps.append(step)
+                return step
+    return None
+
+
 def finish_with_refutations(solver, result, max_steps, warnings):
     """Discover a path, then publish only the suffix that survives replay."""
+    from .between_cases import apply_between_cases
     checkpoint = solver.fork_for_replay()
     on_step, solver.on_step = solver.on_step, None
     deadline = time.time() + 25.0
@@ -94,6 +140,12 @@ def finish_with_refutations(solver, result, max_steps, warnings):
     while (result.status == "stuck" and len(solver.steps) < max_steps
            and time.time() < deadline):
         start = len(solver.steps)
+        if refute_equal_bivalue(solver, time.monotonic() + min(3, deadline - time.time())):
+            result = solver.run(max_steps, candidate_maps=False, merge_singles=False)
+            continue
+        if apply_between_cases(solver, time.monotonic() + min(12, deadline - time.time())):
+            result = solver.run(max_steps, candidate_maps=False, merge_singles=False)
+            continue
         step = solver.contradiction_step(deadline, max_steps=max_steps)
         if step is None:
             warnings.append("找到的反证过长，未能在步骤预算内展示完整证明"

@@ -111,6 +111,16 @@ class Step:
         if self.technique == "dual_value" and self.narration.get("proof"):
             from .dual_values import describe_step
             data["proof_detail"] = describe_step(self.narration, n, lang, show_trace=True)
+        if self.technique == "equal_bivalue":
+            data["proof_detail"] = "\n\n".join(
+                step.to_dict(n, lang)["detail"] for step in self.narration["trace"]
+            )
+        if self.technique == "between_cases":
+            from .between_cases import between_cases_text
+            data["proof_detail"] = between_cases_text(self.narration, n, lang, expanded=True)
+        if self.technique == "shaded_inversions" and self.narration.get("layout"):
+            from .shaded_inversions import shade_step_text
+            data["proof_detail"] = shade_step_text(self.narration, n, lang, show_trials=True)
         if lang == "en":
             from .step_locale import english_step
             return english_step(data, n, self.narration)
