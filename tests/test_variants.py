@@ -2,6 +2,7 @@ import json
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -33,6 +34,27 @@ def run(spec):
 
 
 class VariantTest(unittest.TestCase):
+    def test_liar_cell_values_stop_incomplete_rule_compilation(self):
+        data = puzzle()
+        data["metadata"]["rules"] = (
+            "LIAR CELLS: Each row contains one liar cell, whose real value is different from its digit. "
+            "Pink Renban lines apply to the values."
+        )
+        for kwargs in ({}, {"spec_override": {"rules": [{"kind": "renban", "elements": ["line:0"]}]}}):
+            with self.subTest(kwargs=kwargs), patch("ysudoku.pipeline._llm_spec") as llm:
+                result = analyze(json.dumps(data), lang="en", **kwargs)
+                self.assertEqual(result.status, "unsupported")
+                self.assertIn("written digits and effective values", result.message)
+                self.assertEqual(result.result.steps, [])
+                self.assertEqual(result.rules.constraints, [])
+                llm.assert_not_called()
+
+    def test_word_liar_does_not_disable_ordinary_rules(self):
+        data = puzzle()
+        data["metadata"]["rules"] = "One of two Renban clues lies. There are no liar cells."
+        result = analyze(json.dumps(data), use_llm=False, spec_override={"rules": []})
+        self.assertEqual(result.status, "solved")
+
     def test_sandwich(self):
         spec = {"rules": [{"kind": "sandwich", "elements": ["line:0"], "sum": 3}],
                 "globals": []}

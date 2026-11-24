@@ -5,12 +5,13 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import llm, rulecache
 from .model import Puzzle, parse_puzzle
-from .rules import (build_inventory, compile_spec, heuristic_spec, paired_outside_choices,
+from .rules import (CompiledRules, build_inventory, compile_spec, heuristic_spec, paired_outside_choices,
                     with_paired_outside_choices)
 from .chaos import check_chaos_solution, solve_chaos
 from .solve import Solver, SolveResult, audit_steps, check_solution, compare_with_solution
@@ -20,7 +21,19 @@ from .narrate import Step
 
 
 # Invalidate cached results when the solver's proof strategy changes.
-ANALYSIS_VERSION = 33
+ANALYSIS_VERSION = 34
+
+
+def _requires_liar_cell_values(rules_text: str) -> bool:
+    """Identify a declared cell modifier that needs a separate value domain."""
+    return bool(
+        re.search(r"\bliar\s+cells?\b", rules_text, re.IGNORECASE)
+        and re.search(
+            r"\b(?:real|effective)\s+values?\s+(?:(?:is|are)\s+different\s+from|differs?\s+from)"
+            r"\s+(?:(?:its|their|the)\s+)?(?:written\s+)?digits?\b",
+            rules_text, re.IGNORECASE,
+        )
+    )
 
 
 @dataclass
@@ -260,6 +273,26 @@ def analyze(
         puzzle.source_url = "https://sudokupad.app/" + target
     if on_puzzle:
         puzzle.rule_sheet = on_puzzle(puzzle) or ""
+    if _requires_liar_cell_values(puzzle.rules_text or ""):
+        message = (
+            "Liar cells require separate domains for written digits and effective values. "
+            "This rule is not supported yet."
+            if lang == "en" else
+            "说谎格要求把盘面数字和实际值分别推理，当前求解器暂不支持这类规则。"
+        )
+        rules = CompiledRules([])
+        solver = Solver(puzzle, rules)
+        if on_rules is not None:
+            try:
+                on_rules([])
+            except Exception:
+                pass
+        return Analysis(
+            puzzle=puzzle, spec={"rules": [], "globals": []}, rules=rules, source="heuristic",
+            result=SolveResult("unsupported", [], []), initial=solver.initial,
+            status="unsupported", message=message, warnings=[message],
+            source_url=puzzle.source_url, lang=lang,
+        )
     inventory = build_inventory(puzzle)
 
     warnings: list[str] = []
