@@ -369,6 +369,9 @@ class Quadruple(Constraint):
     def to_dict(self) -> dict:
         return {"kind": self.kind, "cells": self._cells, "digits": self.digits}
 
+    def digit_demands(self) -> dict[int, int]:
+        return {digit: self.digits.count(digit) for digit in set(self.digits)}
+
     def check(self, values: list[int]) -> bool:
         present = [values[c] for c in self._cells]
         if any(v == 0 for v in present):
@@ -388,17 +391,26 @@ class Quadruple(Constraint):
 
         def coverable(probe: list[int] | None = None) -> bool:
             doms = probe or [st.dom[c] for c in self._cells]
-            reach = {0}
-            for digit in needs:
-                nxt = set()
-                for used in reach:
-                    for i, dom in enumerate(doms):
-                        if not used >> i & 1 and dom >> (digit - 1) & 1:
-                            nxt.add(used | (1 << i))
-                if not nxt:
-                    return False
-                reach = nxt
-            return bool(reach)
+            assigned: list[tuple[int, int]] = []
+
+            def visit(index: int, used: int) -> bool:
+                if index == len(needs):
+                    return True
+                digit = needs[index]
+                for i, dom in enumerate(doms):
+                    if used >> i & 1 or not dom >> (digit - 1) & 1:
+                        continue
+                    cell = self._cells[i]
+                    if any(d == digit and (cell in st.peers[other] or other == cell)
+                           for d, other in assigned):
+                        continue
+                    assigned.append((digit, cell))
+                    if visit(index + 1, used | (1 << i)):
+                        return True
+                    assigned.pop()
+                return False
+
+            return visit(0, 0)
 
         if not coverable():
             raise Contradiction("quadruple cannot be covered")

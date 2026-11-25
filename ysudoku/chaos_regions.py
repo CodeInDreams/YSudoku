@@ -400,6 +400,33 @@ def region_steps(solver, rules, steps, *, refutations=None, replay=None, deadlin
                 if len(cells) < 2:
                     continue
                 state.begin()
+                events = []
+                for con in solver.constraints:
+                    demands = con.digit_demands() if hasattr(con, "digit_demands") else None
+                    if not demands:
+                        continue
+                    circle = set(con.cells())
+                    if not circle <= cells:
+                        continue
+                    for digit, count in demands.items():
+                        if count != 1:
+                            continue
+                        for peer in sorted(cells - circle):
+                            if state.has(peer, digit):
+                                state.elim(peer, digit, Reason(
+                                    "region_digit",
+                                    {"circle": sorted(circle), "value": digit}))
+                                events.append(f"圈要求 {digit}，占用该区域唯一席位，"
+                                              f"{cell_name(peer, state.n)} 排除 {digit}")
+                if events:
+                    observation = sorted(cells), "同一区域内数字互异。" + "；".join(events)
+                    break
+                state.rollback()
+        if not observation:
+            for cells in fragments.groups.values():
+                if len(cells) < 2:
+                    continue
+                state.begin()
                 for c in sorted(cells):
                     if state.dom[c].bit_count() != 1:
                         continue
