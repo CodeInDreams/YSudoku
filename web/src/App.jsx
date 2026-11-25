@@ -966,6 +966,7 @@ export default function App() {
   }
 
   async function cacheAlive() {
+    if (phase === "failed") return true;
     if (!analysis?.storage?.key || !ready) return true;
     if (phase === "rendering") return true;
     try {
