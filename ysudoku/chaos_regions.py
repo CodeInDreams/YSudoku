@@ -401,7 +401,7 @@ def region_steps(solver, rules, steps, *, refutations=None, replay=None, deadlin
                 if len(cells) < 2:
                     continue
                 state.begin()
-                events = []
+                notes = []
                 for con in solver.constraints:
                     demands = con.digit_demands() if hasattr(con, "digit_demands") else None
                     if not demands:
@@ -417,10 +417,11 @@ def region_steps(solver, rules, steps, *, refutations=None, replay=None, deadlin
                                 state.elim(peer, digit, Reason(
                                     "region_digit",
                                     {"circle": sorted(circle), "value": digit}))
-                                events.append(f"圈要求 {digit}，占用该区域唯一席位，"
-                                              f"{cell_name(peer, state.n)} 排除 {digit}")
-                if events:
-                    observation = sorted(cells), "同一区域内数字互异。" + "；".join(events)
+                                notes.append(f"圈要求 {digit}，占用该区域唯一席位，"
+                                             f"{cell_name(peer, state.n)} 排除 {digit}")
+                if notes:
+                    events = state.end()
+                    observation = sorted(cells), "同一区域内数字互异。" + "；".join(notes)
                     break
                 state.rollback()
         if not observation:
