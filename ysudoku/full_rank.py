@@ -50,6 +50,11 @@ class FullRank(Constraint):
     def to_dict(self):
         return {"kind": self.kind, "cells": self.cells(), "rank": self.rank, "side": self.side}
 
+    def choice_premise(self, event):
+        if event.reason.kind == "full_rank":
+            return {"kind": "rank_head", **event.reason.data}
+        return None
+
     def check(self, values):
         reading = tuple(values[c] for c in self._cells)
         if reading[0] and reading[0] != self.head:

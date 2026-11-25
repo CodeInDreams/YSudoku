@@ -387,6 +387,7 @@ export default function App() {
   const [session, setSession] = useState(null);
 
   const [previewSrc, setPreviewSrc] = useState("");
+  const [previewGeometry, setPreviewGeometry] = useState(null);
   const [openingTitle, setOpeningTitle] = useState("");
   const [previewJob, setPreviewJob] = useState("");
   const [frameSrc, setFrameSrc] = useState("");
@@ -1076,8 +1077,12 @@ export default function App() {
       action={<Button onClick={demo} disabled={busy}>{t("header.demo")}</Button>} />
   );
 
-  const showingPreview = previewSrc && (!frameSrc || idx < 0);
+  const showingPreview = previewSrc && (!frameSrc || (idx < 0 && frameStep !== -1));
   const geometry = frameGeometry?.src === frameSrc ? frameGeometry : null;
+  const displayedGeometry = showingPreview
+    ? (previewGeometry?.src === previewSrc ? previewGeometry : null)
+    : geometry;
+  const boardImageStyle = { filter: dark ? "brightness(0.8) contrast(1.04)" : undefined };
   const metadata = sessionGrid?.session === session ? sessionGrid.rect : null;
   const savedRect = geometry && metadata?.imageWidth === geometry.width && metadata?.imageHeight === geometry.height
     ? metadata : null;
@@ -1093,7 +1098,7 @@ export default function App() {
       </CardHeader>
       <CardContent className="p-5">
         <div className="relative mx-auto flex w-full max-w-[540px] items-center justify-center overflow-hidden rounded-[2px] border bg-white dark:border-border dark:bg-neutral-800"
-          style={{ aspectRatio: geometry && !showingPreview ? `${geometry.width} / ${geometry.height}` : "1 / 1" }}>
+          style={{ aspectRatio: displayedGeometry ? `${displayedGeometry.width} / ${displayedGeometry.height}` : "1 / 1" }}>
           {!ready && !previewSrc && !deleted && phase !== "failed" && <div className="absolute inset-0 z-10 grid place-items-center gap-2 bg-white/80 text-xs text-slate-500 dark:bg-neutral-800/90 dark:text-neutral-300"><Loader2 className="h-5 w-5 animate-spin text-primary" />{t("board.loading")}</div>}
           {analysis && !deleted && phase === "failed" && (
             <div className="absolute inset-x-0 bottom-0 z-20 flex items-center justify-between gap-2 border-t bg-background p-3 text-xs">
@@ -1111,9 +1116,11 @@ export default function App() {
             </div>
           )}
           {showingPreview && !deleted && (
-            <img src={previewSrc} alt={t("board.initial")} className="h-full w-full object-contain"
+            <img key={previewSrc} src={previewSrc} alt={t("board.initial")} className="h-full w-full object-contain"
+              style={boardImageStyle}
               onError={() => setPreviewSrc("")}
-              onLoad={() => {
+              onLoad={({ currentTarget }) => {
+                setPreviewGeometry({ src: previewSrc, width: currentTarget.naturalWidth, height: currentTarget.naturalHeight });
                 if (previewJob) requestAnimationFrame(() => requestAnimationFrame(() => {
                   fetch(`/api/job/preview-ready?id=${encodeURIComponent(previewJob)}`, { method: "POST" }).catch(() => {});
                 }));
@@ -1122,7 +1129,7 @@ export default function App() {
           {frameSrc && !showingPreview && !deleted && (
             <img src={frameSrc} alt="SudokuPad"
               className={`h-full w-full object-fill transition-opacity ${ready ? "opacity-100" : "opacity-0"}`}
-              style={{ filter: dark ? "brightness(0.8) contrast(1.04)" : undefined }}
+              style={boardImageStyle}
               onLoad={() => setReady(true)} />
           )}
           {overlay && gridRect && idx >= 0 && !showingPreview && ready && !deleted && (

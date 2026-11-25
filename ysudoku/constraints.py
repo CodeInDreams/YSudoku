@@ -151,6 +151,9 @@ class Cage(Constraint):
             return True
         return sum(vals) == self.total and (not self.unique or len(set(vals)) == len(vals))
 
+    def sum_terms(self):
+        return [(c, 1) for c in self._cells], self.total
+
     def prune(self, st: State) -> bool:
         cells = self._cells
         k = len(cells)
@@ -274,6 +277,9 @@ class Arrow(Constraint):
             return True
         return values[self.circle] == sum(values[c] for c in self.arm)
 
+    def sum_terms(self):
+        return [(c, 1) for c in self.arm] + [(self.circle, -1)], 0
+
     def prune(self, st: State) -> bool:
         reason = Reason("arrow", {"circle": self.circle, "arm": self.arm})
         changed = False
@@ -342,6 +348,11 @@ class PairRule(Constraint):
         if values[self.a] == 0 or values[self.b] == 0:
             return True
         return self.ok(values[self.a], values[self.b])
+
+    def sum_terms(self):
+        if self._kind == "xv" and self.params.get("sum") is not None:
+            return [(self.a, 1), (self.b, 1)], int(self.params["sum"])
+        return None
 
     def prune(self, st: State) -> bool:
         reason = Reason(self._kind, {"a": self.a, "b": self.b, **self.params})
@@ -984,6 +995,12 @@ class XSums(Constraint):
             return False
         return sum(vals[:x]) == self.total
 
+    def choice_premise(self, event):
+        data = event.reason.data
+        if event.reason.kind == "x_sums" and "complement" in data:
+            return {"kind": "complement", **data}
+        return None
+
     def prune(self, st: State) -> bool:
         cells = self.ordered()
         first = cells[0]
@@ -1284,6 +1301,9 @@ class RegionCount(Constraint):
         if allowed != self.counts:
             self.counts = allowed
             self.repeat_witness = digit, minimum
+
+    def region_counts(self):
+        return list(self.counts)
 
     def describe(self) -> str:
         return f"区域计数 {self.counts}（{len(self._cells)} 格）"

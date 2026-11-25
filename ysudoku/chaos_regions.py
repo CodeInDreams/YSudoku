@@ -355,7 +355,8 @@ def region_steps(solver, rules, steps, *, refutations=None, replay=None, deadlin
     state = solver.state
     fragments = RegionFragments(state)
     solver.allow_chains = False  # Construct regions from deductions before the separate search fallback.
-    clues = [copy(c) for c in rules.constraints if c.kind == "region_count"]
+    clues = [copy(c) for c in rules.constraints
+             if getattr(c, "region_counts", lambda: None)() is not None]
     clue_ids = {id(clue): index for index, clue in enumerate(clues)}
     fragments.count_clues = clues
     fragments.all_count_clues = clues.copy()

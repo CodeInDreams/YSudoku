@@ -32,19 +32,14 @@ def _premise(name, terms, total, n):
 
 def _sources(constraints):
     for con in constraints:
-        if con.kind == "arrow":
-            terms = [(c, 1) for c in con.arm] + [(con.circle, -1)]
-            if len(dict(terms)) == len(terms):
-                yield "箭头", dict(terms), 0
-        elif con.kind == "cage" and len(set(con.cells())) == len(con.cells()):
-            yield "笼和", dict.fromkeys(con.cells(), 1), con.total
-        elif getattr(con, "_kind", "") == "xv" and con.a != con.b:
-            total = con.params["sum"]
-            yield {5: "V", 10: "X"}.get(total, "配对和"), dict.fromkeys(con.cells(), 1), total
-        elif con.kind == "ir_support":
-            for relation in con.relations:
-                if isinstance(relation, Sum):
-                    yield "和数", dict.fromkeys(relation.cells, 1), relation.total
+        terms = con.sum_terms() if hasattr(con, "sum_terms") else None
+        if not terms:
+            continue
+        pairs, total = terms
+        if not pairs or len(dict(pairs)) != len(pairs):
+            continue
+        name = getattr(con, "describe", lambda: "线索")()
+        yield name, dict(pairs), int(total)
 
 
 @dataclass

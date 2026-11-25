@@ -4,6 +4,18 @@ User-facing features and fixes are recorded here. See [CONTRIBUTING.md](CONTRIBU
 
 ## Unreleased
 
+Target version: 1.2.1-beta
+
+### Added
+
+- Consume required digits through generic constraint protocols (`digit_demands`, `sum_terms`, `region_counts`, `choice_premise`) instead of rule-name branches.
+- Apply a circle's required digit to a partial Chaos Construction region. Tringle and Cross now derives `R3C2 != 9` and places `R3C3 = 9`.
+
+### Fixed
+
+- Match the board preview's aspect ratio, crop, and dark-mode dimming to the playback frames. Use the rendered opening frame once it is available.
+- Keep the full outer border when cropping the playable grid.
+
 ## [1.2.0] - 2026-11-24
 
 ### Added

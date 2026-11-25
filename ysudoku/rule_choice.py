@@ -127,11 +127,10 @@ class RuleChoice(Constraint):
                         trial.events = []
                         changed |= rule.prune(trial)
                         for event in trial.events:
-                            data = event.reason.data
-                            if event.reason.kind == "x_sums" and "complement" in data:
-                                premises[index] = {"kind": "complement", **data}
-                            elif event.reason.kind == "full_rank":
-                                premises[index] = {"kind": "rank_head", **data}
+                            hook = getattr(rule, "choice_premise", None)
+                            premise = hook(event) if hook else None
+                            if premise:
+                                premises[index] = premise
                         trial.record = False
                     for cell in self.scope:
                         if not trial.vals[cell] and trial.dom[cell].bit_count() == 1:

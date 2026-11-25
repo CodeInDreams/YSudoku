@@ -677,7 +677,7 @@ def initial_screenshot(url, size, frame=None, *, crop=False):
 
 def _rule_image(puzzle):
     if not puzzle.rule_sheet:
-        puzzle.rule_sheet = initial_screenshot(puzzle.source_url, puzzle.size)
+        puzzle.rule_sheet = initial_screenshot(puzzle.source_url, puzzle.size, crop=not puzzle.has_outside_clues)
     png = Path(puzzle.rule_sheet).read_bytes()
     return "data:image/png;base64," + base64.b64encode(png).decode()
 

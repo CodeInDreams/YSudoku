@@ -106,15 +106,15 @@ def solve_chaos(puzzle, constraints, node_limit: int = 1_500_000,
     nodes = [0]
     started = time.monotonic()
     region_rules = getattr(fragments, "count_clues",
-                           [con for con in constraints if con.kind == "region_count"])
-    quadruples = [con for con in constraints if con.kind == "quadruple"]
+                           [con for con in constraints
+                            if getattr(con, "region_counts", lambda: None)() is not None])
+    quadruples = [con for con in constraints
+                  if getattr(con, "digit_demands", lambda: None)()]
     quad_needs = []
     for con in quadruples:
-        counts = [0] * (n + 1)
-        for digit in con.digits:
-            if 1 <= digit <= n:
-                counts[digit] += 1
-        quad_needs.append(tuple((d, count) for d, count in enumerate(counts) if count))
+        demands = con.digit_demands() or {}
+        quad_needs.append(tuple((int(d), int(c)) for d, c in demands.items()
+                                if 1 <= d <= n and c > 0))
     quad_by_row = [set() for _ in range(n)]
     quad_by_col = [set() for _ in range(n)]
     for qi, con in enumerate(quadruples):
@@ -282,7 +282,7 @@ def solve_chaos(puzzle, constraints, node_limit: int = 1_500_000,
     def check_all() -> bool:
         region_map = {c: region_of[c] for c in range(total)}
         for con in constraints:
-            if con.kind == "region_count":
+            if getattr(con, "region_counts", lambda: None)() is not None:
                 if not con.check_regions(values, region_map):
                     return False
             elif not con.check(values):

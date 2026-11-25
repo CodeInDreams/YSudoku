@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import Event, Thread
+from types import SimpleNamespace
 import time
 import unittest
 from unittest.mock import patch
@@ -12,6 +13,21 @@ from ysudoku import server, store
 
 
 class OpenPuzzleTest(unittest.TestCase):
+    def test_rule_image_uses_playback_crop_policy(self):
+        from ysudoku.pipeline import _rule_image
+
+        with TemporaryDirectory() as directory:
+            frame = Path(directory) / "preview.png"
+            frame.write_bytes(b"test")
+            for outside in (False, True):
+                with self.subTest(outside=outside), patch(
+                    "ysudoku.pipeline.initial_screenshot", return_value=str(frame)
+                ) as capture:
+                    puzzle = SimpleNamespace(rule_sheet="", source_url="https://sudokupad.app/example",
+                                             size=9, has_outside_clues=outside)
+                    _rule_image(puzzle)
+                    capture.assert_called_once_with(puzzle.source_url, 9, crop=not outside)
+
     def test_language_mismatch_requires_explicit_regeneration(self):
         fixture = str(Path(__file__).resolve().parents[1] / "fixtures/demo-killer.json")
         with TemporaryDirectory() as directory, patch.dict(os.environ, YSUDOKU_STORE=directory):
