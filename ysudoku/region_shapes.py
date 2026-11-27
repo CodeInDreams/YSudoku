@@ -39,7 +39,8 @@ def _has_distinct_digits(restricted_domains):
 MAX_EXPLAINED_SHAPES = 4
 
 
-def region_shapes(board, root, clues, limit=7500, *, masks=None, allowed=None, max_shapes=None):
+def region_shapes(board, root, clues, limit=7500, *, masks=None, allowed=None,
+                  max_shapes=None, case_pockets=None):
     """Return all surviving shapes, or None if the local budget is exhausted."""
     if masks is None:
         masks = {r: _mask(cells) for r, cells in board.groups.items()}
@@ -76,6 +77,8 @@ def region_shapes(board, root, clues, limit=7500, *, masks=None, allowed=None, m
     domains = board.state.dom
     full = board.state.full
     result = set()
+    if case_pockets is not None:
+        case_pockets.update(dict.fromkeys(layers[board.n], 0))
     for shape in layers[board.n]:
         connected = shape & -shape
         while (more := connected | (board.expand(connected) & shape)) != connected:
@@ -92,6 +95,9 @@ def region_shapes(board, root, clues, limit=7500, *, masks=None, allowed=None, m
                        for k in counts) for mask, counts in count_bounds):
             continue
         if board.minimum_cover(shape) != board.n:
+            if case_pockets is not None:
+                case_pockets[shape] = min((piece for piece in board.uncovered_components(shape)
+                                           if piece.bit_count() % board.n), key=int.bit_count)
             continue
         restricted = tuple(sorted(domains[c - 1] for c in bits(shape) if domains[c - 1] != full))
         if not _has_distinct_digits(restricted):

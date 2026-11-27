@@ -11,6 +11,13 @@ HEX = {
     p.PURPLE: "#e87cf1",
 }
 
+# Region backgrounds use lighter fills on the same native SudokuPad swatches.
+REGION_SWATCHES = dict(enumerate((
+    "#c4e0f6", "#c9e3a4", "#f4e596", "#f5ca9b", "#f3b9b5",
+    "#dec5ef", "#b1e4d5", "#b5d6b2", "#d8d8a9", "#ded2f6",
+    "#ebd0b9", "#f0dcad", "#d9bff1", "#b2e1ea", "#d8bbc6",
+), 3))
+
 
 def xv_colours(events):
     """Return [{cells:[a,b], colour, hex}] for XV events in a step."""

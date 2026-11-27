@@ -13,6 +13,9 @@ Target version: 1.2.1-beta
 
 ### Fixed
 
+- Use lighter Chaos Construction region fills so centre candidates stay legible. Prefer distinct colours for adjacent fragments when first colouring them.
+- Refute a region border when a few local completions either cut off unusable space or force a contradiction. Tringle and Cross now proves R6C1 belongs to the yellow region.
+
 - Explain Chaos Construction deductions with a short list of concrete shapes or a single border refutation. Skip shape comparisons that require larger enumerations.
 - Include generic IR sums in shared-sum reasoning, retain the evidence from compound rule choices, and apply digit and region checks together for Chaos Construction rules.
 - Do not auto-regenerate missing frames after a solve failure; wait for an explicit retry.

@@ -12,6 +12,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from .visual_colours import REGION_SWATCHES
+
 
 class LiveError(RuntimeError):
     pass
@@ -22,7 +24,7 @@ class LiveGone(LiveError):
 
 
 PORT = int(os.environ.get("YSUDOKU_LIVE_PORT", "8791"))
-FRAME_RENDERER_VERSION = 34
+FRAME_RENDERER_VERSION = 35
 MIN_CLEAN_FRAME_VERSION = 34
 _ROOT = Path(__file__).resolve().parents[1]
 _SCRIPT = _ROOT / "tools" / "live_sudokupad.mjs"
@@ -143,6 +145,9 @@ def build(url: str, steps: list[list[dict]], directory: str | None = None,
     payload = {"url": url, "steps": steps}
     if analysis is not None:
         payload["analysis"] = analysis
+        if any(group.get("region") for step in analysis.get("steps", [])
+               for group in step.get("visual", {}).get("colours", [])):
+            payload["regionPalette"] = REGION_SWATCHES
     if size:
         payload["size"] = int(size)
     if crop:

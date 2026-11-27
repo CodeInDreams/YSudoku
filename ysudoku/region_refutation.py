@@ -4,7 +4,8 @@ from copy import copy
 from itertools import combinations
 from time import monotonic
 
-from .state import Contradiction, cell_name
+from .region_shapes import region_shapes
+from .state import Contradiction, bits, cell_name
 
 
 def _fork(base):
@@ -194,12 +195,88 @@ def refute_border(fragments, clues, *, deadline=None):
         proof = _trial(trial, clues, max_merges=4)
         if proof is None:
             continue
-        actions, reasons = proof
-        for pos in range(len(actions) - 1, -1, -1):
-            shorter = _trial(trial, clues, actions[:pos] + actions[pos+1:])
-            if shorter is not None and len(shorter[1]) < len(reasons):
-                actions, reasons = shorter
+        actions, reasons = _trim_growth_trial(trial, clues, proof)
         if len(reasons) <= 5:
             _, en = _trial(trial, clues, actions, lang="en")
             return (a, b), reasons, en
     return None
+
+
+def _trim_growth_trial(trial, clues, proof):
+    actions, reasons = proof
+    for pos in range(len(actions) - 1, -1, -1):
+        shorter = _trial(trial, clues, actions[:pos] + actions[pos+1:])
+        if shorter is not None and len(shorter[1]) < len(reasons):
+            actions, reasons = shorter
+    return actions, reasons
+
+
+def refute_border_shape(fragments, clues, *, deadline=None):
+    """Check a border when at most six local completions fit behind it."""
+    n = fragments.n
+    masks = {root: sum(1 << cell for cell in group) for root, group in fragments.groups.items()}
+    candidates = []
+    for root in fragments.colours:
+        owned = masks[root]
+        size = owned.bit_count()
+        if not max(2, n - 4) <= size < n:
+            continue
+        neighbours = {fragments.owner[cell - 1] for cell in bits(fragments.expand(owned) & ~owned)}
+        candidates.extend((-size, root, other) for other in neighbours if not fragments.blocked(root, other))
+    for _, a, b in sorted(candidates)[:12]:
+        if deadline is not None and monotonic() >= deadline:
+            raise TimeoutError
+        trial = _fork(fragments)
+        trial.apart(a, b)
+        pockets = {}
+        shapes = region_shapes(trial, a, clues, limit=512, masks=masks, max_shapes=6, case_pockets=pockets)
+        if shapes is None or len(shapes) != 1:
+            continue
+        shape, = shapes
+        if any(not piece for other, piece in pockets.items() if other != shape):
+            continue
+        extra = shape & ~masks[a]
+        for root in sorted({trial.owner[cell - 1] for cell in bits(extra)}):
+            trial.merge(trial.owner[a], trial.owner[root])
+        proof = _trial(trial, clues, max_merges=6)
+        if proof is None:
+            continue
+        actions, reasons = _trim_growth_trial(trial, clues, proof)
+        if len(reasons) > 8:
+            continue
+        _, english = _trial(trial, clues, actions, lang="en")
+        rejected = [(case & ~masks[a], piece) for case, piece in sorted(pockets.items()) if case != shape]
+        return ((a, b), _shape_cases(extra, rejected, n) + reasons,
+                _shape_cases(extra, rejected, n, lang="en") + english)
+    return None
+
+
+def _shape_cases(extra, rejected, n, lang="zh"):
+    english = lang == "en"
+    sep = ", " if english else "、"
+
+    def names(mask):
+        return sep.join(cell_name(cell - 1, n) for cell in bits(mask))
+
+    lines = []
+    common = extra
+    if rejected:
+        groups = {}
+        for case, pocket in rejected:
+            common &= case
+            groups.setdefault(pocket, []).append(case)
+        if common:
+            fixed = names(common)
+            lines.append(f"With the known borders and circle clues, every extension includes {fixed}."
+                         if english else f"按已知边界和圈域限制，所有补法都要加上 {fixed}。")
+        for pocket, cases in groups.items():
+            size = pocket.bit_count()
+            witness = names(pocket) if size < n else cell_name((pocket & -pocket).bit_length() - 1, n)
+            choices = (" or " if english else " 或 ").join(f"[{names(case & ~common)}]" for case in cases)
+            capacity = "one cell" if size == 1 else f"{size} cells"
+            lines.append(f"Adding {choices} cuts off {capacity} ({witness}), which cannot be split into {n}-cell regions."
+                         if english else f"再加 {choices} 会切出 {size} 格空地（{witness}），无法分成 {n} 格区域。")
+    remaining = names(extra & ~common) if rejected else names(extra)
+    lines.append(f"The only remaining extension adds {remaining}." if english
+                 else f"唯一剩下的补法是加上 {remaining}。")
+    return lines

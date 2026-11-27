@@ -1,7 +1,7 @@
 from pathlib import Path
 import unittest
 
-from ysudoku.chaos_regions import RegionFragments
+from ysudoku.chaos_regions import RegionFragments, colours_are_close
 from ysudoku.constraints import RegionCount
 from ysudoku.pipeline import analyze
 from ysudoku.region_refutation import refute_count
@@ -64,3 +64,20 @@ class RegionRefutationTest(unittest.TestCase):
         self.assertIn("剩余落点为 R4C1、R5C1", lock.detail)
         self.assertIn("R3C2 排除 9", lock.detail)
         self.assertIn("only possible cells are R4C1, R5C1", lock.to_dict(9, "en")["detail"])
+
+        border = next(s for s in steps if s.narration.get("border_refutation") == [19, 45])
+        self.assertTrue(any(27 in group["cells"] and 45 in group["cells"]
+                            for group in border.visual["colours"]))
+        self.assertIn("1 格空地（R6C1）", border.detail)
+        self.assertIn("R4C5 所在区域最多能连到 2 格", border.detail)
+        self.assertIn("one cell (R6C1)", border.to_dict(9, "en")["detail"])
+
+        colours = {cell: group["colour"] for group in steps[-1].visual["colours"] if group.get("region")
+                   for cell in group["cells"]}
+        for cell, colour in colours.items():
+            neighbours = [cell + 9]
+            if cell % 9 < 8:
+                neighbours.append(cell + 1)
+            for peer in neighbours:
+                if peer in colours and colours[peer] != colour:
+                    self.assertFalse(colours_are_close(colour, colours[peer]), (cell, peer))

@@ -22,7 +22,7 @@ from .narrate import Step
 
 
 # Invalidate cached results when the solver's proof strategy changes.
-ANALYSIS_VERSION = 39
+ANALYSIS_VERSION = 40
 
 
 def _requires_liar_cell_values(rules_text: str) -> bool:

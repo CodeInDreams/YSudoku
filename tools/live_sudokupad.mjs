@@ -120,7 +120,7 @@ async function ensurePage({ fresh = false } = {}) {
   return page;
 }
 
-async function open(url, logicalN = 0, crop = false) {
+async function open(url, logicalN = 0, crop = false, regionPalette = {}) {
   // A browser context persists SudokuPad's progress and completion flags.
   // Each new capture starts with its own origin storage.
   await ensurePage({ fresh: true });
@@ -143,6 +143,14 @@ async function open(url, logicalN = 0, crop = false) {
     }
   } catch { /* puzzle already started or a resume overlay */ }
   await page.waitForSelector("svg.boardsvg", { timeout: 30000 });
+  const fills = colourKeys.flatMap((key, offset) => {
+    const hex = regionPalette[offset + 3];
+    return typeof hex === "string" && /^#[\da-f]{6}$/i.test(hex)
+      ? [`#cell-colors .color-${key} { fill: ${hex}; }`] : [];
+  });
+  if (fills.length) {
+    await page.addStyleTag({ content: fills.join("\n") });
+  }
   let lastView = "";
   for (let i = 0; i < 40; i++) {
     const current = await page.locator("svg.boardsvg").getAttribute("viewBox");
@@ -184,7 +192,7 @@ async function open(url, logicalN = 0, crop = false) {
   const capture = { x: left, y: top, width: right - left, height: bottom - top };
   const rect = { x: grid.x - left, y: grid.y - top, width: grid.width, height: grid.height,
                  imageWidth: capture.width, imageHeight: capture.height };
-  board = { box, grid, capture, rect, n, crop };
+  board = { box, grid, capture, rect, n, crop, regionPalette };
   lastRect = rect;
 
   const initial = await readBoard();
@@ -525,7 +533,7 @@ async function act(action) {
     return;
   }
   if (action.op === "reload_base") {
-    await open(action.url, board.n, board.crop);
+    await open(action.url, board.n, board.crop, board.regionPalette);
     for (const item of action.actions || []) await act(item);
     await page.waitForTimeout(200);
     const now = await readBoard();
@@ -646,11 +654,11 @@ async function ensureCellValue(cell, value, known = null) {
   return final.values[cell] === Number(value);
 }
 
-async function buildSession(url, steps, session, targetDir, size = 0, crop = false) {
+async function buildSession(url, steps, session, targetDir, size = 0, crop = false, regionPalette = {}) {
   const dir = targetDir || path.join(process.cwd(), ".cache", "frames", session);
   fs.mkdirSync(dir, { recursive: true });
   try {
-    await open(url, size, crop);
+    await open(url, size, crop, regionPalette);
     const initial = await shot();
     const rect = { ...board.rect, imageWidth: initial.readUInt32BE(16), imageHeight: initial.readUInt32BE(20) };
     fs.writeFileSync(path.join(dir, "grid.json"), JSON.stringify(rect));
@@ -781,10 +789,9 @@ const server = http.createServer((req, res) => {
         const session = String(body.session || Date.now().toString(36));
         const steps = body.analysis ? buildStepActions(body.analysis) : body.steps || [];
         const targetDir = body.dir || null;
-        const build = work.then(
-          () => buildSession(body.url, steps, session, targetDir, Number(body.size) || 0, Boolean(body.crop)),
-          () => buildSession(body.url, steps, session, targetDir, Number(body.size) || 0, Boolean(body.crop)),
-        );
+        const render = () => buildSession(body.url, steps, session, targetDir, Number(body.size) || 0,
+                                          Boolean(body.crop), body.regionPalette);
+        const build = work.then(render, render);
         work = build.catch(() => {});
         if (body.wait) await build;
         return json(res, 200, { ok: true, session, count: steps.length });

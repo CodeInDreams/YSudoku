@@ -1,11 +1,12 @@
 import unittest
 
-from ysudoku.chaos_regions import RegionFragments, colour_distance, region_steps
+from ysudoku.chaos_regions import RegionFragments, colour_distance, colours_are_close, region_steps
 from ysudoku.constraints import RegionCount
 from ysudoku.model import parse_puzzle
 from ysudoku.rules import CompiledRules
 from ysudoku.solve import Solver
 from ysudoku.state import State
+from ysudoku.visual_colours import REGION_SWATCHES
 
 
 class RegionFragmentsTest(unittest.TestCase):
@@ -37,7 +38,12 @@ class RegionFragmentsTest(unittest.TestCase):
         palette = f.region_palette()
         self.assertEqual(palette[0], 3)
         self.assertGreater(colour_distance(palette[0], palette[1]), colour_distance(3, 16))
+        self.assertFalse(colours_are_close(palette[0], palette[1]))
         self.assertEqual(f.colours, {0: 3, 1: 16})
+
+    def test_region_fills_avoid_dark_channels(self):
+        self.assertTrue(all(min(bytes.fromhex(hex_value[1:])) >= 145
+                            for hex_value in REGION_SWATCHES.values()))
 
     def test_existing_colours_stay_when_fragments_become_adjacent(self):
         f = RegionFragments(State(4, []))

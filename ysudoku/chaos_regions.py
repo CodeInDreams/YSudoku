@@ -1,24 +1,17 @@
 """Proven region fragments. A colour names a fragment, not a final region ID."""
 
-from colorsys import rgb_to_hsv
 from itertools import combinations
 
 from .colour_map import ColourMap, MAX_COLOURS_PER_CELL
 from .constraints import RegionCount, region_count_rules
 from .narrate import Step
 from .region_shapes import shape_deduction
-from .region_refutation import refute_border, refute_count, region_growth
+from .region_refutation import refute_border, refute_border_shape, refute_count, region_growth
 from .state import Contradiction, Reason, cell_name
-from .visual_colours import HEX
-
-SWATCHES = {**HEX, **dict(enumerate((
-    "#cc3311", "#117733", "#0044c4", "#ee99aa", "#ffff19",
-    "#f046f0", "#a05a1e", "#33bbee", "#911eb4",
-), 9))}
+from .visual_colours import REGION_SWATCHES as SWATCHES
 
 RGB = {colour: tuple(bytes.fromhex(hex_value[1:])) for colour, hex_value in SWATCHES.items()}
-HSV = {colour: rgb_to_hsv(*(channel / 255 for channel in rgb)) for colour, rgb in RGB.items()}
-MIN_ADJACENT_DISTANCE = 85 ** 2
+MIN_ADJACENT_DISTANCE = 55 ** 2
 
 
 def colour_distance(a, b):
@@ -26,12 +19,7 @@ def colour_distance(a, b):
 
 
 def colours_are_close(a, b):
-    hue_a, sat_a, value_a = HSV[a]
-    hue_b, sat_b, value_b = HSV[b]
-    hue_gap = abs(hue_a - hue_b)
-    return (colour_distance(a, b) < MIN_ADJACENT_DISTANCE
-            or (min(sat_a, sat_b) >= 0.4 and abs(value_a - value_b) < 0.2
-                and min(hue_gap, 1 - hue_gap) < 0.20))
+    return colour_distance(a, b) < MIN_ADJACENT_DISTANCE
 
 
 class RegionFragments:
@@ -87,8 +75,14 @@ class RegionFragments:
         """Size needed to cover the cells and the remainders they cut off."""
         if mask in self.cover_sizes:
             return self.cover_sizes[mask]
+        minimum = mask.bit_count() + sum(piece.bit_count() % self.n
+                                         for piece in self.uncovered_components(mask))
+        if len(self.cover_sizes) < 32_768:
+            self.cover_sizes[mask] = minimum
+        return minimum
+
+    def uncovered_components(self, mask):
         outside = self.board ^ mask
-        minimum = mask.bit_count()
         while outside:
             piece = outside & -outside
             while True:
@@ -96,11 +90,8 @@ class RegionFragments:
                 if more == piece:
                     break
                 piece = more
-            minimum += piece.bit_count() % self.n
+            yield piece
             outside ^= piece
-        if len(self.cover_sizes) < 32_768:
-            self.cover_sizes[mask] = minimum
-        return minimum
 
     def merge(self, a, b):
         if self.blocked(a, b):
@@ -237,12 +228,11 @@ class RegionFragments:
             free = [colour for colour in SWATCHES if colour not in display.values()]
             preferred = original if original in free else free[0]
             alternatives = [preferred, *(colour for colour in free if colour != preferred)]
-            display[root] = next(
-                (colour for colour in alternatives if all(
-                    not colours_are_close(colour, other) for other in neighbours
-                )),
-                preferred,
-            )
+            choice = next((colour for colour in alternatives if all(
+                not colours_are_close(colour, other) for other in neighbours)), None)
+            display[root] = (choice if choice is not None else
+                             max(alternatives, key=lambda colour: min(
+                                 colour_distance(colour, other) for other in neighbours)))
         self.display_colours = display
         return display
 
@@ -534,7 +524,8 @@ def region_steps(solver, rules, steps, *, refutations=None, replay=None, deadlin
                 else:
                     shape = shape_deduction(fragments, clues)
                     if not shape:
-                        border = refute_border(fragments, clues, deadline=deadline)
+                        border = (refute_border(fragments, clues, deadline=deadline)
+                                  or refute_border_shape(fragments, clues, deadline=deadline))
                         if not border:
                             break
                         (a, b), reasons, en = border
