@@ -2,6 +2,7 @@
 
 from copy import copy
 from itertools import combinations
+from time import monotonic
 
 from .state import Contradiction, cell_name
 
@@ -16,8 +17,9 @@ def _fork(base):
     return trial
 
 
-def region_growth(f, clues, *, pair=None, conflict_only=False, assumption=None):
+def region_growth(f, clues, *, pair=None, conflict_only=False, assumption=None, lang="zh"):
     """If m clue cells span at least k regions, one region can use at most m-k+1 of them."""
+    english = lang == "en"
     masks = {a: sum(1 << c for c in group) for a, group in f.groups.items()}
     sources = [None, *(c for c in clues if min(c.counts) > 1 and len(c.cells()) <= 4)]
     roots = [f.owner[pair[0]]] if pair else masks
@@ -40,7 +42,9 @@ def region_growth(f, clues, *, pair=None, conflict_only=False, assumption=None):
                 alternatives = [allowed & ~(sum(slots) ^ sum(keep))
                                 for keep in combinations(slots, limit)]
                 if clue is not assumption:
-                    premise = f"以 {cell_name(cells[0], f.n)} 起的圈内，同一区域至多占 {limit} 格。"
+                    start = cell_name(cells[0], f.n)
+                    premise = (f"A region can use at most {limit} cells of the circle starting at {start}. "
+                               if english else f"以 {start} 起的圈内，同一区域至多占 {limit} 格。")
 
             def capacity(mask):
                 if owned & ~mask:
@@ -49,14 +53,25 @@ def region_growth(f, clues, *, pair=None, conflict_only=False, assumption=None):
                 return 0 if owned & ~reach else reach.bit_count()
 
             sizes = [capacity(mask) for mask in alternatives]
-            if max(sizes) < f.n:
-                if max(sizes) == 0:
+            largest = max(sizes)
+            if largest < f.n:
+                if english:
+                    if largest == 0:
+                        raise Contradiction(f"{premise}The known cells of {name}'s region cannot connect.")
+                    if largest == 1 and owned.bit_count() == 1 and not clue:
+                        neighbours = f.expand(owned)
+                        names = ", ".join(cell_name(c, f.n) for c in range(f.n*f.n) if neighbours & (1 << c))
+                        raise Contradiction(f"All orthogonal neighbours of {name} ({names}) are in other regions. "
+                                            f"Its region has only one cell and needs {f.n}.")
+                    raise Contradiction(f"{premise}The region containing {name} can reach at most "
+                                        f"{largest} cells and needs {f.n}.")
+                if largest == 0:
                     raise Contradiction(f"{premise}{name} 所在片区的已知格无法连成一个 {f.n} 格区域。")
-                if max(sizes) == 1 and owned.bit_count() == 1 and not clue:
+                if largest == 1 and owned.bit_count() == 1 and not clue:
                     neighbours = f.expand(owned)
                     names = "、".join(cell_name(c, f.n) for c in range(f.n*f.n) if neighbours & (1 << c))
                     raise Contradiction(f"{name} 的正交邻格 {names} 全都与它异区，它只能占 1 格，达不到 {f.n} 格。")
-                raise Contradiction(f"{premise}{name} 所在区域最多能连到 {max(sizes)} 格，达不到 {f.n} 格。")
+                raise Contradiction(f"{premise}{name} 所在区域最多能连到 {largest} 格，达不到 {f.n} 格。")
             if conflict_only:
                 continue
             viable = [mask for mask, size in zip(alternatives, sizes) if size >= f.n]
@@ -71,6 +86,9 @@ def region_growth(f, clues, *, pair=None, conflict_only=False, assumption=None):
                 bound = max(capacity(mask & ~masks[b]) for mask in viable)
                 if bound < f.n:
                     other = cell_name(b, f.n)
+                    if english:
+                        return (a, b), (f"{premise}Without the fragment at {other}, the region at {name} "
+                                        f"can reach only {bound} cells. The two fragments must share a region.")
                     return (a, b), (f"{premise}{name} 所在区域若避开 {other} 所在片区，"
                                      f"最多能连到 {bound} 格，因此两者必须同区。")
     return None
@@ -79,36 +97,41 @@ def region_growth(f, clues, *, pair=None, conflict_only=False, assumption=None):
 MAX_FORCED_MERGES = 16
 
 
-def _trial(base, clues, actions=None):
+def _trial(base, clues, actions=None, *, assumption=None, max_merges=MAX_FORCED_MERGES, lang="zh"):
     """Discover forced merges, or replay a subsequence to trim the certificate."""
     f = _fork(base)
     merges, reasons = [], []
     try:
-        for i in range((MAX_FORCED_MERGES if actions is None else len(actions)) + 1):
+        for i in range((max_merges if actions is None else len(actions)) + 1):
             while True:
-                choice = f.propagate_choices()
+                choice = f.propagate_choices(lang=lang)
                 if choice:
                     reasons.append(choice[1])
                     continue
-                change = next(((clue, v) for clue in clues if (v := f.clue(clue))), None)
+                change = next(((clue, v) for clue in clues if (v := f.clue(clue, lang=lang))), None)
                 if not change:
                     break
                 clue, (cells, detail) = change
-                if clue is not clues[0]:
-                    counts = " 或 ".join(map(str, clue.counts))
-                    reasons.append(f"以 {cell_name(cells[0], f.n)} 起的圈要求 {counts} 区。{detail}")
+                if clue is not assumption:
+                    start = cell_name(cells[0], f.n)
+                    if lang == "en":
+                        counts = " or ".join(map(str, clue.counts))
+                        reasons.append(f"The circle starting at {start} spans {counts} regions. {detail}")
+                    else:
+                        counts = " 或 ".join(map(str, clue.counts))
+                        reasons.append(f"以 {start} 起的圈要求 {counts} 区。{detail}")
             if actions is None:
-                region_growth(f, clues, conflict_only=True, assumption=clues[0])
-                if i == MAX_FORCED_MERGES:
+                region_growth(f, clues, conflict_only=True, assumption=assumption, lang=lang)
+                if i == max_merges:
                     return None
-                found = region_growth(f, clues, assumption=clues[0])
+                found = region_growth(f, clues, assumption=assumption, lang=lang)
                 if not found:
                     return None
             else:
                 if i == len(actions):
-                    region_growth(f, clues, conflict_only=True, assumption=clues[0])
+                    region_growth(f, clues, conflict_only=True, assumption=assumption, lang=lang)
                     return None
-                found = region_growth(f, clues, pair=actions[i], assumption=clues[0])
+                found = region_growth(f, clues, pair=actions[i], assumption=assumption, lang=lang)
                 if not found:
                     continue
             pair, detail = found
@@ -130,7 +153,7 @@ def refute_count(fragments, clues, target=None):
             assumed = copy(clue)
             assumed.counts = [count]
             trial_clues = [assumed, *clues[:index], *clues[index+1:]]
-            proof = _trial(fragments, trial_clues)
+            proof = _trial(fragments, trial_clues, assumption=assumed)
             if proof is None:
                 continue
             actions, reasons = proof
@@ -139,9 +162,44 @@ def refute_count(fragments, clues, target=None):
                 if pair not in actions:
                     continue
                 pos = actions.index(pair)
-                shorter = _trial(fragments, trial_clues, actions[:pos] + actions[pos+1:])
+                shorter = _trial(fragments, trial_clues, actions[:pos] + actions[pos+1:], assumption=assumed)
                 if shorter is not None and len(shorter[1]) <= len(reasons):
                     actions, reasons = shorter
             if best is None or len(reasons) < len(best[2]):
                 best = index, count, reasons
     return best
+
+
+def refute_border(fragments, clues, *, deadline=None):
+    """Try one nearby border at a time, using only short region-capacity chains."""
+    masks = {root: sum(1 << c for c in group) for root, group in fragments.groups.items()}
+    candidates = {}
+    for a in fragments.colours:
+        owned = masks[a]
+        allowed = fragments.board
+        for b, mask in masks.items():
+            if a != b and fragments.blocked(a, b):
+                allowed &= ~mask
+        frontier = fragments.expand(owned) & allowed & ~owned
+        for b, mask in masks.items():
+            if mask & frontier:
+                size = fragments.reachable(owned, allowed & ~mask).bit_count()
+                pair = tuple(sorted((a, b)))
+                candidates[pair] = min(size, candidates.get(pair, size))
+    for a, b in sorted(candidates, key=lambda pair: (candidates[pair], pair))[:12]:
+        if deadline is not None and monotonic() >= deadline:
+            raise TimeoutError
+        trial = _fork(fragments)
+        trial.apart(a, b)
+        proof = _trial(trial, clues, max_merges=4)
+        if proof is None:
+            continue
+        actions, reasons = proof
+        for pos in range(len(actions) - 1, -1, -1):
+            shorter = _trial(trial, clues, actions[:pos] + actions[pos+1:])
+            if shorter is not None and len(shorter[1]) < len(reasons):
+                actions, reasons = shorter
+        if len(reasons) <= 5:
+            _, en = _trial(trial, clues, actions, lang="en")
+            return (a, b), reasons, en
+    return None

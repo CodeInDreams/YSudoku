@@ -7,7 +7,7 @@ from itertools import combinations
 from .colour_map import ColourMap, MAX_COLOURS_PER_CELL
 from .narrate import Step
 from .region_shapes import shape_deduction
-from .region_refutation import refute_count, region_growth
+from .region_refutation import refute_border, refute_count, region_growth
 from .state import Contradiction, Reason, cell_name
 from .visual_colours import HEX
 
@@ -188,7 +188,7 @@ class RegionFragments:
                     "角格的两种颜色表示二选一。绿线是已确定的边界。两条黄线中恰有一条会成为边界，排除的边界会变红。")
         return None
 
-    def propagate_choices(self):
+    def propagate_choices(self, *, lang="zh"):
         for cell, (left, right, _) in self.corner_choices.items():
             root = self.owner[cell]
             targets = [self.owner[left], self.owner[right]]
@@ -196,12 +196,16 @@ class RegionFragments:
                 continue
             viable = [b for b in targets if not self.blocked(root, b)]
             if not viable:
-                raise Contradiction(f"{cell_name(cell, self.n)} 的两个同区出口都被排除")
+                name = cell_name(cell, self.n)
+                raise Contradiction(f"Neither exit from {name} can share its region." if lang == "en"
+                                    else f"{name} 的两个同区出口都被排除")
             if len(viable) == 1:
                 other, = viable
                 self.merge(root, other)
-                return [cell, left, right], (f"{cell_name(cell, self.n)} 的两个出口只剩"
-                                             f" {cell_name(other, self.n)} 所在片区，因此必须同区。")
+                name, exit_name = cell_name(cell, self.n), cell_name(other, self.n)
+                detail = (f"The only remaining exit from {name} is at {exit_name}, so they share a region."
+                          if lang == "en" else f"{name} 的两个出口只剩 {exit_name} 所在片区，因此必须同区。")
+                return [cell, left, right], detail
         return None
 
     def region_palette(self):
@@ -295,7 +299,8 @@ class RegionFragments:
             partitions = more
         return partitions
 
-    def clue(self, rule):
+    def clue(self, rule, *, lang="zh"):
+        english = lang == "en"
         cells = rule.cells()
         roots = list(dict.fromkeys(self.owner[c] for c in cells))
         distinct = len(cells) in rule.counts and rule.counts == [len(cells)]
@@ -306,45 +311,54 @@ class RegionFragments:
             one = len(roots) < len(cells)
         if distinct:
             if len(roots) != len(cells) or one and len(cells) > 1:
-                raise Contradiction("圈内的同区关系与区域数冲突")
+                raise Contradiction("The known same-region cells conflict with the circle's region count."
+                                    if english else "圈内的同区关系与区域数冲突")
             if all(tuple(sorted(pair)) in self.separate for pair in pairs):
                 return None
             for a, b in pairs:
                 self.apart(a, b)
             for a in roots:
                 self.mark(a)
-            return cells, "圈内每格各属一个区域，以不同颜色标出这些已确定互异的片区。"
+            return cells, ("Every cell of this circle belongs to a different region." if english
+                           else "圈内每格各属一个区域，以不同颜色标出这些已确定互异的片区。")
         if one and pairs:
             for b in roots[1:]:
                 self.merge(self.owner[cells[0]], b)
-            return cells, "圈内只能有一个区域，因此这些格必须同区。"
+            return cells, ("The circle spans just one region, so all its cells must share it." if english
+                           else "圈内只能有一个区域，因此这些格必须同区。")
         if 1 < len(roots) < len(cells) and rule.counts == [len(roots)]:
             if any(not self.blocked(a, b) for a, b in pairs):
                 for a, b in pairs:
                     self.apart(a, b)
                 for a in roots:
                     self.mark(a)
-                hosts = "、".join(cell_name(next(c for c in cells if self.owner[c] == a), self.n)
-                                 for a in roots)
-                return cells, f"已有格子同区，圈内只剩 {len(roots)} 个片区。要满足区域数，{hosts} 必须两两异区。"
+                hosts = [cell_name(next(c for c in cells if self.owner[c] == a), self.n) for a in roots]
+                if english:
+                    return cells, (f"Some cells already share a region, leaving {len(roots)} fragments. "
+                                   f"The fragments at {', '.join(hosts)} must all be in different regions.")
+                return cells, f"已有格子同区，圈内只剩 {len(roots)} 个片区。要满足区域数，{'、'.join(hosts)} 必须两两异区。"
             return None
         # For small circles, intersect the local partitions still allowed by
         # their count and the proven pair relations (e.g. a three-region clue).
         if len(roots) <= 4 and not one and not distinct:
             patterns = [p for p in self.local_partitions(roots) if len(p) in rule.counts]
             if not patterns:
-                raise Contradiction("圈内没有满足区域数的分组")
+                raise Contradiction("No grouping of the circle's cells satisfies its region count."
+                                    if english else "圈内没有满足区域数的分组")
             for a, b in pairs:
                 together = [any(a in block and b in block for block in p) for p in patterns]
-                names = f"{cell_name(a, self.n)} 和 {cell_name(b, self.n)}"
+                left, right = cell_name(a, self.n), cell_name(b, self.n)
+                names = f"{left} 和 {right}"
                 if all(together):
                     self.merge(a, b)
-                    return cells, f"这个圈的所有可行分组都要求 {names} 同区。"
+                    return cells, (f"Every allowed grouping puts {left} and {right} in the same region." if english
+                                   else f"这个圈的所有可行分组都要求 {names} 同区。")
                 if not any(together) and not self.blocked(a, b):
                     self.apart(a, b)
                     self.mark(a)
                     self.mark(b)
-                    return cells, f"这个圈的所有可行分组都要求 {names} 不同区。"
+                    return cells, (f"Every allowed grouping puts {left} and {right} in different regions." if english
+                                   else f"这个圈的所有可行分组都要求 {names} 不同区。")
         return None
 
 
@@ -488,10 +502,21 @@ def region_steps(solver, rules, steps, *, refutations=None, replay=None, deadlin
                 else:
                     shape = shape_deduction(fragments, clues)
                     if not shape:
-                        break
-                    step = Step(len(steps), "chaos_region", 2, shape.title, shape.detail, [],
-                                visual={"focus": shape.cells, "premise": shape.evidence.get("premise", [])},
-                                pre_dom=pre_dom, pre_vals=pre_vals, narration=shape.evidence)
+                        border = refute_border(fragments, clues, deadline=deadline)
+                        if not border:
+                            break
+                        (a, b), reasons, en = border
+                        names = f"{cell_name(a, state.n)} 和 {cell_name(b, state.n)}"
+                        cells = sorted(fragments.groups[a] | fragments.groups[b])
+                        fragments.merge(a, b)
+                        detail = [f"假设 {names} 异区。", *reasons, f"因此 {names} 必须同区。"]
+                        step = Step(len(steps), "chaos_region", 2, "区域边界反证", "\n".join(detail), [],
+                                    visual={"focus": cells}, pre_dom=pre_dom, pre_vals=pre_vals,
+                                    narration={"border_refutation": [a, b], "reasons_en": en})
+                    else:
+                        step = Step(len(steps), "chaos_region", 2, shape.title, shape.detail, [],
+                                    visual={"focus": shape.cells, "premise": shape.evidence.get("premise", [])},
+                                    pre_dom=pre_dom, pre_vals=pre_vals, narration=shape.evidence)
             step.index = len(steps)
         snapshot = fragments.snapshot()
         # Region labels take one slot; preserve other annotations up to the

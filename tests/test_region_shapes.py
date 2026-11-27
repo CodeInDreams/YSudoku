@@ -1,7 +1,10 @@
 import unittest
 
 from ysudoku.chaos_regions import RegionFragments
-from ysudoku.region_shapes import region_shapes, separated_shape_anchors, shape_deduction
+from ysudoku.region_shapes import (
+    MAX_EXPLAINED_SHAPES, explain_shape_cases, region_shapes,
+    separated_shape_anchors, shape_deduction,
+)
 from ysudoku.state import State
 
 
@@ -19,8 +22,28 @@ class RegionShapesTest(unittest.TestCase):
         self.assertEqual(region_shapes(board, 0, []), {0b1111})
         proof = shape_deduction(board, [])
         self.assertEqual(proof.cells, [0, 1, 2, 3])
+        self.assertEqual(proof.evidence["shape_cases"], [[3]])
+        self.assertIn("[R1C4]", explain_shape_cases(proof.evidence, state.n, "en"))
         self.assertEqual(board.snapshot()["region_progress"]["complete"], 1)
 
+    def test_case_budget_applies_before_filtering_by_digits(self):
+        state = State(4, [])
+        board = RegionFragments(state)
+        board.mark(0)
+        for cell in range(16):
+            if cell != 3:
+                state.dom[cell] = 0b0111
+        self.assertEqual(region_shapes(board, 0, []), {0xF})
+        self.assertIsNone(region_shapes(board, 0, [], max_shapes=MAX_EXPLAINED_SHAPES))
+
+    def test_pair_with_too_many_cases_leaves_fragments_unchanged(self):
+        board = RegionFragments(State(4, []))
+        board.mark(0)
+        board.mark(5)
+        shapes = region_shapes(board, 0, [])
+        self.assertGreater(len(shapes), MAX_EXPLAINED_SHAPES)
+        self.assertIsNone(separated_shape_anchors(board, {0: shapes, 5: {0xF0}}))
+        self.assertFalse(board.blocked(0, 5))
 
     def test_nonadjacent_fragments_can_be_proven_distinct_in_one_step(self):
         board = RegionFragments(State(4, []))
@@ -33,6 +56,7 @@ class RegionShapesTest(unittest.TestCase):
 
         self.assertEqual(proof.cells, [0, 5, 10])
         self.assertEqual(len(proof.evidence["shape_comparisons"]), 2)
+        self.assertEqual(proof.evidence["shared_region_cases"][0]["cases"], [[0, 1, 2, 3]])
         self.assertTrue(board.blocked(0, 5))
         self.assertTrue(board.blocked(5, 10))
         self.assertIsNone(separated_shape_anchors(board, {0: {0xF}, 5: {0xF0}, 10: {0xF00}}))

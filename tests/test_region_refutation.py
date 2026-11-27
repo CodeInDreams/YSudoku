@@ -44,9 +44,18 @@ class RegionRefutationTest(unittest.TestCase):
         original = next(c for c in analysis.rules.constraints
                         if c.kind == "region_count" and c.cells() == cells)
         self.assertEqual(original.counts, [1, 4])
-        growth = next(s for s in steps[proof.index+2:] if s.title == "区域形状推理")
+        growth = next(s for s in steps[proof.index+2:] if s.title == "区域边界反证")
+        self.assertLessEqual(len(growth.detail.splitlines()), 7)
+        self.assertIn("达不到 9 格", growth.detail)
+        self.assertFalse(growth.events)
+        english = analysis.to_json(lang="en")["steps"][growth.index]
+        self.assertEqual(english["title"], "Region border refutation")
+        self.assertIn("can reach at most", english["detail"])
+        self.assertIn("needs 9", english["detail"])
         self.assertTrue(any({1, 2, 3, 4, 5, 10} <= set(g["cells"])
-                            for g in growth.visual["colours"]))
+                            for s in steps[growth.index:] for g in s.visual["colours"]))
+        self.assertFalse(any("shape_comparisons" in s.narration
+                             and "shared_region_cases" not in s.narration for s in steps))
 
         self.assertTrue(any("圈要求 9" in s.detail and "R3C2 排除 9" in s.detail
                             for s in steps))

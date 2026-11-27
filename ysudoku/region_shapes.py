@@ -36,7 +36,10 @@ def _has_distinct_digits(restricted_domains):
             or AllDifferent(range(len(restricted_domains))).possible(restricted_domains))
 
 
-def region_shapes(board, root, clues, limit=7500, *, masks=None, allowed=None):
+MAX_EXPLAINED_SHAPES = 4
+
+
+def region_shapes(board, root, clues, limit=7500, *, masks=None, allowed=None, max_shapes=None):
     """Return all surviving shapes, or None if the local budget is exhausted."""
     if masks is None:
         masks = {r: _mask(cells) for r, cells in board.groups.items()}
@@ -65,6 +68,8 @@ def region_shapes(board, root, clues, limit=7500, *, masks=None, allowed=None):
                 if any((grown & mask).bit_count() > cap for mask, cap in ceilings):
                     continue
                 layers[length].add(grown)
+                if max_shapes is not None and len(layers[board.n]) > max_shapes:
+                    return None
                 visited += 1
                 if visited > limit:
                     return None
@@ -99,179 +104,126 @@ def region_shapes(board, root, clues, limit=7500, *, masks=None, allowed=None):
 
 
 def shape_deduction(board, clues):
+    masks = {root: _mask(group) for root, group in board.groups.items()}
     placements = {}
-    for root in sorted(board.colours, key=lambda r: (-len(board.groups[r]), r)):
-        group = board.groups[root]
-        shapes = (region_shapes(board, root, clues) if len(group) < board.n
-                  else {_mask(group)})
-        if shapes is not None:
-            placements[root] = shapes
-    for root, shapes in placements.items():
-        group = board.groups[root]
-        name = cell_name(root, board.n)
-        peer_name = ""
-        for other, other_shapes in placements.items():
-            if root == other:
-                continue
-            distinct = board.blocked(root, other)
-            check_pockets = len(shapes) * len(other_shapes) <= 4096
-
-            def can_coexist(shape, other_shape):
-                if shape & other_shape:
-                    return not distinct and shape == other_shape
-                if not check_pockets:
-                    return True
-                return board.minimum_cover(shape | other_shape) == 2 * board.n
-
-            filtered = {s for s in shapes if any(can_coexist(s, t) for t in other_shapes)}
-            if len(filtered) < len(shapes):
-                peer_name = cell_name(other, board.n)
-                shapes = filtered
-        if not shapes:
-            raise Contradiction(f"{name} 所在片区无法组成一个连通的 {board.n} 格区域。")
-        if len(group) == board.n:
-            continue
-        premise = f"并检查与 {peer_name} 等片区能否共存，" if peer_name else ""
-        common, union = board.board, 0
-        for shape in shapes:
-            common &= shape
-            union |= shape
-        added = [c - 1 for c in bits(common & ~_mask(group))]
-        if added:
-            for cell in added:
-                a, b = board.owner[root], board.owner[cell]
-                if a != b:
-                    board.merge(a, b)
-            cells = "、".join(cell_name(c, board.n) for c in added)
-            return RegionShapeProof(sorted(board.groups[board.owner[root]]),
-                f"{name} 所在片区可扩成 {len(shapes)} 种连通的 {board.n} 格区域。"
-                f"按格数、已知边界、圈域提示和数字互异筛选，{premise}每种都包含 {cells}，所以这些格必须同区。")
-        boundary = board.expand(_mask(group)) & ~union
-        excluded = sorted({board.owner[c - 1] for c in bits(boundary)
-                           if not board.blocked(root, board.owner[c - 1])})
-        if excluded:
-            for other in excluded:
-                board.apart(root, other)
-            cells = "、".join(cell_name(c, board.n) for c in excluded)
-            return RegionShapeProof(sorted(group | set(excluded)),
-                f"{name} 所在片区有 {len(shapes)} 种可行的连通区域形状，{premise}其中都避开 {cells}，"
-                "因此可以确定这些邻格与该片区异区。")
-    return (frontier_deduction(board, clues, placements)
-            or separated_shape_anchors(board, placements))
-
-
-MAX_FRONTIER_ROOTS = 16
-FRONTIER_SHAPE_BUDGET = 2500
-MAX_PAIR_CHECKS = 25_000
-
-
-def frontier_deduction(board, clues, placements):
-    """Use local shapes around the frontier of the constructed partition."""
-    relevant = board.expand(_mask(c for r in placements for c in board.groups[r]))
+    relevant = board.expand(_mask(c for root in board.colours for c in board.groups[root]))
     relevant |= _mask({cell for clue in clues for cell in clue.cells()})
-    if not relevant:
-        return None
-    masks = {r: _mask(cells) for r, cells in board.groups.items()}
-    peers_by_cost = sorted(placements.items(), key=lambda item: (len(item[1]), item[0]))
-    priority = []
-    for root in board.groups.keys() - board.colours.keys():
-        if relevant & masks[root]:
-            reach = _growth_space(board, root, masks)
-            priority.append((reach.bit_count(), root, reach))
 
-    for _, root, allowed in sorted(priority)[:MAX_FRONTIER_ROOTS]:
-        shapes = region_shapes(board, root, clues, limit=FRONTIER_SHAPE_BUDGET, masks=masks, allowed=allowed)
+    coloured = sorted(board.colours, key=lambda root: (-len(board.groups[root]), root))
+    frontier = sorted(
+        (reach.bit_count(), root, reach)
+        for root in masks.keys() - board.colours.keys() if relevant & masks[root]
+        if (reach := _growth_space(board, root, masks))
+    )
+    roots = [(root, None, 7500) for root in coloured]
+    roots += [(root, reach, 2500) for _, root, reach in frontier[:16]]
+    for root, reach, budget in roots:
+        shapes = region_shapes(board, root, clues, limit=budget, masks=masks, allowed=reach,
+                               max_shapes=MAX_EXPLAINED_SHAPES)
         if shapes is None:
             continue
-        proof = _frontier_consequence(board, root, shapes, masks)
+        if not shapes:
+            raise Contradiction(f"{cell_name(root, board.n)} 所在片区无法组成一个连通的 {board.n} 格区域。")
+        proof = _local_consequence(board, root, shapes, masks[root])
         if proof:
             return proof
-
-        # Prefer a single supporting region. If that is insufficient, combine
-        # the independent support checks without exploring a board solution.
-        filtered = shapes
-        peers = []
-        for other, candidates in peers_by_cost:
-            if len(shapes) * len(candidates) > MAX_PAIR_CHECKS:
-                continue
-            common = shapes & candidates
-            supports = {shape for shape in shapes if shape in common
-                        or any(not shape & candidate for candidate in candidates)}
-            if supports == shapes:
-                continue
-            proof = _frontier_consequence(board, root, supports, masks, [other])
-            if proof:
-                return proof
-            if filtered - supports:
-                filtered &= supports
-                peers.append(other)
-        if peers:
-            proof = _frontier_consequence(board, root, filtered, masks, peers)
-            if proof:
-                return proof
-    return None
+        if root in board.colours:
+            placements[root] = shapes
+    return separated_shape_anchors(board, placements)
 
 
-def _frontier_consequence(board, root, shapes, masks, peers=()):
-    name = cell_name(root, board.n)
-    if not shapes:
-        raise Contradiction(f"{name} 所在区域没有可行的 {board.n} 格形状。")
+def _case_list(shapes):
+    return [[c - 1 for c in bits(shape)] for shape in sorted(shapes)]
+
+
+def _local_consequence(board, root, shapes, owned):
+    if owned.bit_count() == board.n:
+        return None
     common, union = board.board, 0
     for shape in shapes:
         common &= shape
         union |= shape
-    same = [c - 1 for c in bits(common & ~masks[root])]
-    apart = sorted({board.owner[c - 1] for c in bits(board.expand(masks[root]) & ~union)
+    same = sorted({board.owner[c - 1] for c in bits(common & ~owned)})
+    apart = sorted({board.owner[c - 1] for c in bits(board.expand(owned) & ~union)
                     if not board.blocked(root, board.owner[c - 1])})
-    if not same and not apart:
+    targets = same or apart
+    if not targets:
         return None
 
-    target = same or apart
-    original = sorted(board.groups[root])
-    peer_cells = sorted({c for other in peers for c in board.groups[other]})
-    focus = sorted(set(original).union(*(board.groups[board.owner[c]] for c in target)))
-    letters = "、".join(cell_name(c, board.n) for c in target)
-    premise = f"分别检查与 {'、'.join(cell_name(c, board.n) for c in peers)} 所在片区的形状能否共存后，" if peers else ""
-    intro = f"从未染色的 {name} 出发，{premise}有 {len(shapes)} 种可能的 {board.n} 格连通区域。"
-    if same:
-        for cell in same:
-            a, b = board.owner[root], board.owner[cell]
-            if a != b:
-                board.merge(a, b)
-        detail = f"{intro}每种形状都经过 {letters}，这些格必须同区。"
-    else:
-        for other in apart:
+    evidence = {"shape_cases": _case_list({shape & ~owned for shape in shapes}),
+                "fragment": sorted(board.groups[root]), "targets": targets, "same": bool(same)}
+    focus = sorted(board.groups[root].union(*(board.groups[c] for c in targets)))
+    for other in targets:
+        if same:
+            board.merge(board.owner[root], board.owner[other])
+        else:
             board.apart(root, other)
-        detail = f"{intro}每种形状都避开 {letters}，这些邻格必须异区。"
-    return RegionShapeProof(focus, detail, "未染色格的区域形状", {
-        "region_anchor": root, "shape_count": len(shapes), "same": bool(same),
-        "targets": target, "peers": list(peers), "premise": peer_cells,
-    })
+    return RegionShapeProof(focus, explain_shape_cases(evidence, board.n), evidence=evidence)
 
 
 def separated_shape_anchors(board, placements):
-    """Compare shape lists once, then apply independent distinct-region facts."""
+    """Two fragments can share a region only if their shape lists intersect."""
     ordered = sorted(placements, key=lambda root: (len(placements[root]), root))
     comparisons = []
-    focus = set()
+    used_cases = {}
     for index, root in enumerate(ordered):
         shapes = placements[root]
-        excluded = [other for other in ordered[index + 1:]
-                    if not board.blocked(root, other) and shapes.isdisjoint(placements[other])]
-        if excluded:
-            comparisons.append({"anchor": root, "targets": excluded, "shape_count": len(shapes)})
-            focus.update((root, *excluded))
+        for other in ordered[index + 1:]:
+            if board.blocked(root, other) or not shapes.isdisjoint(placements[other]):
+                continue
+            cases = used_cases | {root: shapes, other: placements[other]}
+            if sum(map(len, cases.values())) > MAX_EXPLAINED_SHAPES:
+                continue
+            used_cases = cases
+            comparisons.append({"anchor": root, "targets": [other]})
     if not comparisons:
         return None
 
-    detail = [f"如果两个片区同区，它们必须能扩成同一个连通的 {board.n} 格形状。"]
+    evidence = {"shape_comparisons": comparisons,
+                "shared_region_cases": [{"anchor": root, "cases": _case_list(shapes)}
+                                        for root, shapes in used_cases.items()]}
     for comparison in comparisons:
-        root = comparison["anchor"]
-        name = cell_name(root, board.n)
-        peers = "、".join(cell_name(c, board.n) for c in comparison["targets"])
-        detail.append(f"{name} 的 {comparison['shape_count']} 种形状在 {peers} 的清单里都找不到，"
-                      f"因此 {name} 与这些片区分别异区。")
-        for other in comparison["targets"]:
-            board.apart(root, other)
-    return RegionShapeProof(sorted(focus), "\n".join(detail), "比较片区的可行形状",
-                            {"shape_comparisons": comparisons})
+        board.apart(comparison["anchor"], comparison["targets"][0])
+    return RegionShapeProof(sorted(used_cases), explain_shape_cases(evidence, board.n),
+                            "比较片区的少量可行形状", evidence)
+
+
+def explain_shape_cases(evidence, n, lang="zh"):
+    english = lang == "en"
+    joiner = ", " if english else "、"
+    alternatives = " or " if english else " 或 "
+
+    def names(cells):
+        return joiner.join(cell_name(c, n) for c in cells)
+
+    def cases(groups):
+        return alternatives.join(f"[{names(cells)}]" for cells in groups)
+
+    if "shape_cases" in evidence:
+        fragment = names(evidence["fragment"])
+        options = cases(evidence["shape_cases"])
+        targets = names(evidence["targets"])
+        if english:
+            intro = (f"To complete the {n}-cell region containing {fragment}, "
+                     f"the rules leave these choices for its additional cells: {options}.")
+            conclusion = (f"Every choice includes {targets}, so they are in the same region as the fragment."
+                          if evidence["same"] else
+                          f"Every choice excludes {targets}, so those fragments are in other regions.")
+        else:
+            intro = f"要把 {fragment} 补成 {n} 格区域，按规则只能补入以下格组：{options}。"
+            conclusion = (f"每种都包含 {targets}，所以它们与该片区同区。" if evidence["same"]
+                          else f"每种都避开 {targets}，所以这些片区与它异区。")
+        return f"{intro}\n{conclusion}"
+
+    lines = [f"Two fragments in the same region must have the same {n}-cell shape."
+             if english else f"两个片区如果同区，就必须能补成同一个 {n} 格形状。"]
+    for item in evidence["shared_region_cases"]:
+        anchor = names([item["anchor"]])
+        options = cases(item["cases"])
+        lines.append(f"Possible shapes at {anchor}: {options}." if english
+                     else f"{anchor} 所在片区的可行形状：{options}。")
+    for item in evidence["shape_comparisons"]:
+        a, b = names([item["anchor"]]), names(item["targets"])
+        lines.append(f"{a} and {b} share no shape, so they are in different regions." if english
+                     else f"{a} 和 {b} 没有相同的可行形状，因此异区。")
+    return "\n".join(lines)

@@ -13,6 +13,8 @@ Target version: 1.2.1-beta
 
 ### Fixed
 
+- Explain Chaos Construction deductions with a short list of concrete shapes or a single border refutation. Skip shape comparisons that require larger enumerations.
+
 - Do not auto-regenerate missing frames after a solve failure; wait for an explicit retry.
 - Keep region digit explanation notes out of `Step.events`, fixing `'str' object has no attribute 'to_dict'`.
 - Match the board preview's aspect ratio, crop, and dark-mode dimming to the playback frames. Use the rendered opening frame once it is available.

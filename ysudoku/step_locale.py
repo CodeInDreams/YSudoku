@@ -207,7 +207,11 @@ def english_step(payload, n, evidence):
         payload.update(title=title, detail=describe_step(evidence, n, "en"))
         return payload
     if technique == "chaos_region":
-        if "region_anchor" in evidence:
+        if "border_refutation" in evidence:
+            title = "Region border refutation"
+        elif "shape_cases" in evidence:
+            title = "Region shape cases"
+        elif "region_anchor" in evidence:
             title = "Region shapes from an uncoloured cell"
         elif "shape_comparisons" in evidence:
             title = "Compare region shapes"
@@ -248,6 +252,13 @@ def _explain(payload, kind, d, evidence, name, n):
     if technique == "chaos_pattern" and evidence:
         return (f"The clue at {names(evidence['cells'])} allows these region counts: "
                 f"{_lists(evidence['counts'])}. Each region is connected and contains {n} distinct digits.")
+    if technique == "chaos_region" and "border_refutation" in evidence:
+        a, b = map(name, evidence["border_refutation"])
+        return "\n".join([f"Suppose {a} and {b} belong to different regions.",
+                          *evidence["reasons_en"], f"Therefore {a} and {b} must share a region."])
+    if technique == "chaos_region" and ("shape_cases" in evidence or "shared_region_cases" in evidence):
+        from .region_shapes import explain_shape_cases
+        return explain_shape_cases(evidence, n, "en")
     if technique == "chaos_region" and "shape_comparisons" in evidence:
         lines = [f"Fragments in the same region must have an identical connected {n}-cell shape."]
         for item in evidence["shape_comparisons"]:
