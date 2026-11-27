@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import llm, rulecache
+from .constraints import region_count_rules
 from .model import Puzzle, parse_puzzle
 from .rules import (CompiledRules, build_inventory, compile_spec, heuristic_spec, paired_outside_choices,
                     with_paired_outside_choices)
@@ -21,7 +22,7 @@ from .narrate import Step
 
 
 # Invalidate cached results when the solver's proof strategy changes.
-ANALYSIS_VERSION = 38
+ANALYSIS_VERSION = 39
 
 
 def _requires_liar_cell_values(rules_text: str) -> bool:
@@ -124,32 +125,34 @@ def _stirling2(n: int, k: int) -> int:
 
 def _chaos_pattern_steps(puzzle, rules, state) -> list:
     """Truthful observation steps: constrain patterns, not individual cells."""
-    quads = {
-        frozenset(con.cells()): con
-        for con in rules.constraints if con.kind == "quadruple"
-    }
+    digits_by_scope = {}
+    for con in rules.constraints:
+        demands = getattr(con, "digit_demands", lambda: None)()
+        if demands:
+            scope = frozenset(con.cells())
+            merged = digits_by_scope.setdefault(scope, {})
+            for digit, count in demands.items():
+                merged[digit] = max(count, merged.get(digit, 0))
     steps = []
     index = 0
-    for con in rules.constraints:
-        if con.kind != "region_count":
-            continue
+    for con, allowed_counts in region_count_rules(rules.constraints):
         cells = con.cells()
-        quad = quads.get(frozenset(cells))
-        digits = "、".join(str(d) for d in quad.digits) if quad else ""
-        patterns = sum(_stirling2(len(cells), k) for k in con.counts)
-        counts = " 或 ".join(str(c) for c in con.counts)
+        digits = "、".join(str(digit) for digit, count in sorted(digits_by_scope.get(frozenset(cells), {}).items())
+                         for _ in range(count))
+        patterns = sum(_stirling2(len(cells), k) for k in allowed_counts)
+        counts = " 或 ".join(str(c) for c in allowed_counts)
         title = f"圈域模式：{len(cells)} 格跨 {counts} 个区域"
         detail = (
             f"这个圆周围的 {len(cells)} 格必须包含数字 {digits or '（未标注）'}；\n"
             f"区域计数要求它们跨 {counts} 个区域，因此区域划分只剩 {patterns} 类模式。\n"
             "结合其他线索、区域大小与连通性，可以继续判断哪些格必须同区或不同区。"
         )
-        if con.repeat_witness:
-            digit, copies = con.repeat_witness
+        if repeat_witness := getattr(con, "repeat_witness", None):
+            digit, copies = repeat_witness
             original = " 或 ".join(map(str, con.clue_counts))
             conclusion = (f"所以这 {len(cells)} 格两两不同区。"
-                          if con.counts == [len(cells)] else
-                          f"所以可行的区域数只剩 {counts}。" if con.counts else
+                          if list(allowed_counts) == [len(cells)] else
+                          f"所以可行的区域数只剩 {counts}。" if allowed_counts else
                           "因此圈中的数字与区域数提示矛盾。")
             title = f"约束简化：{conclusion.rstrip('。')}"
             detail = (f"圈的区域提示原本允许 {original} 个区域。圈内有 {copies} 个 {digit}，"
@@ -161,7 +164,7 @@ def _chaos_pattern_steps(puzzle, rules, state) -> list:
             visual={"focus": cells, "groups": [{"cells": cells, "label": f"圈{index + 1}"}]},
             pre_dom=list(state.dom), pre_vals=list(state.vals),
             audit="unknown",
-            narration={"cells": cells, "counts": con.counts},
+            narration={"cells": cells, "counts": allowed_counts},
         ))
         index += 1
     return steps
@@ -455,8 +458,8 @@ def analyze(
             "how many cells of its own region", "block vision",
             "region borders", "consecutive cells immediately following",
         ))
-        has_region_rules = any(c.kind == "region_count" for c in rules.constraints)
-        if exotic and not has_region_rules:
+        counts = list(region_count_rules(rules.constraints))
+        if exotic and not counts:
             return Analysis(
                 puzzle=puzzle, spec=spec, rules=rules, result=SolveResult("unsupported", [], []),
                 initial=solver.initial, source=source,
@@ -466,7 +469,7 @@ def analyze(
                 message="检测到作者自定义的区域语义（区域计数/视野/边界），首个混沌版本暂不支持",
             )
         pattern_steps = _chaos_pattern_steps(puzzle, rules, solver.state)
-        if solver.invalid or any(c.kind == "region_count" and not c.counts for c in rules.constraints):
+        if solver.invalid or any(not allowed for _, allowed in counts):
             return Analysis(puzzle=puzzle, spec=spec, rules=rules, source=source,
                             initial=solver.initial, status="invalid", warnings=warnings,
                             result=SolveResult("invalid", pattern_steps, solver.state.vals),

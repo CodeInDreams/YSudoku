@@ -75,6 +75,9 @@ class Sum(Relation):
         self.total = int(total)
         self.unique = bool(unique)
 
+    def sum_terms(self):
+        return [(cell, 1) for cell in self.cells], self.total
+
     def signature(self):
         return (type(self).__name__, self.cells, self.total, self.unique)
 

@@ -57,5 +57,10 @@ class RegionRefutationTest(unittest.TestCase):
         self.assertFalse(any("shape_comparisons" in s.narration
                              and "shared_region_cases" not in s.narration for s in steps))
 
-        self.assertTrue(any("圈要求 9" in s.detail and "R3C2 排除 9" in s.detail
-                            for s in steps))
+        lock = next(s for s in steps if any(e.reason.kind == "region_digit" and
+                                           e.cell == 19 and e.value == 9 for e in s.events))
+        self.assertEqual(lock.visual["premise"], [27, 36])
+        self.assertEqual(lock.visual["focus"], [19])
+        self.assertIn("剩余落点为 R4C1、R5C1", lock.detail)
+        self.assertIn("R3C2 排除 9", lock.detail)
+        self.assertIn("only possible cells are R4C1, R5C1", lock.to_dict(9, "en")["detail"])

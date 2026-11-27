@@ -51,8 +51,9 @@ class FullRank(Constraint):
         return {"kind": self.kind, "cells": self.cells(), "rank": self.rank, "side": self.side}
 
     def choice_premise(self, event):
-        if event.reason.kind == "full_rank":
-            return {"kind": "rank_head", **event.reason.data}
+        data = event.reason.data
+        if event.reason.kind == "full_rank" and tuple(data["cells"]) == self._cells and data["rank"] == self.rank:
+            return {"kind": "rank_head", "rank": self.rank, "head": self.head}
         return None
 
     def check(self, values):

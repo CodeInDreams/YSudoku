@@ -586,7 +586,7 @@ def _explain_rule_choice(events, data, n):
         for p in branch["premises"]:
             if p["kind"] == "rank_head":
                 premises.append(f"排名 {p['rank']} 的首位是 {p['head']}")
-            elif len(p["lengths"]) == 1:
+            elif p["kind"] == "complement" and len(p["lengths"]) == 1:
                 length = p["lengths"][0]
                 if 0 < n - length <= 3:
                     premises.append(f"整组和 {p['sum'] + p['complement']} 减去前缀和 "

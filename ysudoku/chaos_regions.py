@@ -1,10 +1,10 @@
 """Proven region fragments. A colour names a fragment, not a final region ID."""
 
 from colorsys import rgb_to_hsv
-from copy import copy
 from itertools import combinations
 
 from .colour_map import ColourMap, MAX_COLOURS_PER_CELL
+from .constraints import RegionCount, region_count_rules
 from .narrate import Step
 from .region_shapes import shape_deduction
 from .region_refutation import refute_border, refute_count, region_growth
@@ -362,6 +362,64 @@ class RegionFragments:
         return None
 
 
+def region_digit_text(locks, n, lang="zh"):
+    def names(cells):
+        separator = ", " if lang == "en" else "、"
+        return separator.join(cell_name(c, n) for c in cells)
+
+    lines = []
+    for lock in locks:
+        digit = lock["digit"]
+        hosts, targets = names(lock["hosts"]), names(lock["targets"])
+        if lang == "en":
+            lines.append(f"The clue requires {digit}, and its only possible cells are {hosts}. "
+                         f"They share a region with {targets}, so remove {digit} from {targets}.")
+        else:
+            lines.append(f"提示要求出现 {digit}，剩余落点为 {hosts}。"
+                         f"这些落点和 {targets} 同区，同区数字互异，所以 {targets} 排除 {digit}。")
+    return "\n".join(lines)
+
+
+def _region_digit_step(fragments, constraints, index):
+    state = fragments.state
+    for con in constraints:
+        demands = getattr(con, "digit_demands", lambda: None)()
+        if not demands:
+            continue
+        scope = sorted(set(con.cells()))
+        by_region = {}
+        for digit, count in sorted(demands.items()):
+            if count != 1:
+                continue
+            hosts = [cell for cell in scope if state.has(cell, digit)]
+            owners = {fragments.owner[cell] for cell in hosts}
+            if len(owners) != 1:
+                continue
+            root = next(iter(owners))
+            targets = sorted(cell for cell in fragments.groups[root] - set(hosts)
+                             if state.has(cell, digit))
+            if targets:
+                by_region.setdefault(root, []).append({"digit": digit, "hosts": hosts, "targets": targets})
+        if not by_region:
+            continue
+
+        locks = next(iter(by_region.values()))
+        pre_dom, pre_vals = state.dom.copy(), state.vals.copy()
+        state.begin()
+        for lock in locks:
+            digit = lock["digit"]
+            reason = Reason("region_digit", {"scope": scope, "hosts": lock["hosts"], "value": digit})
+            for cell in lock["targets"]:
+                state.elim(cell, digit, reason)
+        hosts = sorted({cell for lock in locks for cell in lock["hosts"]})
+        focus = sorted({cell for lock in locks for cell in lock["targets"]})
+        return Step(index, "chaos_region", 2, "区域锁定候选", region_digit_text(locks, state.n),
+                    state.end(), visual={"focus": focus, "premise": hosts,
+                                         "groups": [{"cells": hosts, "kind": "premise"}]},
+                    pre_dom=pre_dom, pre_vals=pre_vals, narration={"region_digit_locks": locks})
+    return None
+
+
 def region_steps(solver, rules, steps, *, refutations=None, replay=None, deadline=None,
                  max_steps=None):
     from time import monotonic
@@ -369,8 +427,7 @@ def region_steps(solver, rules, steps, *, refutations=None, replay=None, deadlin
     state = solver.state
     fragments = RegionFragments(state)
     solver.allow_chains = False  # Construct regions from deductions before the separate search fallback.
-    clues = [copy(c) for c in rules.constraints
-             if getattr(c, "region_counts", lambda: None)() is not None]
+    clues = [RegionCount(con.cells(), counts) for con, counts in region_count_rules(rules.constraints)]
     clue_ids = {id(clue): index for index, clue in enumerate(clues)}
     fragments.count_clues = clues
     fragments.all_count_clues = clues.copy()
@@ -410,35 +467,10 @@ def region_steps(solver, rules, steps, *, refutations=None, replay=None, deadlin
                 cells = sorted(fragments.groups[a] | fragments.groups[b])
                 fragments.merge(a, b)
                 observation = cells, detail
+        step = None
         if not observation:
-            for cells in fragments.groups.values():
-                if len(cells) < 2:
-                    continue
-                state.begin()
-                notes = []
-                for con in solver.constraints:
-                    demands = con.digit_demands() if hasattr(con, "digit_demands") else None
-                    if not demands:
-                        continue
-                    circle = set(con.cells())
-                    if not circle <= cells:
-                        continue
-                    for digit, count in demands.items():
-                        if count != 1:
-                            continue
-                        for peer in sorted(cells - circle):
-                            if state.has(peer, digit):
-                                state.elim(peer, digit, Reason(
-                                    "region_digit",
-                                    {"circle": sorted(circle), "value": digit}))
-                                notes.append(f"圈要求 {digit}，占用该区域唯一席位，"
-                                             f"{cell_name(peer, state.n)} 排除 {digit}")
-                if notes:
-                    events = state.end()
-                    observation = sorted(cells), "同一区域内数字互异。" + "；".join(notes)
-                    break
-                state.rollback()
-        if not observation:
+            step = _region_digit_step(fragments, solver.constraints, len(steps))
+        if not observation and step is None:
             for cells in fragments.groups.values():
                 if len(cells) < 2:
                     continue
@@ -456,7 +488,7 @@ def region_steps(solver, rules, steps, *, refutations=None, replay=None, deadlin
                         f"{cell_name(e.reason.data['by'], state.n)} 已确定为 {e.value}，"
                         f"{cell_name(e.cell, state.n)} 排除 {e.value}" for e in events)
                     break
-        if not observation and any(min(c.counts) > 1 for c in clues):
+        if not observation and step is None and any(min(c.counts) > 1 for c in clues):
             forced = region_growth(fragments, clues)
             if forced:
                 (a, b), detail = forced
@@ -467,7 +499,7 @@ def region_steps(solver, rules, steps, *, refutations=None, replay=None, deadlin
             cells, detail = observation
             step = Step(len(steps), "chaos_region", 2, "混沌区域推理", detail, events,
                         visual={"focus": cells}, pre_dom=pre_dom, pre_vals=pre_vals)
-        else:
+        elif step is None:
             step, error = solver.next_step()
             if error:
                 raise Contradiction(error)

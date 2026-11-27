@@ -59,6 +59,13 @@ class RuleAlternative(Constraint):
     def to_dict(self):
         return {"kind": "and", "rules": [rule.to_dict() for rule in self.constraints]}
 
+    def choice_premise(self, event):
+        for rule in self.constraints:
+            hook = getattr(rule, "choice_premise", None)
+            if hook and (premise := hook(event)):
+                return premise
+        return None
+
     def prune(self, st):
         changed = False
         while True:
@@ -118,19 +125,20 @@ class RuleChoice(Constraint):
                 continue
             trial = st.copy()
             rules = [options[name] for (_, options), name in zip(self.regions, names)]
-            premises = {}
+            premises = []
             try:
                 for _ in range(MAX_JOINT_ROUNDS):
                     changed = False
-                    for index, rule in enumerate(rules):
+                    for rule in rules:
                         trial.record = st.record
                         trial.events = []
                         changed |= rule.prune(trial)
-                        for event in trial.events:
-                            hook = getattr(rule, "choice_premise", None)
-                            premise = hook(event) if hook else None
-                            if premise:
-                                premises[index] = premise
+                        hook = getattr(rule, "choice_premise", None)
+                        if hook:
+                            for event in trial.events:
+                                premise = hook(event)
+                                if premise and premise not in premises:
+                                    premises.append(premise)
                         trial.record = False
                     for cell in self.scope:
                         if not trial.vals[cell] and trial.dom[cell].bit_count() == 1:
@@ -146,7 +154,7 @@ class RuleChoice(Constraint):
                 continue
             facts = [[cell, trial.dom[cell].bit_length()] for cell in self.scope
                      if trial.dom[cell].bit_count() == 1 and st.dom[cell].bit_count() > 1]
-            branches.append((trial.dom, {"rules": names, "premises": list(premises.values()), "facts": facts}))
+            branches.append((trial.dom, {"rules": names, "premises": premises, "facts": facts}))
         if not branches:
             raise Contradiction("所有符合规则使用次数的分配都与当前候选冲突")
         return branches, rejected

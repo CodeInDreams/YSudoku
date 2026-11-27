@@ -104,7 +104,7 @@ def _assignment(data, name, n):
         for premise in branch["premises"]:
             if premise["kind"] == "rank_head":
                 lines.append(f"Rank {premise['rank']} starts with {premise['head']}.")
-            elif len(premise["lengths"]) == 1:
+            elif premise["kind"] == "complement" and len(premise["lengths"]) == 1:
                 length = premise["lengths"][0]
                 lines.append(f"The first {length} cells sum to {premise['sum']}, "
                              f"leaving {premise['complement']} for the rest of the unit.")
@@ -207,7 +207,9 @@ def english_step(payload, n, evidence):
         payload.update(title=title, detail=describe_step(evidence, n, "en"))
         return payload
     if technique == "chaos_region":
-        if "border_refutation" in evidence:
+        if "region_digit_locks" in evidence:
+            title = "Region locked candidates"
+        elif "border_refutation" in evidence:
             title = "Region border refutation"
         elif "shape_cases" in evidence:
             title = "Region shape cases"
@@ -252,6 +254,9 @@ def _explain(payload, kind, d, evidence, name, n):
     if technique == "chaos_pattern" and evidence:
         return (f"The clue at {names(evidence['cells'])} allows these region counts: "
                 f"{_lists(evidence['counts'])}. Each region is connected and contains {n} distinct digits.")
+    if technique == "chaos_region" and "region_digit_locks" in evidence:
+        from .chaos_regions import region_digit_text
+        return region_digit_text(evidence["region_digit_locks"], n, "en")
     if technique == "chaos_region" and "border_refutation" in evidence:
         a, b = map(name, evidence["border_refutation"])
         return "\n".join([f"Suppose {a} and {b} belong to different regions.",

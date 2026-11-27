@@ -1,7 +1,8 @@
 import unittest
 from ysudoku.model import parse_puzzle
 
-from ysudoku.constraints import Arrow, Cage, PairRule, Thermo
+from ysudoku.constraints import Arrow, Cage, IRSupport, PairRule, Thermo
+from ysudoku.constraints_ir import AllDifferent, Sum
 from ysudoku.rules import CompiledRules
 from ysudoku.solve import Solver
 from ysudoku.state import State, bits
@@ -37,3 +38,16 @@ class SumLinksTest(unittest.TestCase):
         state.dom[6] = 0b101
         link.apply(state)
         self.assertEqual(list(bits(state.dom[0])), [3, 5])
+
+    def test_ir_adapter_exports_each_sum_for_shared_clue_reasoning(self):
+        ir = IRSupport([Sum([0, 2], 5), AllDifferent([0, 2]), Sum([2, 4], 8)])
+        link, = compile_links([ir], 9)
+        state = State(9, [])
+        link.apply(state)
+        self.assertEqual(link.terms, ((0, 1), (4, -1)))
+        self.assertEqual(link.total, -3)
+        self.assertEqual(list(bits(state.dom[4])), list(range(4, 10)))
+
+    def test_signed_equation_includes_both_sides_of_arrow(self):
+        link, = compile_links([Cage([0, 2], 5), Arrow(4, [0, 2, 6])], 4)
+        self.assertIn("R1C1 + R1C3 + R2C3 = R2C1", link.premises[1])

@@ -9,12 +9,12 @@ Target version: 1.2.1-beta
 ### Added
 
 - Consume required digits through generic constraint protocols (`digit_demands`, `sum_terms`, `region_counts`, `choice_premise`) instead of rule-name branches.
-- Apply a circle's required digit to a partial Chaos Construction region. Tringle and Cross now derives `R3C2 != 9` and places `R3C3 = 9`.
+- In Chaos Construction, lock a required digit to a region when all its remaining clue cells belong to that region. Mark the clue cells and elimination targets separately, with explanations in Chinese and English.
 
 ### Fixed
 
 - Explain Chaos Construction deductions with a short list of concrete shapes or a single border refutation. Skip shape comparisons that require larger enumerations.
-
+- Include generic IR sums in shared-sum reasoning, retain the evidence from compound rule choices, and apply digit and region checks together for Chaos Construction rules.
 - Do not auto-regenerate missing frames after a solve failure; wait for an explicit retry.
 - Keep region digit explanation notes out of `Step.events`, fixing `'str' object has no attribute 'to_dict'`.
 - Match the board preview's aspect ratio, crop, and dark-mode dimming to the playback frames. Use the rendered opening frame once it is available.

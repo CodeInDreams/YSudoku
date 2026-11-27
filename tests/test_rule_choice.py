@@ -1,8 +1,11 @@
 import unittest
 from unittest.mock import patch
 
+from ysudoku.constraints import XSums
+from ysudoku.full_rank import FullRank
 from ysudoku.model import parse_puzzle
-from ysudoku.rules import compile_spec
+from ysudoku.rule_choice import RuleAlternative, RuleChoice
+from ysudoku.rules import CompiledRules, compile_spec
 from ysudoku.solve import Solver
 from ysudoku.state import bits
 
@@ -57,3 +60,15 @@ class RuleChoiceTest(unittest.TestCase):
         with patch("ysudoku.rule_choice.MAX_JOINT_ASSIGNMENTS", 1):
             choice.prune(state)
         self.assertEqual(list(bits(state.dom[10])), [3])
+
+    def test_joint_assignment_preserves_both_subrule_premises(self):
+        puzzle = parse_puzzle({"cells": [[{} for _ in range(4)] for _ in range(4)]})
+        state = Solver(puzzle, CompiledRules([])).state
+        alternative = RuleAlternative([FullRank([0, 1, 2, 3], 1, "left", 4),
+                                       XSums([8, 9, 10, 11], 3, "left")])
+        choice = RuleChoice([("region", {"combined": alternative})])
+        state.begin()
+        branches, rejected = choice._joint(state, [["combined"]])
+        self.assertEqual(rejected, [])
+        _, branch = branches[0]
+        self.assertEqual({p["kind"] for p in branch["premises"]}, {"rank_head", "complement"})

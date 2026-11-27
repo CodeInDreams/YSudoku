@@ -12,6 +12,8 @@ import time
 from dataclasses import dataclass, field
 from functools import lru_cache
 
+from .constraints import region_count_rules
+
 
 @lru_cache(maxsize=65536)
 def _quad_supports(needs: tuple[int, ...], domains: tuple[int, ...]):
@@ -105,9 +107,8 @@ def solve_chaos(puzzle, constraints, node_limit: int = 1_500_000,
                 apart_masks[c] = apart
     nodes = [0]
     started = time.monotonic()
-    region_rules = getattr(fragments, "count_clues",
-                           [con for con in constraints
-                            if getattr(con, "region_counts", lambda: None)() is not None])
+    region_rules = list(region_count_rules(getattr(fragments, "count_clues", constraints)))
+    original_region_rules = list(region_count_rules(constraints))
     quadruples = [con for con in constraints
                   if getattr(con, "digit_demands", lambda: None)()]
     quad_needs = []
@@ -123,9 +124,10 @@ def solve_chaos(puzzle, constraints, node_limit: int = 1_500_000,
             quad_by_row[r].add(qi)
             quad_by_col[c].add(qi)
     region_rules_by_cell = [[] for _ in range(total)]
-    for con in region_rules:
-        for cell in con.cells():
-            region_rules_by_cell[cell].append(con)
+    for con, counts in region_rules:
+        cells = con.cells()
+        for cell in cells:
+            region_rules_by_cell[cell].append((cells, counts))
     cage_rules = []
     for con in constraints:
         con_total = getattr(con, "total", None)
@@ -257,13 +259,12 @@ def solve_chaos(puzzle, constraints, node_limit: int = 1_500_000,
                         changed = True
         return domains
 
-    def region_count_possible(con) -> bool:
-        cells = con.cells()
+    def region_count_possible(cells, counts) -> bool:
         assigned = {c: region_of[c] for c in cells if region_of[c] >= 0}
         unassigned = [c for c in cells if region_of[c] < 0]
         existing = sorted(set(assigned.values()))
         if not unassigned:
-            return len(existing) in con.counts
+            return len(existing) in counts
         usable = [r for r, assigned_cells in enumerate(region_cells)
                   if len(assigned_cells) < n]
         new_slots = max(0, n - len(region_cells))
@@ -277,17 +278,13 @@ def solve_chaos(puzzle, constraints, node_limit: int = 1_500_000,
         # product at every search node.
         extra_labels = len(set(options) - set(existing))
         max_distinct = len(existing) + min(len(unassigned), extra_labels)
-        return any(len(existing) <= count <= max_distinct for count in con.counts)
+        return any(len(existing) <= count <= max_distinct for count in counts)
 
     def check_all() -> bool:
         region_map = {c: region_of[c] for c in range(total)}
-        for con in constraints:
-            if getattr(con, "region_counts", lambda: None)() is not None:
-                if not con.check_regions(values, region_map):
-                    return False
-            elif not con.check(values):
-                return False
-        return True
+        return (all(con.check(values) for con in constraints)
+                and all(_region_count_met(con, counts, values, region_map)
+                        for con, counts in original_region_rules))
 
     choices_by_cell = {}
     for corner, (a, b, _) in getattr(fragments, "corner_choices", {}).items():
@@ -299,8 +296,8 @@ def solve_chaos(puzzle, constraints, node_limit: int = 1_500_000,
             labels = [region_of[a], region_of[b]]
             if region_of[corner] >= 0 and -1 not in labels and region_of[corner] not in labels:
                 return False
-        for con in region_rules_by_cell[cell]:
-            if not region_count_possible(con):
+        for cells, counts in region_rules_by_cell[cell]:
+            if not region_count_possible(cells, counts):
                 return False
         return True
 
@@ -431,6 +428,13 @@ def solve_chaos(puzzle, constraints, node_limit: int = 1_500_000,
                        message=f"搜索 {nodes[0]} 个结点后找到一致解")
 
 
+def _region_count_met(con, counts, values, region_of):
+    if len({region_of[cell] for cell in con.cells()}) not in counts:
+        return False
+    check = getattr(con, "check_regions", None)
+    return check is None or check(values, region_of)
+
+
 def check_chaos_solution(puzzle, constraints, values: list[int], regions: list[list[int]]) -> list[str]:
     n = puzzle.size
     total = n * n
@@ -459,12 +463,10 @@ def check_chaos_solution(puzzle, constraints, values: list[int], regions: list[l
                 errors.append(f"区域{i + 1}不是 1..{n} 的排列")
             if not _cells_connected(reg, n):
                 errors.append(f"区域{i + 1}不连通")
-    for con in constraints:
-        if con.kind == "region_count":
-            if valid_partition and not con.check_regions(values, region_of):
-                errors.append(f"违反规则：{con.describe()}")
-        elif not con.check(values):
-            errors.append(f"违反规则：{con.describe()}")
+    errors.extend(f"违反规则：{con.describe()}" for con in constraints if not con.check(values))
+    if valid_partition:
+        errors.extend(f"违反规则：{con.describe()}" for con, counts in region_count_rules(constraints)
+                      if not _region_count_met(con, counts, values, region_of))
     return errors
 
 

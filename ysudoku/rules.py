@@ -524,11 +524,12 @@ def compile_spec(puzzle: Puzzle, elements: list[Element], spec: dict,
             result.warnings.append(f"未知全局规则 {kind}")
 
     if puzzle.is_chaos:
-        quadruples = [c for c in result.constraints if isinstance(c, Quadruple)]
+        digit_demands = [(c.cells(), demands) for c in result.constraints
+                         if (demands := getattr(c, "digit_demands", lambda: None)())]
         for count in result.constraints:
             if isinstance(count, RegionCount):
-                for quad in quadruples:
-                    count.simplify_with_quadruple(quad)
+                for cells, demands in digit_demands:
+                    count.simplify_with_digit_demands(cells, demands)
 
     ignored = [e for e in elements if e.id not in used]
     for e in ignored:

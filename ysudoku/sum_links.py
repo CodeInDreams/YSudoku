@@ -3,7 +3,6 @@
 from dataclasses import dataclass
 from itertools import combinations
 
-from .constraints_ir import Sum
 from .state import Contradiction, Reason, bits, cell_name
 
 
@@ -19,27 +18,22 @@ def _equation(terms, total, n):
     return " + ".join(positive or ["0"]) + " = " + " + ".join(negative or ["0"])
 
 
-def _premise(name, terms, total, n):
-    cells = "、".join(cell_name(c, n) for c in terms)
-    if name == "箭头":
-        arm = "、".join(cell_name(c, n) for c, sign in terms.items() if sign > 0)
-        circle = next(c for c, sign in terms.items() if sign < 0)
-        return f"箭头圆格 {cell_name(circle, n)} 的数字等于箭身 {arm} 的数字之和。"
-    if name in ("V", "X"):
-        return f"{name} 连接的两格 {cells} 加起来是 {total}。"
-    return f"{name}线索给出 {cells} 的数字之和是 {total}。"
-
-
 def _sources(constraints):
     for con in constraints:
-        terms = con.sum_terms() if hasattr(con, "sum_terms") else None
-        if not terms:
-            continue
-        pairs, total = terms
-        if not pairs or len(dict(pairs)) != len(pairs):
-            continue
-        name = getattr(con, "describe", lambda: "线索")()
-        yield name, dict(pairs), int(total)
+        equations = getattr(con, "sum_equations", None)
+        if equations is None:
+            terms = getattr(con, "sum_terms", lambda: None)()
+            if terms is None:
+                continue
+            pairs, total = terms
+            name = getattr(con, "describe", lambda: "线索")()
+            sources = [(name, pairs, total)]
+        else:
+            sources = equations()
+        for name, pairs, total in sources:
+            terms = dict(pairs)
+            if terms and len(terms) == len(pairs):
+                yield name, terms, int(total)
 
 
 @dataclass
@@ -98,8 +92,8 @@ def compile_links(constraints, n):
         sign = 1 if terms[0][1] > 0 else -1
         terms = tuple((c, coeff * sign) for c, coeff in terms)
         total = (a - b) * sign
-        premises = (_premise(name, left, a, n),
-                    _premise(other, right, b, n))
+        premises = (f"{name} 给出 {_equation(left.items(), a, n)}。",
+                    f"{other} 给出 {_equation(right.items(), b, n)}。")
         key = terms, total
         if key not in links or len(shared) < len(links[key].shared):
             links[key] = SumLink(terms, total, premises, tuple(shared))

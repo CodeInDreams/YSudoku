@@ -88,10 +88,6 @@ class Constraint:
     def to_dict(self) -> dict:
         return {"kind": self.kind}
 
-    def check(self, values: list[int]) -> bool:
-        return True
-
-
 class IRSupport(Constraint):
     """Constraint adapter that exposes generic IR deductions as solver events."""
 
@@ -111,6 +107,13 @@ class IRSupport(Constraint):
 
     def check(self, values):
         return all(relation.check(values) for relation in self.relations)
+
+    def sum_equations(self):
+        for relation in self.relations:
+            terms = getattr(relation, "sum_terms", lambda: None)()
+            if terms is not None:
+                pairs, total = terms
+                yield relation.describe(), pairs, total
 
     def prune(self, st: State) -> bool:
         from .support_engine import analyze_support
@@ -267,7 +270,7 @@ class Arrow(Constraint):
         return [self.circle] + self.arm
 
     def describe(self) -> str:
-        return f"箭头（圈 R{self.circle // 9 + 1}C{self.circle % 9 + 1} = 箭身之和）"
+        return "箭头（圆格等于箭身之和）"
 
     def to_dict(self) -> dict:
         return {"kind": "arrow", "circle": self.circle, "arm": self.arm}
@@ -997,7 +1000,8 @@ class XSums(Constraint):
 
     def choice_premise(self, event):
         data = event.reason.data
-        if event.reason.kind == "x_sums" and "complement" in data:
+        if (event.reason.kind == "x_sums" and "complement" in data
+                and data["cells"] == self._cells and data["sum"] == self.total and data["side"] == self.side):
             return {"kind": "complement", **data}
         return None
 
@@ -1275,6 +1279,14 @@ class ClassCover(Constraint):
         return changed
 
 
+def region_count_rules(constraints):
+    """Yield each rule and its allowed region counts, including an empty set."""
+    for con in constraints:
+        counts = getattr(con, "region_counts", lambda: None)()
+        if counts is not None:
+            yield con, counts
+
+
 class RegionCount(Constraint):
     """Region-aware rule: the scope cells must span one of the allowed counts."""
 
@@ -1291,12 +1303,10 @@ class RegionCount(Constraint):
     def cells(self) -> list[int]:
         return self._cells
 
-    def simplify_with_quadruple(self, quad):
-        # A subset of this scope can also witness a lower bound.
-        if not set(quad.cells()) <= set(self._cells) or not quad.digits:
+    def simplify_with_digit_demands(self, cells, demands):
+        if not demands or not set(cells) <= set(self._cells):
             return
-        digit = max(quad.digits, key=quad.digits.count)
-        minimum = quad.digits.count(digit)
+        digit, minimum = max(demands.items(), key=lambda item: item[1])
         allowed = [k for k in self.counts if k >= minimum]
         if allowed != self.counts:
             self.counts = allowed
